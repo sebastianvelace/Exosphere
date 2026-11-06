@@ -70,23 +70,12 @@ public class Part
     }
 
     /// <summary>
-    /// This part's own centre of mass along its axis, from its centre: header propellant sits
-    /// at its station, the dry structure at its declared centre, main propellant at the part centre.
+    /// This part's own centre of mass along its axis, from its centre (the shared
+    /// <see cref="PartMassGeometry"/> decomposition): header propellant at its station, the dry
+    /// structure at its declared centre, a tanked resource at its settled column's centroid and
+    /// any other main propellant at the part centre.
     /// </summary>
-    public double MassCenterOffsetYM
-    {
-        get
-        {
-            var headers = Definition.HeaderTanks;
-            if (headers.Count == 0 && Definition.DryMassCenterYM == 0.0) return 0.0;
-            double mass = CurrentMass;
-            if (mass <= 0.0) return 0.0;
-            double moment = Definition.MassDry * Definition.DryMassCenterYM;
-            for (int i = 0; i < headers.Count && i < HeaderPropellantKg.Length; i++)
-                moment += HeaderPropellantKg[i] * headers[i].CenterYM;
-            return moment / mass;
-        }
-    }
+    public double MassCenterOffsetYM => PartMassGeometry.CenterOffsetYM(this);
 
     /// <summary>Protected feed inventory, still included in wet mass. Defaults to no isolation.</summary>
     public double ReservedLiquidFuel { get; private set; }
@@ -922,6 +911,46 @@ public class Part
     {
         BuildEngineInstanceThrustGeometry(_thrustGeometryScratch, ambientPressure, zeroGimbal: true);
         return _thrustGeometryScratch;
+    }
+
+    /// <summary>
+    /// The exit plane of one engine instance, part-local at zero gimbal: the mount's thrust
+    /// point moved back along the thrust axis by the model's declared exit offset, with the
+    /// outward exhaust normal and the declared exit radius (zero: a point outlet). A model-less
+    /// engine uses its part's declared nozzle exit, else its thrust point as a point outlet.
+    /// </summary>
+    public bool TryGetNozzleExit(string engineInstanceId, out Vector3d exitM, out Vector3d exhaustNormal,
+        out double exitRadiusM)
+    {
+        exitRadiusM = 0.0;
+        exhaustNormal = -Vector3d.Up;
+        if (!HasEngineRuntime || string.Equals(engineInstanceId, InstanceId, StringComparison.Ordinal))
+        {
+            if (Definition.NozzleExit is { } declared)
+            {
+                exitM = new Vector3d(0.0, declared.YM, 0.0);
+                exitRadiusM = 0.5 * declared.DiameterM;
+            }
+            else exitM = new Vector3d(0.0, Definition.ThrustPositionYM, 0.0);
+            return true;
+        }
+        for (int i = 0; i < _engineStates.Count; i++)
+        {
+            if (!string.Equals(_engineStates[i].InstanceId, engineInstanceId, StringComparison.Ordinal)) continue;
+            var mount = Definition.ResolvedEngineCluster?.Engines.ElementAtOrDefault(i);
+            var thrustPoint = mount != null
+                ? mount.Position + new Vector3d(0.0, Definition.ThrustPositionYM, 0.0)
+                : new Vector3d(0.0, Definition.ThrustPositionYM, 0.0);
+            var direction = (mount?.Direction ?? Vector3d.Up).Normalized;
+            var model = ResolveEngineModel(_engineStates[i]);
+            double offset = model?.NozzleExitAxialOffsetM ?? 0.0;
+            exitM = thrustPoint - direction * offset;
+            exhaustNormal = -direction;
+            exitRadiusM = 0.5 * (model?.NozzleExitDiameterM ?? 0.0);
+            return true;
+        }
+        exitM = default;
+        return false;
     }
 
     /// <summary>

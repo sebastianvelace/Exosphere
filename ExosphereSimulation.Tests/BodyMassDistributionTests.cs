@@ -212,7 +212,7 @@ public sealed class BodyMassDistributionTests
     }
 
     [Fact]
-    public void SeparateDryAndPropellantStationsRestoreTheMissingParallelAxisVariance()
+    public void SeparateDryAndPropellantStationsKeepTheParallelAxisVariance()
     {
         var part = new Part(new PartDefinition
         {
@@ -228,13 +228,14 @@ public sealed class BodyMassDistributionTests
             new("main", station, cylinder, [new MassKnot(0, 30)]),
         ]);
         var sample = distribution.Sample(0);
-        var old = graph.GetMassProperties();
-        Assert.Equal(old.CenterOfMassBody, sample.CenterOfMassBodyM);
-        // 10*30/(10+30) * 2² = 30 kg m² omitted by the existing shifted-lump model.
-        Assert.Equal(160, old.InertiaBody.M11);
-        Assert.Equal(190, sample.InertiaBodyKgM2.M11);
-        Assert.Equal(30, sample.InertiaBodyKgM2.M33 - old.InertiaBody.M33);
-        Assert.Equal(old.InertiaBody.M22, sample.InertiaBodyKgM2.M22);
+        var graphProperties = graph.GetMassProperties();
+        Assert.Equal(graphProperties.CenterOfMassBody, sample.CenterOfMassBodyM);
+        // 160 kg m² of cylinder inertia plus 10*30/(10+30) * 2² = 30 kg m² of spread between the
+        // dry centre and the propellant; the former shifted-lump model dropped the 30.
+        Assert.Equal(190, graphProperties.InertiaBody.M11, 12);
+        Assert.Equal(190, sample.InertiaBodyKgM2.M11, 12);
+        Assert.Equal(sample.InertiaBodyKgM2.M33, graphProperties.InertiaBody.M33, 12);
+        Assert.Equal(sample.InertiaBodyKgM2.M22, graphProperties.InertiaBody.M22, 12);
     }
 
     [Fact]

@@ -176,6 +176,14 @@ public class Universe
     /// </summary>
     public bool GravityGradientEnabled { get; set; } = true;
 
+    /// <summary>
+    /// F4 open-system transport on the coupled path: candidate mass, centre and inertia follow
+    /// the step's funded flows (shared component geometry), and the transport force and moment
+    /// (jet damping, Coriolis, moving centre of mass) act beside thrust. False keeps the frozen
+    /// post-debit mass snapshot as a comparison baseline. The legacy split path is always frozen.
+    /// </summary>
+    public bool VariableMassTransportEnabled { get; set; } = true;
+
     /// <summary>Evidence from the last completed coupled 6-DoF step.</summary>
     public Physics.Coupled6DofTelemetry LastCoupled6DofTelemetry { get; private set; }
 
@@ -2454,6 +2462,9 @@ public class Universe
 
         vessel.Position = framedPosition;
         vessel.Velocity = framedVelocity;
+        // The split baseline keeps frozen mass; it carries no feed momentum to a later step.
+        vessel.TransportRelativeMomentumBody = vessel.TransportRelativeAngularMomentumBody = null;
+        vessel.LastVariableMassStatus = "legacy-frozen";
         vessel.BeginLegacyPhysicsStep(dt, refBody, vessel.LastContactTorqueWorld);
         try
         {
@@ -2520,6 +2531,10 @@ public class Universe
         Physics.WaterContactDefinition water, double dt)
     {
         var (startPosition, startVelocity) = BodyStateAt(body, CurrentTime);
+        // Water motion keeps the frozen post-debit snapshot (no propulsive flow is expected
+        // afloat); it carries no feed momentum to a later step.
+        vessel.TransportRelativeMomentumBody = vessel.TransportRelativeAngularMomentumBody = null;
+        vessel.LastVariableMassStatus = "water-frozen";
         vessel.Position = body.Position+(vessel.Position-startPosition);
         vessel.Velocity = body.Velocity+(vessel.Velocity-startVelocity);
         double evaluationTime = CurrentTime+dt;
@@ -2585,7 +2600,47 @@ public class Universe
 
         vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
         vessel.DockedStackTransverseInertiaKgM2 = DockedStackTransverseInertia(vessel);
+        vessel.CaptureTransportWindow = VariableMassTransportEnabled;
         vessel.BeginCoupledPhysicsStep(dt, refBody, DistributedAerodynamicsEnabled, PhysicalBodyFlapsEnabled);
+        vessel.CaptureTransportWindow = false;
+        Physics.VariableMassStepModel? transportModel = null;
+        string? transportReason = "disabled";
+        if (VariableMassTransportEnabled)
+        {
+            try
+            {
+                Physics.VariableMassStepModel.TryBuild(vessel.Parts, vessel.TransportWindow, vessel,
+                    DockedMembers(vessel), out transportModel, out transportReason);
+            }
+            catch
+            {
+                vessel.EndCoupledPhysicsStep();
+                throw;
+            }
+            if (transportModel != null && transportModel.Transport.Groups.Count == 0)
+            {
+                transportModel = null;
+                transportReason = "no-outflow";
+            }
+        }
+        vessel.LastVariableMassStatus = transportModel != null ? "active" : transportReason;
+        vessel.LastTransportSample = null;
+        if (transportModel == null)
+        {
+            // A step without tracked flow carries no relative momentum. Only a step whose flow
+            // is genuinely zero settles it; a fallback with untracked flow forgets it, so the
+            // next tracked step neither invents nor drops a feed impulse.
+            bool flowing = vessel.TransportWindow?.Debits.Count > 0;
+            vessel.TransportRelativeMomentumBody = flowing ? null : Vector3d.Zero;
+            vessel.TransportRelativeAngularMomentumBody = flowing ? null : Vector3d.Zero;
+        }
+        if (transportModel != null)
+        {
+            IntegrateVesselVariableMass(vessel, refBody, dt, transportModel, referenceStartPosition,
+                referenceStartVelocity, frameAcceleration, evaluationTime);
+            ApplyPostIntegrationPhysics(vessel, refBody, dt);
+            return;
+        }
         try
         {
             // A docked stack is one rigid body: integrate the composite mass, centre of mass
@@ -2690,6 +2745,193 @@ public class Universe
     }
 
     /// <summary>
+    /// Coupled 6-DoF step with F4 variable-mass transport. The integrated state is the
+    /// instantaneous centre of mass of the remaining body (coordinate position and velocity);
+    /// mass, centre and inertia are sampled at every RK4 stage from the step's funded profile,
+    /// the step is split at every knot where a flow changes, and the open-system force and moment
+    /// are added beside thrust. The skirt datum is rebuilt from the final centre with its moving
+    /// offset: v_datum = v_c − ω×(R c) − R ċ, so the structure's material velocity is continuous.
+    /// </summary>
+    private void IntegrateVesselVariableMass(Vessel vessel, CelestialBody refBody, double dt,
+        Physics.VariableMassStepModel model, Vector3d referenceStartPosition, Vector3d referenceStartVelocity,
+        Vector3d frameAcceleration, double evaluationTime)
+    {
+        try
+        {
+            var distribution = model.Distribution;
+            var transport = model.Transport;
+            var members = DockedMembers(vessel);
+            double attachedMass = 0.0;
+            var attachedMoment = Vector3d.Zero;
+            if (members != null)
+                foreach (var member in members)
+                {
+                    attachedMass += member.MassProperties.Mass;
+                    attachedMoment += (member.DatumPositionPrimaryLocal
+                        + member.OrientationPrimaryLocal.Rotate(member.MassProperties.CenterOfMassBody))
+                        * member.MassProperties.Mass;
+                }
+            Vector3d OwnShift(in Physics.BodyMassSample sample) => attachedMass <= 0.0 ? Vector3d.Zero
+                : (sample.CenterOfMassBodyM * sample.MassKg - attachedMoment) / (sample.MassKg - attachedMass)
+                    - sample.CenterOfMassBodyM;
+
+            var boundaries = new List<double>(distribution.BoundariesSeconds);
+            foreach (var group in transport.Groups)
+            {
+                foreach (var debit in group.Debits) { boundaries.Add(debit.StartSeconds); boundaries.Add(debit.EndSeconds); }
+                foreach (var outlet in group.Outlets) { boundaries.Add(outlet.StartSeconds); boundaries.Add(outlet.EndSeconds); }
+            }
+
+            var start = distribution.Sample(0.0, Physics.MassBoundarySide.Right);
+            var orientation = vessel.Orientation;
+            var angularVelocityWorld = vessel.AngularVelocity;
+            var materialVelocity = vessel.Velocity;
+            // A flow change between steps (ignition, throttle, shutdown) conserves the total
+            // momenta P = m v_material + R p_rel and H = I ω + h_rel: the feed's fluid momentum
+            // change reacts on the structure (the water-hammer impulse of an abrupt valve).
+            var opening = transport.Sample(0.0, Physics.MassBoundarySide.Right, start,
+                orientation.Inverse().Rotate(angularVelocityWorld));
+            if (vessel.TransportRelativeMomentumBody is { } previousMomentum
+                && vessel.TransportRelativeAngularMomentumBody is { } previousAngularMomentum)
+            {
+                materialVelocity -= orientation.Rotate(opening.RelativeLinearMomentumBodyKgMps - previousMomentum)
+                    / start.MassKg;
+                var startInertia = start.ToRigidBodyMassProperties();
+                angularVelocityWorld -= orientation.Rotate(startInertia.InverseInertiaBody.Multiply(
+                    opening.RelativeAngularMomentumBodyKgM2PerS - previousAngularMomentum));
+            }
+            var centerOffsetWorld = orientation.Rotate(start.CenterOfMassBodyM);
+            var centerPosition = vessel.Position + centerOffsetWorld;
+            var centerVelocity = materialVelocity + angularVelocityWorld.Cross(centerOffsetWorld)
+                + orientation.Rotate(start.CenterOfMassRateBodyMps);
+            var initialState = new Physics.RigidBody6DofState(
+                centerPosition - referenceStartPosition, centerVelocity - referenceStartVelocity,
+                orientation, orientation.Inverse().Rotate(angularVelocityWorld));
+
+            double subStart = 0.0, subEnd = dt;
+            Physics.BodyMassSample stage = start;
+            double stageTime = 0.0;
+            var stageSide = Physics.MassBoundarySide.Right;
+            Physics.RigidBodyMassProperties Sample(double absoluteTime)
+            {
+                double local = absoluteTime - CurrentTime;
+                // RK4 asks for its end stage at start + interval; take the interval's own side.
+                if (local >= subEnd - 1e-12 * dt) { local = subEnd; stageSide = Physics.MassBoundarySide.Left; }
+                else { local = System.Math.Max(subStart, local); stageSide = Physics.MassBoundarySide.Right; }
+                stageTime = local;
+                stage = distribution.Sample(local, stageSide);
+                return stage.ToRigidBodyMassProperties();
+            }
+
+            Physics.RigidBodyForces Forces(Physics.RigidBody6DofState candidate, Physics.RigidBodyMassProperties mass)
+            {
+                var absolute = ToAbsoluteState(refBody, candidate);
+                var own = ShiftCenterOfMass(absolute, OwnShift(stage));
+                var landingContact = EvaluateLandingContact(vessel, refBody, own);
+                var catchContact = EvaluateCatchContact(vessel, own, evaluationTime);
+                var waterContact = EvaluateCoupledWaterContact(vessel, refBody, own, evaluationTime);
+                var contactForce = (landingContact?.ForceWorld ?? Vector3d.Zero)
+                    + (catchContact?.ForceWorld ?? Vector3d.Zero)
+                    + (waterContact?.ForceWorld ?? Vector3d.Zero);
+                var contactTorque = (landingContact?.TorqueWorld ?? Vector3d.Zero)
+                    + (catchContact?.TorqueWorld ?? Vector3d.Zero)
+                    + (waterContact?.TorqueWorld ?? Vector3d.Zero)
+                    + (own.Position - absolute.Position).Cross(contactForce);
+                var context = new Physics.RigidBodyForceContext(
+                    _bodies, refBody,
+                    externalForceWorld: contactForce - frameAcceleration * mass.Mass,
+                    externalTorqueWorld: contactTorque,
+                    distributedAerodynamics: DistributedAerodynamicsEnabled,
+                    physicalBodyFlaps: PhysicalBodyFlapsEnabled,
+                    gravityGradientEnabled: GravityGradientEnabled);
+                var forces = Physics.RigidBodyForceEvaluator.Evaluate(vessel, absolute, context, mass);
+                var open = transport.Sample(stageTime, stageSide, stage, candidate.AngularVelocityBody);
+                return new Physics.RigidBodyForces(
+                    forces.ForceWorld + candidate.Orientation.Rotate(open.ForceBodyN),
+                    forces.TorqueBody + open.TorqueBodyNm);
+            }
+
+            var finalState = vessel.Parts.IntegrateEngineIntervals(initialState, dt, boundaries,
+                (state, offset, interval) =>
+                {
+                    if (offset > 0.0) state = CrossFlowCut(state, offset);
+                    subStart = offset;
+                    // The interval ends on an exact knot: recover it rather than trust the
+                    // rounded offset + interval, so the left-side rates belong to this interval.
+                    subEnd = dt;
+                    foreach (double knot in boundaries)
+                        if (knot > offset && knot < subEnd
+                            && System.Math.Abs(knot - (offset + interval)) <= 1e-9 * dt) subEnd = knot;
+                    return Integrators.RigidBody6DofIntegrator.Step(state, CurrentTime + offset, interval,
+                        Sample, (candidate, _, mass) => Forces(candidate, mass));
+                });
+
+            // At a knot inside the step the integrated centre velocity v_c = v_material + ω×c + Rċ
+            // changes by −R ΔS/m (S = p_rel − m ċ = Σ Q (e − c)) and ω by −I⁻¹ Δh_rel, so that
+            // P and H are continuous; c and the attitude are continuous.
+            Physics.RigidBody6DofState CrossFlowCut(Physics.RigidBody6DofState state, double time)
+            {
+                var before = distribution.Sample(time, Physics.MassBoundarySide.Left);
+                var after = distribution.Sample(time, Physics.MassBoundarySide.Right);
+                var left = transport.Sample(time, Physics.MassBoundarySide.Left, before, state.AngularVelocityBody);
+                var right = transport.Sample(time, Physics.MassBoundarySide.Right, after, state.AngularVelocityBody);
+                var leftFlux = left.RelativeLinearMomentumBodyKgMps - before.CenterOfMassRateBodyMps * before.MassKg;
+                var rightFlux = right.RelativeLinearMomentumBodyKgMps - after.CenterOfMassRateBodyMps * after.MassKg;
+                var velocity = state.Velocity - state.Orientation.Rotate(rightFlux - leftFlux) / after.MassKg;
+                var angular = state.AngularVelocityBody - after.ToRigidBodyMassProperties().InverseInertiaBody.Multiply(
+                    right.RelativeAngularMomentumBodyKgM2PerS - left.RelativeAngularMomentumBodyKgM2PerS);
+                return new(state.Position, velocity, state.Orientation, angular);
+            }
+
+            var end = distribution.Sample(dt, Physics.MassBoundarySide.Left);
+            var absoluteFinal = ToAbsoluteState(refBody, finalState);
+            var finalOffsetWorld = absoluteFinal.Orientation.Rotate(end.CenterOfMassBodyM);
+            vessel.Position = absoluteFinal.Position - finalOffsetWorld;
+            vessel.Velocity = absoluteFinal.Velocity
+                - absoluteFinal.AngularVelocityWorld.Cross(finalOffsetWorld)
+                - absoluteFinal.Orientation.Rotate(end.CenterOfMassRateBodyMps);
+            vessel.Orientation = absoluteFinal.Orientation;
+            vessel.AngularVelocity = absoluteFinal.AngularVelocityWorld;
+            vessel.LastTransportSample = transport.Sample(dt, Physics.MassBoundarySide.Left, end,
+                finalState.AngularVelocityBody);
+            vessel.TransportRelativeMomentumBody = vessel.LastTransportSample.Value.RelativeLinearMomentumBodyKgMps;
+            vessel.TransportRelativeAngularMomentumBody = vessel.LastTransportSample.Value.RelativeAngularMomentumBodyKgM2PerS;
+
+            LastCoupled6DofTelemetry = new Physics.Coupled6DofTelemetry(
+                Integrated: true,
+                SimulationTime: evaluationTime,
+                StepSeconds: dt,
+                MassKg: end.MassKg,
+                InitialCenterOfMassPositionWorld: centerPosition,
+                FinalCenterOfMassPositionWorld: absoluteFinal.Position,
+                InitialCenterOfMassVelocityWorld: centerVelocity,
+                FinalCenterOfMassVelocityWorld: absoluteFinal.Velocity,
+                FinalOrientation: absoluteFinal.Orientation,
+                FinalAngularVelocityWorld: absoluteFinal.AngularVelocityWorld);
+
+            var ownFinal = ShiftCenterOfMass(absoluteFinal, OwnShift(end));
+            var contactAfter = EvaluateLandingContact(vessel, refBody, ownFinal);
+            vessel.LastSurfaceContact = contactAfter;
+            vessel.LastContactForceWorld = contactAfter?.ForceWorld ?? Vector3d.Zero;
+            vessel.LastContactTorqueWorld = contactAfter?.TorqueWorld ?? Vector3d.Zero;
+            var catchContactAfter = EvaluateCatchContact(vessel, ownFinal, evaluationTime);
+            vessel.LastCatchContact = catchContactAfter;
+            UpdateLandingContactState(vessel, refBody, contactAfter, dt);
+            UpdateCatchContactState(vessel, catchContactAfter, dt);
+            vessel.LastWaterContact = EvaluateCoupledWaterContact(vessel, refBody, ownFinal, evaluationTime);
+            if (vessel.LastWaterContact is { } waterAfter)
+            {
+                vessel.LastContactForceWorld += waterAfter.ForceWorld;
+                vessel.LastContactTorqueWorld += waterAfter.TorqueWorld;
+            }
+        }
+        finally
+        {
+            vessel.EndCoupledPhysicsStep();
+        }
+    }
+
+    /// <summary>
     /// Pre-entry water wrench for one candidate centre-of-mass state, in the same datum
     /// convention as the split tick (vessel datum with the definition's centre-of-mass
     /// height); the free-floating water integrator takes over once water motion starts.
@@ -2718,6 +2960,12 @@ public class Universe
     private Physics.RigidBodyMassProperties DockedCompositeMassProperties(
         Vessel primary, in Physics.RigidBodyMassProperties own)
     {
+        var members = DockedMembers(primary);
+        return members == null ? own : Physics.CompositeMassProperties.Combine(own, members);
+    }
+
+    private List<Physics.RigidlyAttachedMember>? DockedMembers(Vessel primary)
+    {
         List<Physics.RigidlyAttachedMember>? members = null;
         foreach (var connection in _dockingConnections)
         {
@@ -2728,7 +2976,7 @@ public class Universe
                     (members ??= new()).Add(new(properties,
                         connection.SecondaryPositionPrimaryLocal, connection.SecondaryOrientationPrimaryLocal));
         }
-        return members == null ? own : Physics.CompositeMassProperties.Combine(own, members);
+        return members;
     }
 
     private static Physics.RigidBody6DofState ToAbsoluteState(

@@ -616,6 +616,12 @@ public class Vessel
     /// bypasses the flight-control law and lasts until cleared or its propellant runs out.
     /// </summary>
     public Vector3d DisturbanceTorqueBody { get; set; }
+    /// <summary>
+    /// Where the disturbance flow (a stuck thruster) leaves the vehicle, skirt-datum body frame,
+    /// and its outward exhaust direction. Required for variable-mass transport of that flow.
+    /// </summary>
+    public Vector3d? DisturbanceOutletBodyM { get; set; }
+    public Vector3d? DisturbanceExhaustDirectionBody { get; set; }
 
     /// <summary>Monopropellant (kg/s) the disturbance source burns; it stops when the supply is gone.</summary>
     public double DisturbanceMassFlowKgPerS { get; set; }
@@ -652,16 +658,38 @@ public class Vessel
     public bool CaptureResourceFunding { get; set; }
     public Physics.ResourceFundingWindow? LastResourceFunding { get; private set; }
 
+    /// <summary>
+    /// Set by the coupled integrator for the step it is about to prepare: the window then feeds
+    /// variable-mass transport (F4) even when the public debug capture is off.
+    /// </summary>
+    internal bool CaptureTransportWindow { get; set; }
+    internal Physics.ResourceFundingWindow? TransportWindow { get; private set; }
+    /// <summary>"active" when the last coupled step integrated variable-mass transport, else why not.</summary>
+    public string? LastVariableMassStatus { get; internal set; }
+    /// <summary>End-of-step open-system transport (relative momenta, force, moment) of that step.</summary>
+    public Physics.OpenSystemTransportSample? LastTransportSample { get; internal set; }
+    /// <summary>
+    /// Feed-flow relative momenta (body frame) at the end of the last coupled step, carried to
+    /// the next step so a flow change conserves total momentum. Null: unknown (no impulse applied).
+    /// A new vessel starts with no flow (zero). Not saved: a reload resumes with null, without a
+    /// feed impulse.
+    /// </summary>
+    internal Vector3d? TransportRelativeMomentumBody { get; set; } = Vector3d.Zero;
+    internal Vector3d? TransportRelativeAngularMomentumBody { get; set; } = Vector3d.Zero;
+
     private void BeginResourceFunding(double dt)
     {
         LastResourceFunding = null;
-        Parts.ResourceFundingCapture = CaptureResourceFunding
+        TransportWindow = null;
+        Parts.ResourceFundingCapture = CaptureResourceFunding || CaptureTransportWindow
             ? new Physics.ResourceFundingCapture(Parts.PartList, dt, InfinitePropellant, Parts.TopologyVersion) : null;
     }
 
     private void CompleteResourceFunding()
     {
-        LastResourceFunding = Parts.ResourceFundingCapture?.Complete(Parts.PartList, Parts.TopologyVersion);
+        var window = Parts.ResourceFundingCapture?.Complete(Parts.PartList, Parts.TopologyVersion);
+        if (CaptureResourceFunding) LastResourceFunding = window;
+        if (CaptureTransportWindow) TransportWindow = window;
         Parts.ResourceFundingCapture = null;
     }
 

@@ -145,7 +145,8 @@ public sealed class SingleResourceExhaustionTests
     }
     private static Universe World(Vessel ship, bool coupled)
     {
-        var world = new Universe { ActiveVessel = ship, Coupled6DofIntegrationEnabled = coupled };
+        // Frozen per-step mass: the boundary itself is under test; transport has its own tests.
+        var world = new Universe { ActiveVessel = ship, Coupled6DofIntegrationEnabled = coupled, VariableMassTransportEnabled = false };
         world.AddBody(new CelestialBody { Id = "body", Radius = 1, SphereOfInfluence = 1e9 });
         world.AddVessel(ship); return world;
     }

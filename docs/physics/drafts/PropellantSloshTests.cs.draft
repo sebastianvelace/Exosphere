@@ -1,0 +1,152 @@
+namespace ExosphereSimulation.Tests;
+
+using Exosphere.Simulation;
+using Exosphere.Simulation.Math;
+using Exosphere.Simulation.Parts;
+using Exosphere.Simulation.Physics;
+using Xunit;
+using Xunit.Abstractions;
+
+/// <summary>
+/// F5 first lateral slosh mode per tank (NASA SP-8009 / SP-106 cylinder model): analytic limits,
+/// conservation of the column's own mass and centre, the coupled pendulum's momentum and
+/// frequency, and the AS-501 measured S-IC slosh frequencies.
+/// </summary>
+public sealed class PropellantSloshTests(ITestOutputHelper output)
+{
+    [Fact]
+    [Trait("FidelityGate", "F5")]
+    [Trait("GateKind", "analytic")]
+    public void TheModeRootIsTheFirstZeroOfTheBesselDerivative()
+    {
+        // J₁′(x) = J₀(x) − J₁(x)/x, by series.
+        static double J(int n, double x)
+        {
+            double sum = 0, term = System.Math.Pow(x / 2, n);
+            for (int k = 1; k <= n; k++) term /= k;
+            for (int k = 0; k < 60; k++)
+            {
+                sum += term;
+                term *= -(x * x / 4) / ((k + 1) * (k + 1 + n));
+            }
+            return sum;
+        }
+        double x = PropellantSlosh.FirstModeRoot;
+        Assert.InRange(System.Math.Abs(J(0, x) - J(1, x) / x), 0, 1e-12);
+    }
+
+    [Theory]
+    [Trait("FidelityGate", "F5")]
+    [Trait("GateKind", "analytic")]
+    [InlineData(0.05)]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    [InlineData(3.0)]
+    public void TheModelKeepsTheColumnsMassAndCentre(double depthRatio)
+    {
+        const double radius = 5.0, mass = 1.0e6, acceleration = 20.0;
+        var mode = PropellantSlosh.FirstMode(radius, depthRatio * radius, mass, acceleration);
+        Assert.Equal(mass, mode.SloshMassKg + mode.FixedMassKg, 6);
+        Assert.Equal(mass * depthRatio * radius / 2, mode.SloshMassKg * mode.SloshMassHeightM + mode.FixedMassKg * mode.FixedMassHeightM, 3);
+        // The pendulum is the mode: ω² = a / L.
+        Assert.Equal(acceleration / mode.PendulumLengthM, mode.FrequencyRadPerS * mode.FrequencyRadPerS, 9);
+        Assert.InRange(mode.SloshMassKg, 0, mass);
+        Assert.True(mode.SloshMassHeightM <= depthRatio * radius);
+    }
+
+    [Fact]
+    [Trait("FidelityGate", "F5")]
+    [Trait("GateKind", "analytic")]
+    public void DeepAndShallowLimitsMatchTheirClosedForms()
+    {
+        const double radius = 2.0, mass = 1000, acceleration = 9.80665, xi = PropellantSlosh.FirstModeRoot;
+        var deep = PropellantSlosh.FirstMode(radius, 50 * radius, mass, acceleration);
+        Assert.Equal(System.Math.Sqrt(xi * acceleration / radius), deep.FrequencyRadPerS, 9);
+        Assert.Equal(0.4547 / 50, deep.SloshMassKg / mass, 4);       // SP-8009 0.4547 (R/h)
+        Assert.Equal(radius / xi, deep.PendulumLengthM, 9);
+        Assert.Equal(1.0862 * radius, 50 * radius - deep.SloshMassHeightM, 3); // 2R/ξ₁ below the surface
+        var shallow = PropellantSlosh.FirstMode(radius, 1e-4 * radius, mass, acceleration);
+        // Shallow water: ω = ξ₁ √(a h) / R, and m₁/m → 2/(ξ₁² − 1).
+        Assert.Equal(xi * System.Math.Sqrt(acceleration * 1e-4 * radius) / radius, shallow.FrequencyRadPerS, 6);
+        Assert.Equal(2 / (xi * xi - 1), shallow.SloshMassKg / mass, 6);
+    }
+
+    [Fact]
+    [Trait("FidelityGate", "F5")]
+    [Trait("GateKind", "analytic")]
+    public void ACoupledPendulumConservesMomentumAndRunsAtTheFreeFreeFrequency()
+    {
+        const double carrier = 3000, slosh = 600, length = 1.5, acceleration = 12;
+        double v = 0, angle = 0.05, rate = 0, time = 0, dt = 1e-3;
+        double momentum0 = SloshPendulumCoupling.LateralMomentum(carrier, slosh, length, v, angle, rate);
+        double previousAngle = angle, firstCrossing = double.NaN, secondCrossing = double.NaN;
+        for (int i = 0; i < 20000; i++)
+        {
+            (double dv, double dw) F(double th, double w) => SloshPendulumCoupling.Derivatives(carrier, slosh, length, acceleration, th, w);
+            var k1 = F(angle, rate);
+            var k2 = F(angle + dt / 2 * rate, rate + dt / 2 * k1.dw);
+            var k3 = F(angle + dt / 2 * (rate + dt / 2 * k1.dw), rate + dt / 2 * k2.dw);
+            var k4 = F(angle + dt * (rate + dt / 2 * k2.dw), rate + dt * k3.dw);
+            v += dt / 6 * (k1.dv + 2 * k2.dv + 2 * k3.dv + k4.dv);
+            angle += dt / 6 * (rate + 2 * (rate + dt / 2 * k1.dw) + 2 * (rate + dt / 2 * k2.dw) + (rate + dt * k3.dw));
+            rate += dt / 6 * (k1.dw + 2 * k2.dw + 2 * k3.dw + k4.dw);
+            time += dt;
+            if (previousAngle > 0 && angle <= 0)
+            {
+                if (double.IsNaN(firstCrossing)) firstCrossing = time;
+                else if (double.IsNaN(secondCrossing)) secondCrossing = time;
+            }
+            previousAngle = angle;
+        }
+        Assert.Equal(momentum0, SloshPendulumCoupling.LateralMomentum(carrier, slosh, length, v, angle, rate), 9);
+        double expected = 2 * System.Math.PI / System.Math.Sqrt(acceleration / length * (1 + slosh / carrier));
+        // 0.05 rad amplitude lengthens the period by under 0.02 %.
+        Assert.Equal(expected, secondCrossing - firstCrossing, 3);
+    }
+
+    /// <summary>
+    /// Historical: AS-501 (Apollo 4) flight evaluation, MPR-SAT-FE-68-1, Figure 11-15
+    /// "Predominant Slosh Frequencies During S-IC Burn" (from liquid-level probes): about
+    /// 0.35 Hz at liftoff for LOX and fuel, LOX rising to about 0.51 Hz near 115 s, fuel
+    /// reaching about 0.46 Hz near 100 s and falling to about 0.42 Hz by 130 s as its tank
+    /// empties. The model's AS-506 S-IC tanks, at the flown specific force and fill, must
+    /// track that curve within ±10 % (curve reading ±0.01 Hz, AS-501/AS-506 trajectory and
+    /// loading differences, unbaffled potential-flow parameters).
+    /// </summary>
+    [Fact]
+    [Trait("FidelityGate", "F5")]
+    [Trait("GateKind", "historical")]
+    public void As506SicSloshFollowsTheAs501MeasuredFrequencies()
+    {
+        (double Time, double Lox, double Fuel)[] measured =
+            [(10, 0.355, 0.355), (60, 0.42, 0.42), (100, 0.48, 0.46), (130, 0.50, 0.42)];
+        var samples = new List<(double Time, double Lox, double Fuel)>();
+        int next = 0;
+        SaturnVAscentFlight.Fly(variantFile: "apollo11_saturn5_as506_1969.json", afterTick: (vessel, elapsed, sicAttached) =>
+        {
+            if (!sicAttached || next >= measured.Length || elapsed < measured[next].Time) return;
+            var earth = vessel.ReferenceBodyId;
+            var tank = vessel.Parts.Parts.First(p => p.Definition.HasVehicleRole("sic_tank"));
+            var axis = vessel.Orientation.Rotate(Vector3d.Up);
+            var telemetry = vessel.LastCoupled6DofSpecificForceWorld;
+            double specificForce = telemetry.Dot(axis);
+            double Frequency(PartMassComponentKind kind, double mass)
+            {
+                var definition = tank.Definition.FindPropellantTank(kind)!;
+                double lambda = definition.DensityKgPerM3 * System.Math.PI * definition.RadiusM * definition.RadiusM;
+                return PropellantSlosh.FirstMode(definition.RadiusM, mass / lambda, mass, specificForce).FrequencyHz;
+            }
+            samples.Add((elapsed, Frequency(PartMassComponentKind.Oxidizer, tank.Oxidizer),
+                Frequency(PartMassComponentKind.LiquidFuel, tank.LiquidFuel)));
+            next++;
+        });
+        Assert.Equal(measured.Length, samples.Count);
+        for (int i = 0; i < measured.Length; i++)
+        {
+            output.WriteLine($"t={samples[i].Time:F1}s LOX {samples[i].Lox:F3} Hz (flight {measured[i].Lox}), "
+                + $"fuel {samples[i].Fuel:F3} Hz (flight {measured[i].Fuel})");
+            Assert.InRange(samples[i].Lox / measured[i].Lox, 0.9, 1.1);
+            Assert.InRange(samples[i].Fuel / measured[i].Fuel, 0.9, 1.1);
+        }
+    }
+}

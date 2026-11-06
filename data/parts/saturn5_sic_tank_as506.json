@@ -10,8 +10,18 @@
   "diameter_m": 10.1,
   "drag_coefficient": 0.2,
   "heat_tolerance": 950,
-  "fuel_capacity_lf": 646854.01749353,
-  "fuel_capacity_ox": 1500417.78906635,
+  "fuel_capacity_lf": 640871.01749353,
+  "fuel_capacity_ox": 1478549.78906635,
+  "dry_mass_center_y_m": -7.4224,
+  "dry_gyration_m": {"transverse_m": 10.764, "axial_m": 4.693},
+  "header_tanks": [
+    {"id": "lox_suction_lines", "propellant": "oxidizer", "capacity_kg": 21868, "center_y_m": -9.42},
+    {"id": "rp1_suction_lines", "propellant": "liquid_fuel", "capacity_kg": 5983, "center_y_m": -16.42}
+  ],
+  "propellant_tanks": [
+    {"resource": "liquid_fuel", "bottom_y_m": -14.145, "top_y_m": -3.334, "radius_m": 5.029, "density_kg_m3": 807},
+    {"resource": "oxidizer", "bottom_y_m": -0.252, "top_y_m": 16.961, "radius_m": 5.029, "density_kg_m3": 1141}
+  ],
   "attachment_nodes": [
     {"id": "top", "position": [0, 18.15, 0], "size": 3, "type": "stack"},
     {"id": "bottom", "position": [0, -18.15, 0], "size": 3, "type": "stack"}

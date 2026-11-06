@@ -226,7 +226,8 @@ public sealed class EngineExhaustionTests
             Position = Vector3d.Right * 10_000, ReferenceBodyId = "body",
             Throttle = 1, SASEnabled = false,
         };
-        universe = new Universe { ActiveVessel = vessel, Coupled6DofIntegrationEnabled = coupled };
+        // These pin the exhaustion boundary under the frozen per-step mass; transport has its own tests.
+        universe = new Universe { ActiveVessel = vessel, Coupled6DofIntegrationEnabled = coupled, VariableMassTransportEnabled = false };
         universe.AddBody(new CelestialBody { Id = "body", Radius = 1, SphereOfInfluence = 1e9 });
         universe.AddVessel(vessel);
         return vessel;

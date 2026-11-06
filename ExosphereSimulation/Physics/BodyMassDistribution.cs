@@ -106,7 +106,7 @@ public sealed class BodyMassDistribution
             var sample = component.SampleMass(timeSeconds, side);
             mass += sample.Mass;
             massRate += sample.Rate;
-            if (!anchored && sample.Mass > 0) { anchor = component.PositionBodyM; anchored = true; }
+            if (!anchored && sample.Mass > 0) { anchor = component.CenterBodyM(sample.Mass); anchored = true; }
         }
         if (!double.IsFinite(mass) || mass <= 0 || !double.IsFinite(massRate))
             throw new InvalidOperationException("Candidate mass and mass rate must be representable.");
@@ -118,25 +118,36 @@ public sealed class BodyMassDistribution
         {
             double componentMass = component.SampleMass(timeSeconds, side).Mass;
             if (componentMass > 0)
-                centerRelative += (component.PositionBodyM - anchor) * (componentMass / mass);
+                centerRelative += (component.CenterBodyM(componentMass) - anchor) * (componentMass / mass);
         }
         var center = anchor + centerRelative;
-        var centerRate = Vector3d.Zero;
+        // m c' = sum(m_i' (c_i - c) + m_i c_i'); m c'' = sum(2 m_i' c_i') - 2 m' c' because each
+        // m_i is affine and each moving centroid (a settled column) moves at a rate set by m_i'.
+        var momentRate = Vector3d.Zero;
+        var momentAcceleration = Vector3d.Zero;
         var inertia = new CentralTensorSum();
         var inertiaRate = new CentralTensorSum();
         foreach (var component in _components)
         {
             var sample = component.SampleMass(timeSeconds, side);
             if (sample.Mass == 0 && sample.Rate == 0) continue;
-            var distance = (component.PositionBodyM - anchor) - centerRelative;
-            if (sample.Rate != 0 && distance != Vector3d.Zero)
-                centerRate += distance * (sample.Rate / mass);
-            inertia.Add(component.SpecificInertiaBodyM2, distance, sample.Mass);
-            // The terms from differentiating distance cancel: sum(m_i*(r_i-c)) = 0.
-            inertiaRate.Add(component.SpecificInertiaBodyM2, distance, sample.Rate);
+            var distance = (component.CenterBodyM(sample.Mass) - anchor) - centerRelative;
+            var componentRate = component.CenterRateBodyMps(sample.Rate);
+            momentRate += distance * sample.Rate + componentRate * sample.Mass;
+            momentAcceleration += componentRate * (2 * sample.Rate);
+            inertia.Add(component.SpecificInertiaAt(sample.Mass), distance, sample.Mass);
+            // d/dt [m_i (J_i + P(d_i))] = m_i' (J_i + P(d_i)) + m_i J_i' + m_i P'(d_i, c_i');
+            // the common -c' part of d_i' cancels because sum(m_i d_i) = 0.
+            inertiaRate.Add(component.SpecificInertiaAt(sample.Mass), distance, sample.Rate);
+            if (sample.Mass > 0)
+            {
+                inertiaRate.AddMatrix(component.SpecificInertiaRate(sample.Mass, sample.Rate), sample.Mass);
+                if (componentRate != Vector3d.Zero)
+                    inertiaRate.AddParallelAxisRate(distance, componentRate, sample.Mass);
+            }
         }
-        var centerAcceleration = centerRate == Vector3d.Zero ? Vector3d.Zero
-            : centerRate * (-2 * (massRate / mass));
+        var centerRate = momentRate / mass;
+        var centerAcceleration = (momentAcceleration - centerRate * (2 * massRate)) / mass;
         var central = inertia.Matrix;
         var centralRate = inertiaRate.Matrix;
         DynamicsInputs.RequireFinite(center, nameof(center));
@@ -160,6 +171,24 @@ public sealed class BodyMassDistribution
             _xz += weight * (specific.M13 - d.X * d.Z);
             _yz += weight * (specific.M23 - d.Y * d.Z);
         }
+        internal void AddMatrix(Matrix3x3d m, double weight)
+        {
+            _xx += weight * m.M11; _yy += weight * m.M22; _zz += weight * m.M33;
+            _xy += weight * m.M12; _xz += weight * m.M13; _yz += weight * m.M23;
+        }
+
+        // weight * dP/dt for P(d) = (d.d)E - d dᵀ with d' = v.
+        internal void AddParallelAxisRate(Vector3d d, Vector3d v, double weight)
+        {
+            double dot2 = 2 * d.Dot(v);
+            _xx += weight * (dot2 - 2 * d.X * v.X);
+            _yy += weight * (dot2 - 2 * d.Y * v.Y);
+            _zz += weight * (dot2 - 2 * d.Z * v.Z);
+            _xy -= weight * (d.X * v.Y + v.X * d.Y);
+            _xz -= weight * (d.X * v.Z + v.X * d.Z);
+            _yz -= weight * (d.Y * v.Z + v.Y * d.Z);
+        }
+
         internal readonly Matrix3x3d Matrix => new(_xx, _xy, _xz, _xy, _yy, _yz, _xz, _yz, _zz);
     }
 }

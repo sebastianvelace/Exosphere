@@ -609,6 +609,15 @@ public partial class PartGraph
     private RigidBodyMassProperties BuildMassProperties(
         IReadOnlyDictionary<Part, Vector3d> positions)
     {
+        double fallbackLength = System.Math.Max(
+            1.0,
+            VehicleLength / System.Math.Max(1, _parts.Count));
+        double fallbackDiameter = System.Math.Max(1.0, MaximumDiameter);
+
+        // One shared decomposition (PartMassGeometry): every component keeps its own centroid
+        // and central inertia, so the parallel-axis spread between dry structure, tanks and
+        // headers is retained instead of shifting one wet cylinder.
+        var components = _massComponentScratch;
         double totalMass = 0.0;
         Vector3d weightedPosition = Vector3d.Zero;
         foreach (var part in _parts)
@@ -618,19 +627,21 @@ public partial class PartGraph
                 throw new InvalidOperationException(
                     $"Part '{part.InstanceId}' has invalid mass {mass:G17}.");
             if (!positions.TryGetValue(part, out var position)) continue;
-
-            totalMass += mass;
-            weightedPosition += MassCentre(part, position) * mass;
+            components.Clear();
+            PartMassGeometry.AppendComponents(part, fallbackLength, fallbackDiameter, components);
+            foreach (var component in components)
+            {
+                if (component.MassKg <= 0.0) continue;
+                totalMass += component.MassKg;
+                weightedPosition += new Vector3d(position.X, position.Y + component.CenterYM, position.Z)
+                    * component.MassKg;
+            }
         }
 
         if (!double.IsFinite(totalMass) || totalMass <= 0.0)
             throw new InvalidOperationException("Cannot build mass properties for an empty graph.");
 
         Vector3d centerOfMass = weightedPosition / totalMass;
-        double fallbackLength = System.Math.Max(
-            1.0,
-            VehicleLength / System.Math.Max(1, _parts.Count));
-        double fallbackDiameter = System.Math.Max(1.0, MaximumDiameter);
 
         double i11 = 0.0;
         double i12 = 0.0;
@@ -641,50 +652,24 @@ public partial class PartGraph
         foreach (var part in _parts)
         {
             if (!positions.TryGetValue(part, out var position)) continue;
-            // Header propellant is a point mass at its station; the rest of the part is the
-            // cylinder below.
-            var headers = part.Definition.HeaderTanks;
-            double headerMass = 0.0;
-            for (int h = 0; h < headers.Count && h < part.HeaderPropellantKg.Length; h++)
+            components.Clear();
+            PartMassGeometry.AppendComponents(part, fallbackLength, fallbackDiameter, components);
+            foreach (var component in components)
             {
-                double headerKg = part.HeaderPropellantKg[h];
-                if (headerKg <= 0.0) continue;
-                headerMass += headerKg;
-                Vector3d d = new Vector3d(position.X, position.Y + headers[h].CenterYM, position.Z) - centerOfMass;
-                i11 += headerKg * (d.Y * d.Y + d.Z * d.Z);
-                i22 += headerKg * (d.X * d.X + d.Z * d.Z);
-                i33 += headerKg * (d.X * d.X + d.Y * d.Y);
-                i12 -= headerKg * d.X * d.Y;
-                i13 -= headerKg * d.X * d.Z;
-                i23 -= headerKg * d.Y * d.Z;
+                double mass = component.MassKg;
+                if (mass <= 0.0) continue;
+                // Local axis is vessel +Y; the component's central tensor is diagonal.
+                double transverse = mass * component.Shape.TransverseSpecific(mass);
+                double axial = mass * component.Shape.AxialSpecific;
+                Vector3d d = new Vector3d(position.X, position.Y + component.CenterYM, position.Z) - centerOfMass;
+                // Parallel-axis theorem: I_shift = I_local + m((d·d)E - d⊗d).
+                i11 += transverse + mass * (d.Y * d.Y + d.Z * d.Z);
+                i22 += axial + mass * (d.X * d.X + d.Z * d.Z);
+                i33 += transverse + mass * (d.X * d.X + d.Y * d.Y);
+                i12 -= mass * d.X * d.Y;
+                i13 -= mass * d.X * d.Z;
+                i23 -= mass * d.Y * d.Z;
             }
-            double mass = part.CurrentMass - headerMass;
-            // The non-header remainder centres on the dry structure's declared station.
-            double restOffsetY = mass > 0.0 ? part.Definition.MassDry * part.Definition.DryMassCenterYM / mass : 0.0;
-            double length = part.Definition.LengthM > 0.0
-                ? part.Definition.LengthM
-                : fallbackLength;
-            double diameter = part.Definition.DiameterM > 0.0
-                ? part.Definition.DiameterM
-                : fallbackDiameter;
-            double radius = diameter * 0.5;
-
-            // Local cylinder axis is vessel +Y. The local COM inertia is diagonal.
-            double transverse = mass
-                * (3.0 * radius * radius + length * length) / 12.0;
-            double axial = 0.5 * mass * radius * radius;
-            Vector3d offset = new Vector3d(position.X, position.Y + restOffsetY, position.Z) - centerOfMass;
-            double xx = offset.X;
-            double yy = offset.Y;
-            double zz = offset.Z;
-
-            // Parallel-axis theorem: I_shift = I_local + m((d·d)E - d⊗d).
-            i11 += transverse + mass * (yy * yy + zz * zz);
-            i22 += axial + mass * (xx * xx + zz * zz);
-            i33 += transverse + mass * (xx * xx + yy * yy);
-            i12 -= mass * xx * yy;
-            i13 -= mass * xx * zz;
-            i23 -= mass * yy * zz;
         }
 
         var inertia = new Matrix3x3d(
@@ -694,7 +679,9 @@ public partial class PartGraph
         return new RigidBodyMassProperties(totalMass, centerOfMass, inertia);
     }
 
-    /// <summary>A part's own centre of mass: its centre, shifted along its axis by header propellant.</summary>
+    private readonly List<PartMassComponent> _massComponentScratch = new(16);
+
+    /// <summary>A part's own centre of mass: its centre, shifted along its axis by its components.</summary>
     private static Vector3d MassCentre(Part part, Vector3d position)
     {
         double offset = part.MassCenterOffsetYM;
@@ -703,6 +690,9 @@ public partial class PartGraph
 
     // Positions depend on topology and geometry only, so ticks share the topology cache.
     private Dictionary<Part, Vector3d> GetCachedPartLocalPositions() => GetTopologyPartLocalPositions();
+
+    /// <summary>The stack-frame positions the mass properties use (only placed parts carry mass).</summary>
+    internal IReadOnlyDictionary<Part, Vector3d> GetTopologyPartLocalPositionsForMass() => GetTopologyPartLocalPositions();
 
     /// <summary>
     /// True when this body's aerodynamics come from its part geometry

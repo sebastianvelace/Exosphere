@@ -441,8 +441,19 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      aprobados; referencia Flight 14 idéntica a la unidad anterior. Falta cerrar venteos
      simultáneos, RCS y demás fuentes antes de construir el inventario completo y activar
      transporte en misiones.
-   - Siguiente: completar F4 y continuar F5–F6 de `docs/physics/rigid_body_fidelity_plan.md` (transporte de masa variable,
-     slosh, recalibración histórica); aletas del S-IC, grid fins y
+   - **F4 cerrada (2026-11-06).** Ventanas de recursos completas validadas (CI 1421/1421).
+     Geometría de masa compartida (`PartMassGeometry`: centro y giro secos, columnas líquidas
+     asentadas sobre el fondo plano equivalente de cada tanque, headers puntuales) y transporte
+     de masa variable en producción (`VariableMassStepModel` + `OpenSystemTransport`): masa,
+     CoM e inercia por etapa RK4, salidas declaradas, camino de flujo interno que cumple la
+     continuidad exacta y cortes de flujo que conservan P y H (impulso de golpe de ariete).
+     Gate histórico: jet damping del S-IC del AS-506 contra MPR-SAT-FE-69-9 (CG en la
+     liberación −0.03 m, J_out +0.6 %; CG al corte +0.50 m, brazo +2.0 %; ΔI +5.6 %).
+     Hallazgo: un vehículo líquido que drena gana alabeo; la Ship del Flight 14 ahora amortigua
+     su tasa de alabeo en ascenso y quemados orbitales. Huecos de datos para F6: estaciones de
+     los módulos del spacecraft, tanques del S-II/S-IVB, flujo del F-1 en altura y el AS-503.
+   - Siguiente: F5 (slosh por tanque, iniciada) y F6 (recalibración histórica) de
+     `docs/physics/rigid_body_fidelity_plan.md`; aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.
 
 2. **Controles aún no equivalentes en el camino acoplado**

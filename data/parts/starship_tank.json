@@ -64,6 +64,7 @@
     {"id": "aft_270_roll_a", "position": [0.0, -11.8, -4.6], "direction": [1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60},
     {"id": "aft_270_roll_b", "position": [0.0, -11.8, -4.6], "direction": [-1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60}
   ],
+  "vent_outlet": {"position": [0, 8.0, 0], "exhaust_direction": [0, 1, 0], "diameter_m": 0},
   "attachment_nodes": [
     {"id": "top",    "position": [0,  14.8, 0], "size": 3, "type": "stack"},
     {"id": "bottom", "position": [0, -14.8, 0], "size": 3, "type": "stack"}

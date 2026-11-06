@@ -1,5 +1,7 @@
 namespace Exosphere.Simulation.Flight;
 
+using Exosphere.Simulation.Math;
+
 /// <summary>
 /// Published Gemini VIII events and a smooth Titan II guidance reconstruction.
 /// The event schedule is historical; commands between events are calibrated.
@@ -86,6 +88,30 @@ public static class Gemini8FlightProfile
 
     /// <summary>Propellant (kg/s) that thruster burns: 111 N at the OAMS 260 s specific impulse.</summary>
     public const double StuckThrusterMassFlowKgPerS = 111.2 / (260.0 * 9.80665);
+
+    /// <summary>
+    /// The OAMS attitude thruster that stuck on, among the adapter's declared thrusters: the
+    /// one whose moment has the stuck torque's (+roll) sign. Its nozzle is where the stuck
+    /// flow leaves the spacecraft (variable-mass transport).
+    /// </summary>
+    public const string StuckThrusterId = "att_0_b";
+
+    /// <summary>Starts the stuck thruster: its calibrated roll torque, its propellant flow and its outlet.</summary>
+    public static void StartStuckThruster(Vessel vessel)
+    {
+        vessel.DisturbanceTorqueBody = new Vector3d(0.0, StuckThrusterTorqueNm, 0.0);
+        vessel.DisturbanceMassFlowKgPerS = StuckThrusterMassFlowKgPerS;
+        foreach (var part in vessel.Parts.Parts)
+            foreach (var thruster in part.Definition.RcsThrusters)
+                if (thruster.Id == StuckThrusterId && vessel.Parts.TryGetPartLocalPosition(part, out var station))
+                {
+                    vessel.DisturbanceOutletBodyM = station + new Vector3d(
+                        thruster.Position[0], thruster.Position[1], thruster.Position[2]);
+                    vessel.DisturbanceExhaustDirectionBody = -new Vector3d(
+                        thruster.Direction[0], thruster.Direction[1], thruster.Direction[2]).Normalized;
+                    return;
+                }
+    }
 
     /// <summary>Body rate (rad/s) below which control counts as recovered.</summary>
     public const double ControlRecoveredRateRadPerS = 0.2 * System.Math.PI / 180.0;

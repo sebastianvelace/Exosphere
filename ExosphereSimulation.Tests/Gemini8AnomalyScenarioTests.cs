@@ -25,8 +25,7 @@ public sealed class Gemini8AnomalyScenarioTests(ITestOutputHelper output)
         var reentry = gemini.Parts.Parts.First(p => p.Definition.HasVehicleRole("gemini_reentry_capsule"));
         double oamsStart = adapter.Monopropellant;
         double reentryStart = reentry.Monopropellant;
-        gemini.DisturbanceTorqueBody = new Vector3d(0.0, Gemini8FlightProfile.StuckThrusterTorqueNm, 0.0);
-        gemini.DisturbanceMassFlowKgPerS = Gemini8FlightProfile.StuckThrusterMassFlowKgPerS;
+        Gemini8FlightProfile.StartStuckThruster(gemini);
 
         double start = universe.CurrentTime, peak = 0.0, recovered = double.NaN;
         double armAt = start + (Gemini8FlightProfile.ReentryControlActivationSeconds - Gemini8FlightProfile.UndockingSeconds);

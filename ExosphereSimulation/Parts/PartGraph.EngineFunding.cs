@@ -48,8 +48,17 @@ public partial class PartGraph
     /// Stateful propulsion/control preparation and resource debit are never repeated here.
     /// </summary>
     internal T IntegrateEngineIntervals<T>(T state, double duration, Func<T, double, double, T> step)
+        => IntegrateEngineIntervals(state, duration, null, step);
+
+    /// <summary>
+    /// As above, also splitting at <paramref name="extraBoundaries"/> (step-local seconds): the
+    /// knots where a variable-mass profile changes rate, so no RK4 stage straddles one.
+    /// </summary>
+    internal T IntegrateEngineIntervals<T>(T state, double duration, IReadOnlyList<double>? extraBoundaries,
+        Func<T, double, double, T> step)
     {
-        if (_engineExhaustions.Count == 0) return step(state, 0, duration);
+        if (_engineExhaustions.Count == 0 && (extraBoundaries == null || extraBoundaries.Count == 0))
+            return step(state, 0, duration);
         double elapsed = 0;
         try
         {
@@ -58,6 +67,9 @@ public partial class PartGraph
                 double end = duration;
                 foreach (var entry in _engineExhaustions)
                     if (entry.Duration > elapsed && entry.Duration < end) end = entry.Duration;
+                if (extraBoundaries != null)
+                    foreach (double boundary in extraBoundaries)
+                        if (boundary > elapsed && boundary < end) end = boundary;
                 SelectEngineInterval(elapsed);
                 state = step(state, elapsed, end - elapsed);
                 elapsed = end;

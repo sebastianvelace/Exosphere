@@ -300,7 +300,7 @@ The isolated-Earth continuation reaches water at 4.422 m/s.
 0 warnings / 0 errors, Flight startup, MainMenu and Construction smoke tests, and the
 real-framebuffer graphics-settings capture/reload check. F3 is closed with the analytic
 RCS/SAS gates, the Gemini 8 historical recovery gate, exact checkpoint continuation and
-the original Flight 14 descent/contact limits. F4 is open; F5–F6 remain planned.
+the original Flight 14 descent/contact limits. F4 is closed (2026-11-06); F5 has started; F6 remains planned.
 
 ## F4 findings (2026-11-04, in progress)
 
@@ -429,3 +429,25 @@ Starship Flight 7/14, Falcon, New Glenn) against its source data after F0–F5; 
 
 Each phase lands as reviewable commits with xUnit tests, an entry in
 `coupled_6dof_migration.md` or `PHYSICS_MODEL.md`, and a full `tools/ci_check.sh` run.
+
+
+## F4 closure (2026-11-06)
+
+F4 closes on the production variable-mass path: one shared mass decomposition
+(`PartMassGeometry`: dry centre/gyration, settled tank columns on equivalent flat bottoms,
+header points), a per-step model of every funded flow and its outlet
+(`VariableMassStepModel`), the open-system force and moment (`OpenSystemTransport`), stage-
+sampled RK4 split at every knot, and momentum-conserving flow cuts (P and H continuous; the
+feed's momentum reacts on the structure). Analytic gates: settled columns, continuity
+identity, co-rotating removal, rocket equation with feed impulses, independent jet-damping
+law, plus the earlier uniform-burn cylinder and tidal libration. Historical gate:
+`SaturnVJetDampingHistoricalTests` (AS-506 S-IC, MPR-SAT-FE-69-9 Table 20-10 and Table 5-I,
+MSFC station drawing): release CG −0.03 m, J_out +0.6 %; cutoff CG +0.50 m, lever +2.0 %;
+ΔI +5.6 %. See `variable_mass_torques.md` "Production activation".
+
+Findings: (1) a draining liquid vehicle spins up in roll (İ_axial = ṁR²/2 outweighs the near-
+axis exhaust), which stopped Flight 14's Ship at insertion until its ascent and orbital-burn
+pointing damped the roll rate (`rollDampingGain`); (2) the AS-506 model needed FER-derived
+dry centres/gyrations, equal-volume tank bottoms and the S-IC suction-line propellant to
+reproduce the flight's CG history; (3) remaining data gaps go to F6: spacecraft module
+stations, S-II/S-IVB tank stations, F-1 high-altitude flow, the AS-503 vehicle.
