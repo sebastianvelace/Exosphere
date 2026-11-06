@@ -4,6 +4,40 @@ A6 is in progress. Atomic RCS funding, in-step liquid-engine exhaustion and opti
 RCS/liquid-engine/main-vent receipts are implemented. A pure fixed-component mass sampler is
 available; continuous mission mass properties and transport forces are not activated.
 
+## Complete preparation resource window (F4 completion in progress)
+
+`Vessel.CaptureResourceFunding` records a `LastResourceFunding` window independently of the
+older liquid/RCS debug flags. It copies every main resource and saved header slot at preparation
+start and before assistance restoration, then attributes exact before/after store changes to
+liquid engines, single-resource engines, main venting, RCS or disturbance flow. Immutable
+consumer receipts remain available inside the window. Store state chains must match exactly;
+unattributed changes, invalid loads or topology changes invalidate coverage. This is resource
+coverage, not certification of exit geometry or representable integration intervals.
+
+The window constructs store profiles from the union of all funded boundaries. A subsequent
+vent reserves only the post-engine open load, but its prescribed interval starts at local zero:
+this explicitly models engine-priority budget reservation. A short vent can stop while fuel
+reserved for the remainder of an engine burn remains. This convention preserves nonnegative
+inventory without inventing a real valve/feed-network response. It is a simulator allocation
+policy, not a historical vent-flow observation. Positive remaining debit contributions are
+summed onto the final store load, preserving exact start/end masses and avoiding bulk subtraction
+near exhaustion. Unrepresentable or increasing withdrawal profiles reject conversion. Assisted
+windows retain gross losses and require a separate replenishment transition before physical use.
+Untouched and undeclared saved header loads remain explicit mass; unknown headers do not become
+inferred liquid outlets.
+
+Solid and monopropellant engines now fund partial intervals through their own stage-local
+single-resource pools. Depletion no longer cancels independently funded liquid/other-resource
+branches. Per-instance prepared flow survives the final part depletion; the existing RK4
+boundary splitter delivers the funded impulse on coupled, water and legacy translation paths.
+No persistent engine failure is introduced. RCS and disturbance retain their existing atomic
+whole-step funding policy.
+
+Targeted suite: **117/117**, covering the resource window, engine/vent overlap, main/header/coast
+cuts, RCS/disturbance composition, assistance, immutable snapshots, captured/uncaptured exact
+state parity, single-resource impulse/position and mixed/runtime branches. Full CI is pending.
+The window remains opt-in; mission mass/transport activation and the historical gate are open.
+
 ## Liquid-engine store intervals (2026-11-06)
 
 `LiquidEngineFundingSnapshot.StoreDepletions` now pairs every actual liquid-engine store

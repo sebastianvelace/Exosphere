@@ -58,6 +58,9 @@ public partial class PartGraph
     private readonly List<Part> _tickEngineScratch = new();
     private readonly List<Part> _tickSubtreeScratch = new();
     private readonly List<LiquidEngineDemand> _liquidDemands = new();
+    private readonly record struct SingleResourceEngineDemand(Part Part, string EngineId,
+        PropellantResourceKind Resource, double MassFlowKgPerS);
+    private readonly List<SingleResourceEngineDemand> _singleResourceDemands = new();
     private readonly HashSet<Part> _hotStageBottomSet = new();
     private readonly List<Part> _hotStageUpperParts = new();
     private readonly List<(EngineInstanceState? State, Part Engine, Vector3d Jx, Vector3d Jz)>
@@ -1655,7 +1658,7 @@ public partial class PartGraph
         double available = 0.0;
         foreach (var part in _parts) available += part.AvailableLiquidFuel + part.AvailableOxidizer;
         if (available <= 0.0) return 0.0;
-        var capture = CapturePropellantFunding ? new LiquidFundingCapture() : null;
+        var capture = CapturePropellantFunding || ResourceFundingCapture != null ? new LiquidFundingCapture() : null;
         capture?.BeginPool(_parts, includeHeaders: false);
         double vented = System.Math.Min(kg, available);
         double fraction = vented / available;
@@ -1667,7 +1670,9 @@ public partial class PartGraph
         if (capture != null)
         {
             capture.EndPool(null);
-            LastMainVentFunding = capture.BuildVent(kg, vented, dt, assist);
+            var receipt = capture.BuildVent(kg, vented, dt, assist);
+            ResourceFundingCapture?.RecordVent(receipt);
+            if (CapturePropellantFunding) LastMainVentFunding = receipt;
         }
         return vented;
     }
@@ -1677,11 +1682,15 @@ public partial class PartGraph
     internal void ConsumePropellant(double dt, double ambientPressure, bool assist)
     {
         LastLiquidEngineFunding = null;
-        _liquidFundingCapture = CapturePropellantFunding && dt > 0 ? new LiquidFundingCapture() : null;
+        _liquidFundingCapture = (CapturePropellantFunding || ResourceFundingCapture != null) && dt > 0
+            ? new LiquidFundingCapture() : null;
         try
         {
             ConsumePropellantCore(dt, ambientPressure);
-            LastLiquidEngineFunding = _liquidFundingCapture?.BuildEngines(dt, assist);
+            var receipt = _liquidFundingCapture?.BuildEngines(dt, assist);
+            ResourceFundingCapture?.RecordLiquid(receipt);
+            ResourceFundingCapture?.RecordCurrentStores(_parts, ResourceWithdrawalSource.OtherEngine);
+            if (CapturePropellantFunding) LastLiquidEngineFunding = receipt;
         }
         finally { _liquidFundingCapture = null; }
     }
@@ -1735,8 +1744,8 @@ public partial class PartGraph
         int pool = _liquidFundingCapture?.BeginPool(tankPool, includeHeaders: true) ?? 0;
 
         // Calcular flujo de masa total de todos los motores activos
-        double totalSolidRate = 0, totalMonoRate = 0;
         _liquidDemands.Clear();
+        _singleResourceDemands.Clear();
         foreach (var engine in engines)
         {
             var def = engine.Definition;
@@ -1779,14 +1788,12 @@ public partial class PartGraph
                         def.MixtureRatio));
             }
             else if (fuelType.Contains("solid", StringComparison.OrdinalIgnoreCase))
-                totalSolidRate += engine.GetMassFlow(ambientPressure);
+                CollectSingleResourceDemand(engine, PropellantResourceKind.SolidFuel, ambientPressure);
             else if (fuelType.Contains("mono", StringComparison.OrdinalIgnoreCase))
-                totalMonoRate += engine.GetMassFlow(ambientPressure);
+                CollectSingleResourceDemand(engine, PropellantResourceKind.Monopropellant, ambientPressure);
         }
 
         // Consumir de los tanques de la etapa activa (cross-feed dentro de la etapa)
-        bool nonLiquidFlameOut = false;
-
         if (_liquidDemands.Count > 0)
         {
             double totalLF = 0.0;
@@ -1877,54 +1884,58 @@ public partial class PartGraph
             }
         }
 
-        if (totalSolidRate > 0)
-        {
-            double solidNeeded = totalSolidRate * dt;
-            double totalSolid = 0.0;
-            for (int i = 0; i < tankPool.Count; i++)
-                totalSolid += tankPool[i].SolidFuel;
-            if (totalSolid < solidNeeded) nonLiquidFlameOut = true;
-            else
-            {
-                for (int i = 0; i < tankPool.Count; i++)
-                {
-                    var part = tankPool[i];
-                    if (part.SolidFuel > 0)
-                        part.SolidFuel -= solidNeeded * (part.SolidFuel / totalSolid);
-                }
-            }
-        }
-
-        if (totalMonoRate > 0)
-        {
-            double monoNeeded = totalMonoRate * dt;
-            double totalMono = 0.0;
-            for (int i = 0; i < tankPool.Count; i++)
-                totalMono += tankPool[i].Monopropellant;
-            if (totalMono < monoNeeded) nonLiquidFlameOut = true;
-            else
-            {
-                for (int i = 0; i < tankPool.Count; i++)
-                {
-                    var part = tankPool[i];
-                    if (part.Monopropellant > 0)
-                        part.Monopropellant -= monoNeeded * (part.Monopropellant / totalMono);
-                }
-            }
-        }
-
-        if (nonLiquidFlameOut)
-        {
-            foreach (var engine in engines)
-            {
-                if (engine.HasEngineRuntime)
-                    engine.MarkFuelDepleted();
-                else
-                    engine.IsStagingActive = false;
-                _tickActiveEngineCacheValid = false;
-            }
-        }
+        FundSingleResourcePool(tankPool, PropellantResourceKind.SolidFuel, pool, dt);
+        FundSingleResourcePool(tankPool, PropellantResourceKind.Monopropellant, pool, dt);
         _liquidFundingCapture?.EndPool(pool);
+    }
+
+    private void CollectSingleResourceDemand(Part part, PropellantResourceKind resource, double pressure)
+    {
+        if (part.HasEngineRuntime)
+        {
+            for (int i = 0; i < part.EngineStates.Count; i++)
+            {
+                double rate = part.GetEngineInstancePerformance(i, pressure).MassFlowKgS;
+                if (rate > 0) _singleResourceDemands.Add(new(part, part.EngineStates[i].InstanceId, resource, rate));
+            }
+        }
+        else
+        {
+            double rate = part.GetMassFlow(pressure);
+            if (rate > 0) _singleResourceDemands.Add(new(part, part.InstanceId, resource, rate));
+        }
+    }
+
+    private void FundSingleResourcePool(IReadOnlyList<Part> tanks, PropellantResourceKind resource,
+        int pool, double dt)
+    {
+        if (!(dt > 0)) return;
+        _singleResourceDemands.Sort(static (a, b) => StringComparer.Ordinal.Compare(a.EngineId, b.EngineId));
+        double rate = 0, available = 0;
+        foreach (var demand in _singleResourceDemands)
+            if (demand.Resource == resource) rate += demand.MassFlowKgPerS;
+        if (!(rate > 0)) return;
+        foreach (var part in tanks)
+            available += resource == PropellantResourceKind.SolidFuel ? part.SolidFuel : part.Monopropellant;
+        double requested = rate * dt;
+        double funded = System.Math.Min(available, requested);
+        double duration = available < requested ? available / rate : dt;
+        foreach (var demand in _singleResourceDemands)
+        {
+            if (demand.Resource != resource) continue;
+            if (duration > 0) ResourceFundingCapture?.OtherEngines.Add(new(demand.Part.InstanceId,
+                demand.EngineId, resource, pool, demand.MassFlowKgPerS, duration));
+            if (available <= requested) RegisterEngineExhaustion(demand.Part, duration);
+        }
+        if (!(funded > 0)) return;
+        foreach (var part in tanks)
+        {
+            double before = resource == PropellantResourceKind.SolidFuel ? part.SolidFuel : part.Monopropellant;
+            double after = funded == available ? 0 : System.Math.Max(0, before - funded * (before / available));
+            if (resource == PropellantResourceKind.SolidFuel) part.SolidFuel = after;
+            else part.Monopropellant = after;
+            ResourceFundingCapture?.RecordSingleResourceDebit(part, resource, before, after, duration);
+        }
     }
 
     // ── Staging: dispara el primer desacoplador disponible ────────────────

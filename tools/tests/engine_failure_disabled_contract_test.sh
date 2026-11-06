@@ -20,8 +20,12 @@ has 'RegisterEngineExhaustion(demand.EnginePart' "$graph" \
   "liquid fuel exhaustion does not use the resource boundary"
 has 'entry.Engine.MarkFuelDepleted();' "$funding" \
   "liquid fuel exhaustion does not end at the resource boundary"
-has 'engine.MarkFuelDepleted();' "$graph" \
-  "non-liquid fuel exhaustion does not use the resource boundary"
+has 'RegisterEngineExhaustion(demand.Part, duration);' "$graph" \
+  "single-resource fuel exhaustion does not use the resource boundary"
+has 'FundSingleResourcePool(tankPool, PropellantResourceKind.SolidFuel, pool, dt);' "$graph" \
+  "solid engines do not use funded intervals"
+has 'FundSingleResourcePool(tankPool, PropellantResourceKind.Monopropellant, pool, dt);' "$graph" \
+  "monopropellant engines do not use funded intervals"
 
 for file in "$graph" "$funding" "$vessel" "$bridge"; do
   if rg -q 'FailEngine\(' "$file"; then

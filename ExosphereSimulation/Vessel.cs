@@ -648,6 +648,23 @@ public class Vessel
     /// </summary>
     public bool InfinitePropellant { get; set; }
 
+    /// <summary>Capture the complete gross resource inventory and attributed preparation debits.</summary>
+    public bool CaptureResourceFunding { get; set; }
+    public Physics.ResourceFundingWindow? LastResourceFunding { get; private set; }
+
+    private void BeginResourceFunding(double dt)
+    {
+        LastResourceFunding = null;
+        Parts.ResourceFundingCapture = CaptureResourceFunding
+            ? new Physics.ResourceFundingCapture(Parts.PartList, dt, InfinitePropellant, Parts.TopologyVersion) : null;
+    }
+
+    private void CompleteResourceFunding()
+    {
+        LastResourceFunding = Parts.ResourceFundingCapture?.Complete(Parts.PartList, Parts.TopologyVersion);
+        Parts.ResourceFundingCapture = null;
+    }
+
     private void ConsumePropellants(double dt, double pressure)
     {
         var snapshot = InfinitePropellant ? Parts.CapturePropellant() : null;
@@ -661,6 +678,8 @@ public class Vessel
             DisturbanceTorqueBody = Vector3d.Zero;
             DisturbanceMassFlowKgPerS = 0.0;
         }
+        Parts.ResourceFundingCapture?.RecordCurrentStores(Parts.PartList,
+            Physics.ResourceWithdrawalSource.Disturbance, Physics.PropellantResourceKind.Monopropellant);
         _propellantSnapshot = snapshot;
     }
 
@@ -1325,14 +1344,23 @@ public class Vessel
         }
         foreach (var (owner, kg) in _rcsDemand)
             if (owner.Monopropellant < kg) return false;
-        double[]? before = CaptureRcsFunding
+        double[]? before = CaptureRcsFunding || Parts.ResourceFundingCapture != null
             ? Parts.PartList.Select(part => part.Monopropellant).ToArray() : null;
         if (shared > 0.0 && !Parts.DrawMonopropellant(shared, primaryStoresOnly: false, _rcsDemand)) return false;
         foreach (var (owner, kg) in _rcsDemand)
             owner.Monopropellant -= kg;
         if (before != null)
-            LastRcsFunding = Physics.RcsPropellantFundingSnapshot.Capture(
+        {
+            var receipt = Physics.RcsPropellantFundingSnapshot.Capture(
                 Parts.PartList, before, thrusters, _rcsDuty, dt, InfinitePropellant);
+            if (CaptureRcsFunding) LastRcsFunding = receipt;
+            if (Parts.ResourceFundingCapture is { } capture)
+            {
+                capture.ReactionControl = receipt;
+                capture.RecordCurrentStores(Parts.PartList, Physics.ResourceWithdrawalSource.ReactionControl,
+                    Physics.PropellantResourceKind.Monopropellant);
+            }
+        }
         return true;
     }
 
@@ -1443,6 +1471,7 @@ public class Vessel
         bool physicalBodyFlaps = false)
     {
         Parts.BeginPhysicsTick();
+        BeginResourceFunding(dt);
         try
         {
             RcsThrusterForceBody = Vector3d.Zero;
@@ -1499,10 +1528,12 @@ public class Vessel
             var alpha = DesiredControlAngularAcceleration(command, hasInput, auth, pressure, dt);
             ApplyAttitudeActuators(alpha, hasInput || (SASEnabled && auth > 1e-6), aeroTorque, pressure, dt,
                 flapCommand, flapAuthority);
+            CompleteResourceFunding();
             RestoreInfinitePropellant();
         }
         catch
         {
+            Parts.ResourceFundingCapture = null;
             Parts.EndPhysicsTick();
             throw;
         }
@@ -1599,9 +1630,11 @@ public class Vessel
     internal void BeginLegacyPhysicsStep(double dt, CelestialBody refBody, Vector3d externalContactTorqueWorld)
     {
         Parts.BeginPhysicsTick();
+        BeginResourceFunding(dt);
         try { TickPhysics(dt, refBody, externalContactTorqueWorld); }
         catch
         {
+            Parts.ResourceFundingCapture = null;
             Parts.EndPhysicsTick();
             throw;
         }
@@ -1686,6 +1719,7 @@ public class Vessel
         LastRcsFunding = null;
         ApplyAttitudeActuators(alpha, hasInput || (SASEnabled && auth > 1e-6), Vector3d.Zero, pressure, dt,
             flapCommand, flapAuthority);
+        CompleteResourceFunding();
         RestoreInfinitePropellant();
 
         // ── Real per-mount torque, from genuine engine-mount geometry (R5/R5b/R5c) ──────

@@ -9,4 +9,5 @@ public partial class PartGraph
     public LiquidEngineFundingSnapshot? LastLiquidEngineFunding { get; private set; }
     public MainPropellantVentSnapshot? LastMainVentFunding { get; private set; }
     private LiquidFundingCapture? _liquidFundingCapture;
+    internal ResourceFundingCapture? ResourceFundingCapture { get; set; }
 }
