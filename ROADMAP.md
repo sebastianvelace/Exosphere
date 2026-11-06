@@ -433,6 +433,14 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      sintético de masa seca desplazada. Suite dirigida 70/70; CI completa 1379/1379,
      builds 0/0, contratos, arranque y captura/recarga de Godot aprobados.
      La conexión a misiones espera cronogramas completos por depósito, geometría y transporte.
+   - Intervalos de extracción por depósito de motores líquidos (`StoreDepletions`):
+     cambios main/header independientes por reactivo, reservas y alimentaciones hot-stage;
+     conversión al muestreador con geometría explícita y masas realmente debitadas.
+     Asistencia y cortes no representables rechazan la conversión. Suite dirigida 75/75;
+     CI completa 1391/1391, builds 0/0, contratos, arranque y captura/recarga de Godot
+     aprobados; referencia Flight 14 idéntica a la unidad anterior. Falta cerrar venteos
+     simultáneos, RCS y demás fuentes antes de construir el inventario completo y activar
+     transporte en misiones.
    - Siguiente: completar F4 y continuar F5–F6 de `docs/physics/rigid_body_fidelity_plan.md` (transporte de masa variable,
      slosh, recalibración histórica); aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.

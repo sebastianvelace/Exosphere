@@ -1852,6 +1852,14 @@ public partial class PartGraph
                 double mainOx = System.Math.Min(fundedOx, totalOx);
                 double fromHeaderLF = fundedLF - mainLF;
                 double fromHeaderOx = fundedOx - mainOx;
+                // Describe the existing main-first allocator without changing its debits.
+                // Each reactant switches independently; no header draw means main flow
+                // lasts the entire funded interval, including exact main exhaustion.
+                // Divide by the funded rate rather than multiplying a tiny mass ratio
+                // by a long duration: the ratio itself can underflow to zero.
+                _liquidFundingCapture?.SetEngineTiming(dt * fraction,
+                    fromHeaderLF > 0 ? mainLF / (fundedLF / (dt * fraction)) : dt * fraction,
+                    fromHeaderOx > 0 ? mainOx / (fundedOx / (dt * fraction)) : dt * fraction);
                 for (int tankIndex = 0; tankIndex < tankPool.Count; tankIndex++)
                 {
                     var p = tankPool[tankIndex];

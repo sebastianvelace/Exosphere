@@ -380,6 +380,18 @@ relative flow and transport/datum conversions still gate activation. Targeted su
 **70/70**; complete CI **1379/1379**, three builds at 0 warnings / 0 errors, all contracts,
 Godot startup and graphics capture/reload passed. No mission tolerance or calibration changed.
 
+**Liquid-engine store intervals (2026-11-06).** Immutable `StoreDepletions` carry each actual
+main/header withdrawal's start and end times, including independent reactant switches,
+protected loads and separate hot-stage feed pools. `CreateStoreMassComponent` connects a
+store to the candidate sampler with explicitly supplied geometry and actual mass endpoints.
+Gross assisted withdrawals and unrepresentable intervals reject conversion. This remains
+an engine-only subinventory: overlapping vent allocation, RCS/other sources, complete vessel
+geometry and transport/datum conversion still gate mission activation. Targeted suite:
+**75/75**; complete CI **1391/1391**, no skips, three builds at 0 warnings / 0 errors,
+all contracts, Godot startup and graphics capture/reload passed. The regenerated Flight 14
+checkpoint reference exactly matches the preceding sampler unit. No mission tolerance or
+calibration changed.
+
 ## Phases
 
 **F0 — Coupled 6-DoF in production (A1).** Flip `Coupled6DofIntegrationEnabled` on by

@@ -4,6 +4,45 @@ A6 is in progress. Atomic RCS funding, in-step liquid-engine exhaustion and opti
 RCS/liquid-engine/main-vent receipts are implemented. A pure fixed-component mass sampler is
 available; continuous mission mass properties and transport forces are not activated.
 
+## Liquid-engine store intervals (2026-11-06)
+
+`LiquidEngineFundingSnapshot.StoreDepletions` now pairs every actual liquid-engine store
+withdrawal with its step-local affine debit interval. Within each feed pool, each reactant
+uses main stores proportionally until its main inventory is exhausted, then headers
+proportionally until the pool's common limiting-reactant cutoff. Protected main loads stay
+in both mass endpoints. Fuel and oxidizer switches are independent; hot-stage pools retain
+their separate switches and cutoffs. These intervals describe the existing allocator's
+main-first funding convention, not a measured pipe transit or internal-flow velocity.
+
+`CreateStoreMassComponent(index, id, station, specificInertia)` connects one interval to
+`FixedShapeMassComponent`. The caller explicitly supplies the store's own fixed CM and
+central specific tensor. Knots retain the actual before/after masses, including any
+reserve; loads are constant before withdrawal and after the cutoff. Consequently the
+profile's slope can differ by store-subtraction roundoff from the nominal funded engine
+flow. The original `MassBalanceResidualKg` remains visible; no engine flow or force is
+renormalized to hide it. Main-switch timing divides available main mass by the effective
+funded reactant rate, avoiding underflow of a tiny main/total mass ratio in a long burn.
+A cut with no representable positive duration is retained as accounting evidence but
+rejected at component conversion. Assistance-marked gross debits also reject conversion;
+practice replenishment cannot silently become continuous physical mass loss.
+
+Only withdrawn engine stores are included. This is not a complete vessel distribution:
+untouched stores, dry structure and all other sources still require an explicit inventory.
+In particular, a later vent receipt has post-engine endpoints; engine profiles preserve
+their pre-vent endpoints. Combining those profiles as simultaneous withdrawals is not yet
+a supported allocation model. RCS, vent overlap, solid/monopropellant engines, disturbance
+jets, assistance transitions and topology changes still gate a complete mission adapter.
+The live integration path and frozen per-step mass properties are unchanged.
+
+Targeted validation: **75/75** store-interval, funding, exhaustion and mass-distribution
+cases, including independent reactant/header cuts, reserves, proportional shared stores,
+hot-stage feeds, immutable captures, explicit assistance rejection and numerical extremes.
+Complete `tools/ci_check.sh`: **1391/1391**, no skips, all three builds at 0 warnings /
+0 errors, all static contracts, Godot Flight startup, MainMenu/Construction smoke and
+graphics capture/reload passed. The regenerated Flight 14 checkpoint reference exactly
+matches the preceding fixed-component-sampler unit. No mission tolerance, calibration or
+production integration path changed.
+
 ## Fixed-component candidate sampler (2026-11-06)
 
 `FixedShapeMassComponent` declares a constant body-frame station and constant central
@@ -71,8 +110,8 @@ startup, MainMenu/Construction smoke and graphics capture/reload passed. The reg
 Flight 14 checkpoint reference exactly matches the pre-numerics candidate. No mission
 tolerance, calibration, data value or production integration path changed in this unit.
 
-Next: construct complete per-store schedules from the funded source inventory, including
-main/header switches, overlapping vent allocation, RCS and remaining uncaptured sources.
+Next: extend the liquid-engine store intervals above to complete schedules over the funded
+source inventory, including overlapping vent allocation, RCS and remaining uncaptured sources.
 Missing intervals or unmodelled assistance cannot silently become a linear endpoint
 interpolation. Then construct the actual component geometry, resolve the dry-offset
 distribution change and connect matching linear/angular transport and datum conversions.
@@ -119,8 +158,9 @@ These receipts describe the existing resource allocation, not a measurement of d
 impulse or a new physical flow model. Prepared engine mass flow uses preparation pressure
 and throttle; candidate force pressure may vary during RK4. The capture does not establish
 nozzle/vent exit geometry, exhaust velocity, internal feed momentum, liquid free surfaces
-or store-level timing across main/header transitions. A continuous mass adapter must still
-resolve those store schedules and the moving-CoM convention below. Solid/monopropellant
+or a complete multi-source store schedule. The store intervals above describe the engine-only
+main/header convention; a continuous mission adapter must still resolve overlapping sources
+and the moving-CoM convention below. Solid/monopropellant
 engines and disturbance jets are outside this liquid-engine/main-vent receipt contract.
 Neither receipt enables transport forces or changes the frozen per-step mass/inertia.
 

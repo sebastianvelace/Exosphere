@@ -138,7 +138,11 @@ actual store withdrawals and funded nozzle flow (`CaptureRcsFunding`); practice-
 replenishment is explicitly marked. These receipts do not activate open-system transport.
 Liquid-engine exhaustion is split at funded interval boundaries; optional
 `CapturePropellantFunding` adds immutable per-instance liquid flows and main/header/vent
-withdrawals, including gross assist-marked debits. Mass/inertia remain frozen per step.
+withdrawals, including gross assist-marked debits. Liquid-engine `StoreDepletions` retain
+per-store main/header debit intervals and convert to fixed-shape candidate components using
+caller-supplied geometry. Assisted or unrepresentable intervals reject conversion. This
+engine-only inventory excludes overlapping vents and other sources; mass/inertia remain
+frozen per step.
 See [`variable_mass_resource_adapter.md`](variable_mass_resource_adapter.md) for the remaining
 continuous mass, flow scheduling and source/exit activation work.
 
