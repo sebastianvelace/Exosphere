@@ -1,13 +1,14 @@
 # F5 closure and F6 continuation
 
 Updated 2026-11-07. User scope: complete F5, then F6; commit/push authorized; do not merge
-main. Branch `codex/f5-slosh-production`. Author and committer: Sebas
+main. F5 is pushed at `ca7949d` on `codex/f5-slosh-production`. Active continuation branch:
+`codex/f6-historical-recalibration`. Author and committer: Sebas
 <sebastianvelace@gmail.com>, conventional commits, no AI attribution.
 
 ## Verified F5 closure
 
 F4 is closed at `6dd3f7e`; the F5 kernels and exact empty-column derivative correction
-are pushed in `0905a38` and `a3f3f84`. Production F5 is complete in the current working tree:
+are pushed in `0905a38` and `a3f3f84`. Production F5 is complete and committed in `ca7949d`:
 
 - Universe uses one funded F4 window for the full rigid/modal solve, with exact engine,
   flow and continuation cuts. No duplicate resource debit or modal mass is introduced.
@@ -46,7 +47,7 @@ were stopped for CPU rendering cost and are not acceptance evidence.
 
 ## F6 remains open
 
-F6 tooling is ready in the working tree: `tools/physics_profile_audit.py`, the standalone
+F6 tooling is verified and ready for its own audit commit: `tools/physics_profile_audit.py`, the standalone
 `tools/PhysicsProfileProbe` and `docs/physics/historical_recalibration.md`. The new C# tool
 must be excluded from Godot's recursive compile in `Exosphere.csproj` (already edited).
 Its build is 0/0 and `/tmp/exo-f6-engineering-final/report.json` passes all three 30 s Falcon
@@ -87,11 +88,15 @@ Useful primary local artifacts:
 
 ## Workflow
 
-Finish closure registry check, commit/push F5 production, then commit/push the F6 audit unit.
+F5 production is committed/pushed at `ca7949d`; closure registry passes 2/2. The F6 audit
+unit has a zero-warning probe build, three passing evidence-guard tests and a passing full
+contract suite. New runs clear previous evidence before launch, preventing stale success
+reports after interruption or empty test discovery. The tool build and guards are now wired
+into CI. Commit/push the audit unit, then continue the source-backed reconstruction.
 Keep `.atl/.skill-registry.cache.json` and `.atl/skill-registry.md` out of every commit:
 they were dirty before this work. No main merge. Continue F6 after the F5 checkpoint;
 no historical/conservation/contact tolerance may be relaxed to force a pass.
 
 No Engram/runtime memory tools may be called until the host re-registers an authoritative
 runtime session identity. No agents have been spawned. All current verification runs have
-finished successfully; the active task is checkpointing F5 and continuing F6.
+finished successfully; the active task is continuing F6 after the pushed F5 closure.

@@ -462,7 +462,8 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      límites físicos de contacto. La fragmentación conserva las contribuciones de momento
      por almacén, incluidas sus referencias y su guardado. CI completa 1504/1504 sin omisiones;
      builds 0/0, contratos, arranque, menús y captura/recarga de Godot aprobados.
-   - Siguiente: F5 (slosh por tanque, iniciada) y F6 (recalibración histórica) de
+   - F5 (slosh por tanque) cerrada: CI 1588/1588 y ascenso real en Godot a órbita estable.
+     Sigue F6 (recalibración histórica), con auditoría de fuentes y residuos en curso, de
      `docs/physics/rigid_body_fidelity_plan.md`; aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.
 

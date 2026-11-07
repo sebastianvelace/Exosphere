@@ -460,3 +460,21 @@ pointing damped the roll rate (`rollDampingGain`); (2) the AS-506 model needed F
 dry centres/gyrations, equal-volume tank bottoms and the S-IC suction-line propellant to
 reproduce the flight's CG history; (3) remaining data gaps go to F6: spacecraft module
 stations, S-II/S-IVB tank stations, F-1 high-altitude flow, the AS-503 vehicle.
+
+
+## F5 production integration and F6 source audit (2026-11-07)
+
+The first-mode kernels are now connected to Universe funding, candidate-state forces,
+coasts, Save V2 and topology boundaries; see [propellant_slosh.md](propellant_slosh.md).
+The complete production acceptance passes 1,588 tests without skips, zero-warning builds,
+Godot startup/menu checks and a real-framebuffer Flight 7 ascent to stable orbit. F5 is
+closed. No historical or conservation
+acceptance limit was relaxed. The no-mode centroid retains its original summation order,
+which preserves the established entry controller's floating-point inputs.
+
+F6 now has a reproducible profile matrix and an independent engineering/mass-property
+probe. Its source audit found that the MA-6 launch spacecraft mass was used as the
+orbital capsule-plus-retro mass. The prior effective Atlas sustainer remains an explicit
+calibration gap, not a hardware rating. See [historical_recalibration.md](historical_recalibration.md)
+for the primary-source evidence, table-specific residuals and validation limits.
+F6 stays open until that reconstruction and the profile residual work are complete.
