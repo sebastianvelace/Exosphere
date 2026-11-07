@@ -3,6 +3,7 @@ namespace Exosphere.Simulation;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
+using Exosphere.Simulation.Integrators;
 
 public enum VesselDestructionCause
 {
@@ -26,6 +27,31 @@ public class Vessel
     public string Name { get; set; } = "Unnamed Vessel";
 
     public PartGraph Parts { get; } = new();
+
+    internal List<SloshTankRuntime> SloshStates { get; } = [];
+    public IReadOnlyList<SloshTankRuntime> PropellantSloshStates => SloshStates;
+    public string? LastSloshStatus { get; internal set; }
+
+    /// <summary>Remaining-body mass properties with liquid modal displacement corrections.</summary>
+    public RigidBodyMassProperties GetMassProperties() => SloshStates.Count == 0
+        ? Parts.GetMassProperties() : SloshVesselState.Sample(this).Mass;
+
+    /// <summary>Sets a declared liquid store's modal coordinates without altering its inventory.</summary>
+    public void SetPropellantSloshState(ResourceStoreId store, SloshDisplacementState state)
+    {
+        var part = Parts.Parts.SingleOrDefault(p => p.InstanceId == store.PartInstanceId)
+            ?? throw new ArgumentException("The modal source part is not owned by this vessel.", nameof(store));
+        var tank = part.Definition.PropellantTanks.SingleOrDefault(t => t.Kind != PartMassComponentKind.SolidFuel
+            && SloshStepModel.Resource(t.Kind) == store.Resource);
+        if (store.HeaderIndex != null || tank == null)
+            throw new ArgumentException("A mode requires a declared main liquid tank.", nameof(store));
+        var parameters = SloshStepModel.Parameters(tank, SloshStepModel.StoreMass(part, store.Resource));
+        state = state.Sample(parameters.CurvaturePerM).State;
+        var runtime = new SloshTankRuntime(store, state, parameters);
+        int index = SloshStates.FindIndex(s => s.Store == store);
+        if (index < 0) SloshStates.Add(runtime); else SloshStates[index] = runtime;
+    }
+
 
     public Vessel(string? id = null)
     {
@@ -435,11 +461,17 @@ public class Vessel
         double stack = DockedStackTransverseInertiaKgM2;
         return own > 0.0 && stack > own ? own / stack : 1.0;
     }
-    public Vector3d  CenterOfMass  => Position + Orientation.Rotate(Parts.CenterOfMass);
-    /// <summary>Inertial velocity of the centre of mass: datum velocity plus ω×r.</summary>
+    public Vector3d  CenterOfMass  => Position + Orientation.Rotate(CenterOfMassOffsetLocal);
+    /// <summary>Material velocity at the instantaneous centroid; excludes relative liquid flow.</summary>
     public Vector3d  CenterOfMassVelocity => Velocity + AngularVelocity.Cross(Orientation.Rotate(CenterOfMassOffsetLocal));
+    /// <summary>Mean velocity of a closed body's moving mass, for the next unforced conic.</summary>
+    public Vector3d CenterOfMassMeanVelocity => CenterOfMassVelocity + (SloshStates.Count == 0 ? Vector3d.Zero
+        : Orientation.Rotate(SloshVesselState.Sample(this).Internal.LinearBodyKgMps / TotalMass));
     /// <summary>Centre of mass in the vessel frame (zero for a part-less point mass).</summary>
-    public Vector3d  CenterOfMassOffsetLocal => Parts.TotalMass > 0.0 ? Parts.CenterOfMass : Vector3d.Zero;
+    public Vector3d  CenterOfMassOffsetLocal => Parts.TotalMass > 0.0
+        // Preserve the established summation order for a vessel without modal geometry.
+        ? SloshStates.Count == 0 ? Parts.CenterOfMass : GetMassProperties().CenterOfMassBody
+        : Vector3d.Zero;
 
     /// <summary>
     /// Conic of this vessel's centre of mass about <paramref name="body"/> at
@@ -447,7 +479,7 @@ public class Vessel
     /// </summary>
     public OrbitalElements ComputeCenterOfMassOrbit(CelestialBody body, double epoch) =>
         OrbitalElements.FromStateVector(CenterOfMass - body.Position,
-            CenterOfMassVelocity - body.Velocity, body.GM, body.Id, epoch);
+            CenterOfMassMeanVelocity - body.Velocity, body.GM, body.Id, epoch);
     public double    VehicleLength => Parts.VehicleLength;
     public double    MaximumDiameter => Parts.MaximumDiameter;
     public double    NoseRadius      => Parts.NoseRadius;
@@ -1008,7 +1040,7 @@ public class Vessel
                 flap.NeutralDeflectionRad - flap.MinDeflectionRad);
             authority += new Vector3d(System.Math.Abs(column.X), System.Math.Abs(column.Y), System.Math.Abs(column.Z)) * travel;
         }
-        var inertia = Parts.GetMassProperties().InertiaBody;
+        var inertia = GetMassProperties().InertiaBody;
         return new Vector3d(
             inertia.M11 > 0.0 ? authority.X / inertia.M11 : 0.0,
             inertia.M22 > 0.0 ? authority.Y / inertia.M22 : 0.0,
@@ -1331,6 +1363,9 @@ public class Vessel
     /// <summary>Moment the RCS thrusters fired this step (body frame, N·m), held across RK4 stages.</summary>
     public Vector3d RcsThrusterTorqueBody { get; private set; }
 
+    // Allocation precedes propellant consumption; retain its exact moment reference.
+    internal Vector3d RcsTorqueReferenceBody { get; private set; }
+
     /// <summary>Last step's propellant flow of the RCS thrusters (kg/s).</summary>
     public double RcsThrusterMassFlowKgPerS { get; private set; }
 
@@ -1370,13 +1405,15 @@ public class Vessel
         double axial = System.Math.Max(1.0, Parts.AxialMomentOfInertia);
         var weights = new Vector3d(1.0, transverse / axial, 1.0);
         double forceWeight = desiredForceBody.MagnitudeSquared > 0.0 ? 1.0 : Physics.RcsAllocation.AttitudeOnlyForceWeight;
-        var result = Physics.RcsAllocation.Allocate(thrusters, CenterOfMassOffsetLocal,
+        var torqueReference = CenterOfMassOffsetLocal;
+        var result = Physics.RcsAllocation.Allocate(thrusters, torqueReference,
             desiredTorqueBody, desiredForceBody, _rcsDuty, weights, forceWeight);
         if (!DrawRcsPropellant(thrusters, result, dt))
         {
             RcsPropellantDepleted = true;
             return;
         }
+        RcsTorqueReferenceBody = torqueReference;
         RcsThrusterForceBody = result.ForceBody;
         RcsThrusterTorqueBody = result.TorqueBody;
         RcsThrusterMassFlowKgPerS = result.MassFlowKgPerS;
@@ -1788,7 +1825,7 @@ public class Vessel
         var appliedAngAccel = engineAngAccel;
         if (rcs.MagnitudeSquared > 0.0)
         {
-            var inertia = Parts.GetMassProperties().InertiaBody;
+            var inertia = GetMassProperties().InertiaBody;
             appliedAngAccel += new Vector3d(
                 inertia.M11 > 0.0 ? rcs.X / inertia.M11 : 0.0,
                 inertia.M22 > 0.0 ? rcs.Y / inertia.M22 : 0.0,
@@ -1893,6 +1930,7 @@ public class Vessel
 
         var transportCenter = Parts.CenterOfMass;
         var before = Parts.ComputePartLocalPositions();
+        var jointsBefore = Parts.Joints.ToArray();
         var detached = Parts.FireNextStage();
         if (detached == null) return null;
 
@@ -1901,13 +1939,14 @@ public class Vessel
         // Every part keeps its place at the instant of separation; each fragment's datum
         // moves to its own new lowest point and inherits the rigid-body velocity there.
         // The decoupler impulse then opens them along the stack axis.
+        var impulsePoint = SplitImpulsePoint(before, jointsBefore, debris);
         PlaceSplitFragmentsRigidly(before, debris, transportCenter);
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
         double opening = impulseNs > 0.0
             ? impulseNs * (TotalMass + debris.TotalMass)
                 / System.Math.Max(1.0, TotalMass * debris.TotalMass)
             : DefaultSeparationOpeningMs;
-        ApplyMassSplitKinematics(debris, axis, 0.0, opening);
+        ApplyMassSplitKinematics(debris, axis, 0.0, opening, impulsePoint, impulseNs > 0 ? impulseNs : null);
 
         // The split changes both position and velocity. Any cached conic now describes
         // the pre-separation stack and must not be reused by the next rails tick.
@@ -1937,10 +1976,11 @@ public class Vessel
         var debris = CreateDebrisVessel(detached, Name + " (structural debris)");
 
         // Fragments start where their parts were, with a gentle opening along vessel +Y.
+        var impulsePoint = SplitImpulsePoint(before, [joint], debris);
         PlaceSplitFragmentsRigidly(before, debris, transportCenter);
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
         const double relativeOpenMs = 0.5;
-        ApplyMassSplitKinematics(debris, axis, 0.0, relativeOpenMs);
+        ApplyMassSplitKinematics(debris, axis, 0.0, relativeOpenMs, impulsePoint);
 
         IsOnRails = false;
         OrbitalState = null;
@@ -1958,7 +1998,8 @@ public class Vessel
     /// inherit ω" split silently drops.
     /// </summary>
     private void ApplyMassSplitKinematics(
-        Vessel other, Vector3d separationAxis, double separationDistanceM, double relativeOpeningMs)
+        Vessel other, Vector3d separationAxis, double separationDistanceM, double relativeOpeningMs,
+        Vector3d impulsePointWorld, double? declaredImpulseNs = null)
     {
         double mThis = System.Math.Max(TotalMass, 1.0);
         double mOther = System.Math.Max(other.TotalMass, 1.0);
@@ -1972,8 +2013,27 @@ public class Vessel
         Velocity += AngularVelocity.Cross(rThis);
         other.Velocity += AngularVelocity.Cross(rOther);
 
+        if (SloshStates.Count > 0 || other.SloshStates.Count > 0)
+        {
+            SloshVesselState.Separate(this, other, impulsePointWorld, separationAxis, relativeOpeningMs, declaredImpulseNs);
+            return;
+        }
         Velocity += separationAxis * (relativeOpeningMs * mOther / mTotal);
         other.Velocity -= separationAxis * (relativeOpeningMs * mThis / mTotal);
+    }
+
+    private Vector3d SplitImpulsePoint(Dictionary<Part, Vector3d> before, IReadOnlyList<Joint> oldJoints, Vessel fragment)
+    {
+        var cut = oldJoints.FirstOrDefault(j => !Parts.Joints.Contains(j) && !fragment.Parts.Joints.Contains(j));
+        if (cut != null)
+        {
+            var node = cut.Parent.Definition.AttachmentNodes.FirstOrDefault(n => n.Id == cut.ParentNodeId);
+            if (node != null && before.TryGetValue(cut.Parent, out var parent))
+                return Position + Orientation.Rotate(parent + new Vector3d(node.Position[0], node.Position[1], node.Position[2]));
+            if (before.TryGetValue(cut.Parent, out parent) && before.TryGetValue(cut.Child, out var child))
+                return Position + Orientation.Rotate((parent + child) / 2);
+        }
+        throw new InvalidOperationException("Separation requires the original joint geometry.");
     }
 
     private void ClearHotStageOverlapState()
@@ -1993,6 +2053,13 @@ public class Vessel
     private void PlaceSplitFragmentsRigidly(Dictionary<Part, Vector3d> before, Vessel fragment,
         Vector3d previousCenterBody)
     {
+        var detachedIds = fragment.Parts.Parts.Select(p => p.InstanceId).ToHashSet(StringComparer.Ordinal);
+        for (int i = SloshStates.Count - 1; i >= 0; i--)
+            if (detachedIds.Contains(SloshStates[i].Store.PartInstanceId))
+            {
+                fragment.SloshStates.Add(SloshStates[i]);
+                SloshStates.RemoveAt(i);
+            }
         EnsureLegacyTransportMomentumShares(previousCenterBody);
         if (TransportMomentumShares is { } shares)
         {
@@ -2082,6 +2149,7 @@ public class Vessel
 
         var transportCenter = Parts.CenterOfMass;
         var before = Parts.ComputePartLocalPositions();
+        var jointsBefore = Parts.Joints.ToArray();
         var detached = Parts.DetachSubtree(rootPartInstanceId);
         if (detached == null) return null;
 
@@ -2110,12 +2178,13 @@ public class Vessel
         foreach (var detachedPart in detached.Parts) payload.Parts.AddPart(detachedPart);
         foreach (var joint in detached.Joints) payload.Parts.AddJoint(joint);
 
+        var impulsePoint = SplitImpulsePoint(before, jointsBefore, payload);
         PlaceSplitFragmentsRigidly(before, payload, transportCenter);
 
         Vector3d velocityAxis = relativeVelocity.Magnitude > 1e-9
             ? -relativeVelocity.Normalized
             : Vector3d.Up;
-        ApplyMassSplitKinematics(payload, velocityAxis, 0.0, relativeVelocity.Magnitude);
+        ApplyMassSplitKinematics(payload, velocityAxis, 0.0, relativeVelocity.Magnitude, impulsePoint);
 
         IsOnRails = false;
         OrbitalState = null;

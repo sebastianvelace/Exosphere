@@ -61,6 +61,7 @@ public sealed class VesselSaveV2
     public VectorSaveV2? TransportRelativeAngularMomentum { get; set; }
     /// <summary>Per-store flow moments about the datum; null in older or untracked saves.</summary>
     public List<TransportMomentumShareSaveV2>? TransportMomentumShares { get; set; }
+    public List<SloshTankSaveV2>? PropellantSloshStates { get; set; }
     public double VentedPropellantKg { get; set; }
     /// <summary>Slewed body-flap channels (pitch, yaw, roll) of the aggregate flap model.</summary>
     public VectorSaveV2 FlapActuators { get; set; } = new();
@@ -86,6 +87,16 @@ public sealed class VesselSaveV2
     public List<JointSaveV2> Joints { get; set; } = new();
     public List<CrewSaveV2> Crew { get; set; } = new();
     public string? PayloadManifestId { get; set; }
+}
+
+public sealed class SloshTankSaveV2
+{
+    public string PartInstanceId { get; set; } = "";
+    public Physics.PropellantResourceKind Resource { get; set; }
+    public VectorSaveV2 Displacement { get; set; } = new();
+    public VectorSaveV2 Rate { get; set; } = new();
+    public Physics.CylindricalSloshParameters? PreviousParameters { get; set; }
+    public Physics.SloshCurvatureHold? CurvatureHold { get; set; }
 }
 
 public sealed class TransportMomentumShareSaveV2
@@ -268,6 +279,7 @@ public static class SaveGameV2Codec
     public static SaveGameV2 Capture(Universe universe, SaveGameV2? metadata = null)
     {
         ArgumentNullException.ThrowIfNull(universe);
+        universe.SynchronizeSloshSaveSnapshot();
         var save = metadata ?? new SaveGameV2();
         save.SchemaVersion = SaveGameV2.CurrentSchemaVersion;
         save.SavedAtUtc = DateTimeOffset.UtcNow;
@@ -400,6 +412,32 @@ public static class SaveGameV2Codec
                 foreach (double value in new[] { momentum.X, momentum.Y, momentum.Z }) RequireFinite(value, vessel.Id);
             if (vessel.TransportRelativeAngularMomentum is { } angularMomentum)
                 foreach (double value in new[] { angularMomentum.X, angularMomentum.Y, angularMomentum.Z }) RequireFinite(value, vessel.Id);
+            if (vessel.PropellantSloshStates is { } sloshStates)
+            {
+                var stores = new HashSet<Physics.ResourceStoreId>();
+                foreach (var state in sloshStates)
+                {
+                    if (state == null || state.Displacement == null || state.Rate == null
+                        || !ownedPartIds.Contains(state.PartInstanceId)
+                        || state.Resource is not (Physics.PropellantResourceKind.LiquidFuel
+                            or Physics.PropellantResourceKind.Oxidizer or Physics.PropellantResourceKind.Monopropellant)
+                        || !stores.Add(new(state.PartInstanceId, state.Resource)))
+                        throw new InvalidDataException($"Invalid or duplicate slosh source on '{vessel.Id}'.");
+                    foreach (double value in new[] { state.Displacement.X, state.Displacement.Y, state.Displacement.Z,
+                        state.Rate.X, state.Rate.Y, state.Rate.Z }) RequireFinite(value, vessel.Id);
+                    if (state.CurvatureHold is { } hold && (!(hold.CurvaturePerM > 0)
+                        || !double.IsFinite(hold.CurvaturePerM) || !Enum.IsDefined(hold.Reason) || state.PreviousParameters == null))
+                        throw new InvalidDataException($"Invalid slosh continuation on '{vessel.Id}'.");
+                    if (state.PreviousParameters is { } parameters)
+                    {
+                        foreach (var jet in new[] { parameters.ModalMassKg, parameters.CurvaturePerM, parameters.HeightAboveFloorM })
+                        {
+                            RequireFinite(jet.Value, vessel.Id); RequireFinite(jet.Rate, vessel.Id); RequireFinite(jet.Acceleration, vessel.Id);
+                            if (jet.Value < 0) throw new InvalidDataException($"Negative slosh coefficient on '{vessel.Id}'.");
+                        }
+                    }
+                }
+            }
             if (vessel.TransportMomentumShares is { } shares)
             {
                 if (vessel.TransportRelativeMomentum == null || vessel.TransportRelativeAngularMomentum == null)
@@ -577,6 +615,15 @@ public static class SaveGameV2Codec
                 Linear = VectorSaveV2.From(share.LinearBodyKgMps),
                 AngularAboutDatum = VectorSaveV2.From(share.AngularAboutDatumBodyKgM2PerS),
             }).ToList(),
+            PropellantSloshStates = vessel.SloshStates.Count == 0 ? null : vessel.SloshStates.Select(state => new SloshTankSaveV2
+            {
+                PartInstanceId = state.Store.PartInstanceId,
+                Resource = state.Store.Resource,
+                Displacement = VectorSaveV2.From(state.State.DisplacementBodyM),
+                Rate = VectorSaveV2.From(state.State.RateBodyMps),
+                PreviousParameters = state.PreviousParameters,
+                CurvatureHold = state.CurvatureHold,
+            }).ToList(),
             VentedPropellantKg = vessel.VentedPropellantKg,
             PitchYawRoll = VectorSaveV2.From(vessel.PitchYawRoll),
             FlapActuators = VectorSaveV2.From(new Vector3d(
@@ -704,6 +751,46 @@ public static class SaveGameV2Codec
                 CurrentShearLoad = state.CurrentShearLoad,
             };
             vessel.Parts.AddJoint(joint);
+        }
+        if (saved.PropellantSloshStates is { } sloshStates)
+            foreach (var state in sloshStates)
+            {
+                if (!parts.TryGetValue(state.PartInstanceId, out var source)
+                    || !source.Definition.PropellantTanks.Any(t => t.Kind != PartMassComponentKind.SolidFuel
+                        && Physics.SloshStepModel.Resource(t.Kind) == state.Resource))
+                    throw new InvalidDataException("Saved slosh state requires a declared source tank.");
+                var tank = source.Definition.PropellantTanks.Single(t => t.Kind != PartMassComponentKind.SolidFuel
+                    && Physics.SloshStepModel.Resource(t.Kind) == state.Resource);
+                var expected = Physics.SloshStepModel.Parameters(tank, Physics.SloshStepModel.StoreMass(source, state.Resource));
+                if (state.PreviousParameters is { } previous
+                    && (previous.ModalMassKg.Value != expected.ModalMassKg.Value
+                        || previous.CurvaturePerM.Value != (state.CurvatureHold?.CurvaturePerM ?? expected.CurvaturePerM.Value)
+                        || previous.HeightAboveFloorM.Value != expected.HeightAboveFloorM.Value))
+                    throw new InvalidDataException("Saved modal coefficients do not match their resource inventory.");
+                var modal = new Physics.SloshDisplacementState(state.Displacement.ToVector(), state.Rate.ToVector());
+                try
+                {
+                    var projected = modal.Sample((state.PreviousParameters ?? expected).CurvaturePerM).State;
+                    double budget = Integrators.CoastingSloshIntegrator.ScaledRoundoffBudget;
+                    if ((projected.DisplacementBodyM - modal.DisplacementBodyM).Magnitude
+                            > budget * System.Math.Max(1, modal.DisplacementBodyM.Magnitude)
+                        || (projected.RateBodyMps - modal.RateBodyMps).Magnitude
+                            > budget * System.Math.Max(1, modal.RateBodyMps.Magnitude))
+                        throw new InvalidDataException("Saved modal state violates its kinematic constraint.");
+                }
+                catch (ArgumentException exception) { throw new InvalidDataException("Invalid modal geometry in save.", exception); }
+                vessel.SloshStates.Add(new(new(state.PartInstanceId, state.Resource), modal, state.PreviousParameters, state.CurvatureHold));
+            }
+        if (vessel.SloshStates.Count > 0)
+        {
+            try
+            {
+                var modalStage = Physics.SloshVesselState.Stage(vessel);
+                Physics.SloshVariableMassDynamics.Evaluate(modalStage.Profile.Baseline, default,
+                    modalStage.State.Datum.Orientation, Vector3d.Zero, modalStage.Corrections, default);
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+            { throw new InvalidDataException("Saved modal state has no positive coupled kinetic matrix.", exception); }
         }
         vessel.Crew.AddRange(saved.Crew.Select(RestoreCrew));
         vessel.ConfigureLandingContactsFromParts();

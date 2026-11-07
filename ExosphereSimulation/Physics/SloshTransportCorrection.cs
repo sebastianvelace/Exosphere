@@ -52,22 +52,26 @@ public readonly record struct SloshTransportCorrection(
             + 2 * curvature.Rate * dot / s3 + heightKK * curvature.Rate * curvature.Rate
             + heightK * curvature.Acceleration;
         var displacementBias = Vector3d.Up * biasY;
-        return FromKinematics(parameters, floorBodyM, displacement, displacementRate, displacementBias, ex, ez);
+        return FromKinematics(parameters, floorBodyM, displacement, displacementRate, displacementBias, ex, ez, Vector3d.Up);
     }
 
     /// <summary>Global displacement form, with tangent accelerations in an orthonormal basis.</summary>
     public static SloshTransportCorrection SampleDisplacement(CylindricalSloshParameters parameters,
-        Vector3d floorBodyM, SloshDisplacementState state)
+        Vector3d floorBodyM, SloshDisplacementState state, Quaterniond? tankToBody = null)
     {
         var kinematics = state.Sample(parameters.CurvaturePerM);
-        return FromKinematics(parameters, floorBodyM, kinematics.State.DisplacementBodyM,
-            kinematics.State.RateBodyMps, kinematics.AccelerationBiasBodyMps2,
-            kinematics.TangentX, kinematics.TangentZ);
+        var q = tankToBody ?? Quaterniond.Identity;
+        if (!(q.NormSquared > 0) || !double.IsFinite(q.NormSquared))
+            throw new ArgumentException("Tank frame must be finite and nonzero.", nameof(tankToBody));
+        q = q.Normalize();
+        return FromKinematics(parameters, floorBodyM, q.Rotate(kinematics.State.DisplacementBodyM),
+            q.Rotate(kinematics.State.RateBodyMps), q.Rotate(kinematics.AccelerationBiasBodyMps2),
+            q.Rotate(kinematics.TangentX), q.Rotate(kinematics.TangentZ), q.Rotate(Vector3d.Up));
     }
 
     private static SloshTransportCorrection FromKinematics(CylindricalSloshParameters parameters,
         Vector3d floorBodyM, Vector3d displacement, Vector3d displacementRate,
-        Vector3d displacementBias, Vector3d ex, Vector3d ez)
+        Vector3d displacementBias, Vector3d ex, Vector3d ez, Vector3d axis)
     {
         DynamicsInputs.RequireFinite(floorBodyM, nameof(floorBodyM));
         var mu = parameters.ModalMassKg; var height = parameters.HeightAboveFloorM;
@@ -75,8 +79,8 @@ public readonly record struct SloshTransportCorrection(
         foreach (var jet in new[] { mu, height })
             if (!double.IsFinite(jet.Value) || !double.IsFinite(jet.Rate) || !double.IsFinite(jet.Acceleration))
                 throw new ArgumentException("Modal coefficients and derivatives must be finite.", nameof(parameters));
-        var r0 = floorBodyM + Vector3d.Up * height.Value;
-        var r0Rate = Vector3d.Up * height.Rate; var r0Acceleration = Vector3d.Up * height.Acceleration;
+        var r0 = floorBodyM + axis * height.Value;
+        var r0Rate = axis * height.Rate; var r0Acceleration = axis * height.Acceleration;
         var r = r0 + displacement;
         var relativeLinear = displacement * mu.Rate + displacementRate * mu.Value;
         var linearRate = displacement * mu.Acceleration + displacementRate * (2 * mu.Rate)

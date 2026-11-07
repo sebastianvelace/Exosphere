@@ -19,8 +19,8 @@
     {"id": "rp1_suction_lines", "propellant": "liquid_fuel", "capacity_kg": 5983, "center_y_m": -16.42}
   ],
   "propellant_tanks": [
-    {"resource": "liquid_fuel", "bottom_y_m": -14.145, "top_y_m": -3.334, "radius_m": 5.029, "density_kg_m3": 807},
-    {"resource": "oxidizer", "bottom_y_m": -0.252, "top_y_m": 16.961, "radius_m": 5.029, "density_kg_m3": 1141}
+    {"resource": "liquid_fuel", "bottom_y_m": -14.145, "top_y_m": -3.334, "radius_m": 5.029, "density_kg_m3": 807, "slosh_damping_ratio": 0.03},
+    {"resource": "oxidizer", "bottom_y_m": -0.252, "top_y_m": 16.961, "radius_m": 5.029, "density_kg_m3": 1141, "slosh_damping_ratio": 0.03}
   ],
   "attachment_nodes": [
     {"id": "top", "position": [0, 18.15, 0], "size": 3, "type": "stack"},

@@ -18,6 +18,7 @@ public sealed class VariableMassStepModel
     /// <summary>Rigidly attached members (docked vessels) folded in as constant components.</summary>
     public int AttachedMemberCount { get; }
     private readonly IReadOnlyDictionary<ResourceStoreId, int> _storeIndex;
+    internal IReadOnlyDictionary<ResourceStoreId, int> StoreComponents => _storeIndex;
 
     private VariableMassStepModel(OpenSystemTransport transport, int attached,
         IReadOnlyDictionary<ResourceStoreId, int> storeIndex)
@@ -49,7 +50,7 @@ public sealed class VariableMassStepModel
 
     /// <summary>Why the last build attempt fell back to frozen mass (null when it succeeded).</summary>
     public static bool TryBuild(PartGraph parts, ResourceFundingWindow? window, Vessel vessel,
-        IReadOnlyList<RigidlyAttachedMember>? attached, out VariableMassStepModel? model, out string? reason)
+        IReadOnlyList<RigidlyAttachedMember>? attached, out VariableMassStepModel? model, out string? reason, bool includeConstantStores = false)
     {
         model = null;
         if (window == null) { reason = "no-resource-window"; return false; }
@@ -57,7 +58,7 @@ public sealed class VariableMassStepModel
         if (window.UsesInfinitePropellantAssist) { reason = "infinite-propellant-assist"; return false; }
         // Universe already discards models without flow. Avoid constructing and validating
         // an entire constant distribution on every coast tick before discarding it.
-        if (window.Debits.Count == 0) { reason = "no-outflow"; return false; }
+        if (window.Debits.Count == 0 && !includeConstantStores) { reason = "no-outflow"; return false; }
         double dt = window.DurationSeconds;
         var positions = parts.GetTopologyPartLocalPositionsForMass();
         double fallbackLength = System.Math.Max(1.0, parts.VehicleLength / System.Math.Max(1, parts.PartList.Count));

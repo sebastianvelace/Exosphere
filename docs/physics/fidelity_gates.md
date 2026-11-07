@@ -22,8 +22,8 @@ with `bash tools/fidelity_gate.sh F1`.
 | F2 | closed | Physical body flaps on measured crossflow drag (Flight 14 descent and belly-flop speed) |
 | F3 | closed | Actuator-only attitude control, declared catalog RCS, exact Flight 14 checkpoint and historical descent; full CI 1259/1259 |
 | F4 | closed | Variable-mass transport (shared mass geometry, settled tank columns, outlets, momentum-conserving flow cuts) on the coupled path; tidal moments; AS-506 S-IC jet-damping historical gate |
-| F5 | open | Cylindrical coefficients, full 6-DoF/modal RK4 and funded Reynolds balance verified; production activation, damping data, persistence and topology pending |
-| F6 | planned | Historical recalibration of every profile |
+| F5 | closed | Production funded modes, conservative coasts, damping provenance, saves/topology verified; complete CI 1588/1588 and Godot stable-orbit ascent pass |
+| F6 | open | Profile matrix and source audit underway; confirmed MA-6 mass-definition defect and native Atlas reconstruction remain open |
 
 ## Gates
 
@@ -107,3 +107,17 @@ Full validation: `bash tools/ci_check.sh`, 1259/1259 tests, three builds at 0 wa
 | F5 | analytic | `Slosh6DofIntegratorTests.SmoothIntegrationConvergesAtFourthOrder` | augmented constrained RK4 convergence |
 | F5 | analytic | `Slosh6DofIntegratorTests.IntegratedDrainingMomentaEqualOnlyTheOutletFluxIncludingTheEmptyFlowCut` | independent integrated outlet flux and conservative empty-store retirement |
 | F5 | analytic | `SloshMomentumTransferTests.PrescribedFlowCutsConserveAllSixInertialMomentaWithoutMovingTheHull` | internal parameter/flow handoffs retain P/H and datum pose |
+
+| F5 | analytic | `PropellantSloshUniverseTests.ProductionAdvancesTheModeAndConservesIndependentClosedSystemMomenta` | production modal integration and boundary regression |
+| F5 | analytic | `PropellantSloshUniverseTests.KeplerCoastAdvancesFluidAndRebuildsTheDatumFromTheMovingMassCenter` | production modal integration and boundary regression |
+| F5 | analytic | `PropellantSloshUniverseTests.SaveDuringDrainThenFlowStopContinuesBitForBit` | production modal integration and boundary regression |
+| F5 | analytic | `PropellantSloshUniverseTests.OlderSavesWithoutModalFieldsStartWithTheLockedDistribution` | production modal integration and boundary regression |
+| F5 | analytic | `PropellantSloshUniverseTests.FundedRcsDatumTorqueDoesNotMoveWithTheLiquidCentroid` | production modal integration and boundary regression |
+| F5 | analytic | `PropellantSloshUniverseTests.SavingAMovingKeplerModeContinuesAtTheSameCommittedEpoch` | active and deferred modal coast resumes at the committed save epoch |
+| F5 | analytic | `PropellantSloshUniverseTests.ExhaustionFundsOnlyTheActualStoreAndRetiresItsModeAfterTheStoppedFlowHandoff` | finite exhaustion, one resource debit and conservative mode retirement |
+| F5 | analytic | `PropellantSloshUniverseTests.ConfiguredDampingUsesActualProperAccelerationAndActsOnlyOnRelativeTangentMotion` | declared damping acts on relative tangent motion using actual proper acceleration |
+| F5 | analytic | `PropellantSloshUniverseTests.PositiveAccelerationLocatesTheAdiabaticBoundaryWithoutAParameterValueJump` | analytic-to-held curvature cut has continuous geometry |
+| F5 | analytic | `PropellantSloshUniverseTests.NonsettlingDrainKeepsBothHemispheresFiniteThroughExhaustionAndReload` | finite conservative drain continuation in both hemispheres and exact reload |
+| F5 | analytic | `PropellantSloshUniverseTests.DockCaptureAndUndockPreserveMovingLiquidMomentumAndCaptureDissipatesEnergy` | coupled capture and release conserve independent P/H; capture dissipates energy |
+| F5 | analytic | `PropellantSloshUniverseTests.ModesFollowTheirSourcePartsAndSeparationImpulsesConserveTotalMomentum` | staging, breakup and payload release retain store ownership and P/H |
+| F5 | analytic | `PropellantSloshUniverseTests.InvalidSavedModesAreRejectedBeforeTheLiveWorldChanges` | invalid source, constraint and coefficient snapshots reject atomically |

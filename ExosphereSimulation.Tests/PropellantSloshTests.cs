@@ -262,6 +262,10 @@ public sealed class PropellantSloshTests(ITestOutputHelper output)
             double Frequency(PartMassComponentKind kind, double mass)
             {
                 var definition = tank.Definition.FindPropellantTank(kind)!;
+                var runtime = Assert.Single(vessel.PropellantSloshStates.Where(s =>
+                    s.Store.PartInstanceId == tank.InstanceId && s.Store.Resource ==
+                    (kind == PartMassComponentKind.Oxidizer ? PropellantResourceKind.Oxidizer : PropellantResourceKind.LiquidFuel)));
+                Assert.Null(runtime.CurvatureHold);
                 double lambda = definition.DensityKgPerM3 * System.Math.PI * definition.RadiusM * definition.RadiusM;
                 return PropellantSlosh.FirstMode(definition.RadiusM, mass / lambda, mass, specificForce).FrequencyHz;
             }

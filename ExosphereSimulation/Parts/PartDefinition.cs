@@ -57,6 +57,8 @@ public class PropellantTankDef
     [JsonPropertyName("top_y_m")] public double TopYM { get; set; }
     [JsonPropertyName("radius_m")] public double RadiusM { get; set; }
     [JsonPropertyName("density_kg_m3")] public double DensityKgPerM3 { get; set; }
+    /// <summary>Optional tank-specific first-mode equivalent viscous damping ratio; null is inviscid.</summary>
+    [JsonPropertyName("slosh_damping_ratio")] public double? SloshDampingRatio { get; set; }
 
     [JsonIgnore]
     public PartMassComponentKind Kind => Resource.ToLowerInvariant() switch

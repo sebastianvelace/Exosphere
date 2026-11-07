@@ -26,8 +26,8 @@
   "dry_mass_center_y_m": -3.5724,
   "dry_gyration_m": {"transverse_m": 5.449, "axial_m": 2.912},
   "propellant_tanks": [
-    {"resource": "oxidizer", "bottom_y_m": -5.42, "top_y_m": -2.92, "radius_m": 3.3, "density_kg_m3": 1141},
-    {"resource": "liquid_fuel", "bottom_y_m": -2.92, "top_y_m": 5.35, "radius_m": 3.3, "density_kg_m3": 70.85}
+    {"resource": "oxidizer", "bottom_y_m": -5.42, "top_y_m": -2.92, "radius_m": 3.3, "density_kg_m3": 1141, "slosh_damping_ratio": 0.03},
+    {"resource": "liquid_fuel", "bottom_y_m": -2.92, "top_y_m": 5.35, "radius_m": 3.3, "density_kg_m3": 70.85, "slosh_damping_ratio": 0.03}
   ],
   "attachment_nodes": [
     {"id": "top", "position": [0, 5.35, 0], "size": 3, "type": "stack"},

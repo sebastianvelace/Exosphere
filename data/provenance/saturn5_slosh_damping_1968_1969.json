@@ -1,0 +1,71 @@
+{
+  "manifestId": "saturn5-slosh-damping-1968-1969",
+  "records": [
+    {
+      "dataId": "saturn5_sic_tank_as506",
+      "field": "sloshDamping:liquid_fuel",
+      "status": "estimated",
+      "value": 0.03,
+      "source": "Honeywell 21171-SR1, Data Base Report for Saturn V/Voyager Load Relief Study, 1967 updated 30 January 1968, figure 42 printed p.100 (PDF p.111), nominal slosh damping data supplied by MSFC; https://ntrs.nasa.gov/api/citations/19690022970/downloads/19690022970.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "AS-506 cylindrical first-mode approximation",
+      "conditions": "Adopt a constant 0.03 equivalent viscous ratio: the figure gives 0.03 for other tanks and a lower envelope of 0.03 for S-IC LOX/fuel after their nominal late-boost reductions from about 0.09/0.075. This deliberately does not reproduce the earlier higher S-IC nominal damping or an unreported baffle-height schedule. c=2*zeta*m1*sqrt(a*k).",
+      "uncertainty": "Preflight design data for a different Saturn V/Voyager configuration, not AS-506 measured flight damping. Constant lower-envelope approximation, with unresolved amplitude, fill/baffle-height and variant dependence; not fitted to mission acceptance gates."
+    },
+    {
+      "dataId": "saturn5_sic_tank_as506",
+      "field": "sloshDamping:oxidizer",
+      "status": "estimated",
+      "value": 0.03,
+      "source": "Honeywell 21171-SR1, Data Base Report for Saturn V/Voyager Load Relief Study, 1967 updated 30 January 1968, figure 42 printed p.100 (PDF p.111), nominal slosh damping data supplied by MSFC; https://ntrs.nasa.gov/api/citations/19690022970/downloads/19690022970.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "AS-506 cylindrical first-mode approximation",
+      "conditions": "Adopt a constant 0.03 equivalent viscous ratio: the figure gives 0.03 for other tanks and a lower envelope of 0.03 for S-IC LOX/fuel after their nominal late-boost reductions from about 0.09/0.075. This deliberately does not reproduce the earlier higher S-IC nominal damping or an unreported baffle-height schedule. c=2*zeta*m1*sqrt(a*k).",
+      "uncertainty": "Preflight design data for a different Saturn V/Voyager configuration, not AS-506 measured flight damping. Constant lower-envelope approximation, with unresolved amplitude, fill/baffle-height and variant dependence; not fitted to mission acceptance gates."
+    },
+    {
+      "dataId": "saturn5_sii_tank_as506",
+      "field": "sloshDamping:oxidizer",
+      "status": "estimated",
+      "value": 0.03,
+      "source": "Honeywell 21171-SR1, Data Base Report for Saturn V/Voyager Load Relief Study, 1967 updated 30 January 1968, figure 42 printed p.100 (PDF p.111), nominal slosh damping data supplied by MSFC; https://ntrs.nasa.gov/api/citations/19690022970/downloads/19690022970.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "AS-506 cylindrical first-mode approximation",
+      "conditions": "Adopt a constant 0.03 equivalent viscous ratio: the figure gives 0.03 for other tanks and a lower envelope of 0.03 for S-IC LOX/fuel after their nominal late-boost reductions from about 0.09/0.075. This deliberately does not reproduce the earlier higher S-IC nominal damping or an unreported baffle-height schedule. c=2*zeta*m1*sqrt(a*k).",
+      "uncertainty": "Preflight design data for a different Saturn V/Voyager configuration, not AS-506 measured flight damping. Constant lower-envelope approximation, with unresolved amplitude, fill/baffle-height and variant dependence; not fitted to mission acceptance gates."
+    },
+    {
+      "dataId": "saturn5_sii_tank_as506",
+      "field": "sloshDamping:liquid_fuel",
+      "status": "estimated",
+      "value": 0.02,
+      "source": "NASA MSFC MPR-SAT-FE-69-4, AS-504 Apollo 9 flight evaluation, section 11.4.2 printed p.11-16: LH2 damping ratio estimated as 0.02 from 10 Hz capacitance probe data; https://klabs.org/history/history_docs/jsc_t/apollo_09_saturn_v.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "AS-506 cylindrical first-mode approximation",
+      "conditions": "Adopt the AS-504 S-II LH2 flight-derived estimate as the AS-506 equivalent viscous ratio. c=2*zeta*m1*sqrt(a*k) uses actual positive axial proper acceleration and the current modal coefficients.",
+      "uncertainty": "Cross-variant transfer of a flight-derived estimate; not a measured AS-506 damping curve, and the report supplies no uncertainty band. Does not certify nonlinear wave amplitude or low-g damping."
+    },
+    {
+      "dataId": "saturn5_sivb_tank_as506",
+      "field": "sloshDamping:oxidizer",
+      "status": "estimated",
+      "value": 0.03,
+      "source": "Honeywell 21171-SR1, Data Base Report for Saturn V/Voyager Load Relief Study, 1967 updated 30 January 1968, figure 42 printed p.100 (PDF p.111), nominal slosh damping data supplied by MSFC; https://ntrs.nasa.gov/api/citations/19690022970/downloads/19690022970.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "AS-506 cylindrical first-mode approximation",
+      "conditions": "Adopt a constant 0.03 equivalent viscous ratio: the figure gives 0.03 for other tanks and a lower envelope of 0.03 for S-IC LOX/fuel after their nominal late-boost reductions from about 0.09/0.075. This deliberately does not reproduce the earlier higher S-IC nominal damping or an unreported baffle-height schedule. c=2*zeta*m1*sqrt(a*k).",
+      "uncertainty": "Preflight design data for a different Saturn V/Voyager configuration, not AS-506 measured flight damping. Constant lower-envelope approximation, with unresolved amplitude, fill/baffle-height and variant dependence; not fitted to mission acceptance gates."
+    },
+    {
+      "dataId": "saturn5_sivb_tank_as506",
+      "field": "sloshDamping:liquid_fuel",
+      "status": "estimated",
+      "value": 0.03,
+      "source": "Honeywell 21171-SR1, Data Base Report for Saturn V/Voyager Load Relief Study, 1967 updated 30 January 1968, figure 42 printed p.100 (PDF p.111), nominal slosh damping data supplied by MSFC; https://ntrs.nasa.gov/api/citations/19690022970/downloads/19690022970.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "AS-506 cylindrical first-mode approximation",
+      "conditions": "Adopt a constant 0.03 equivalent viscous ratio: the figure gives 0.03 for other tanks and a lower envelope of 0.03 for S-IC LOX/fuel after their nominal late-boost reductions from about 0.09/0.075. This deliberately does not reproduce the earlier higher S-IC nominal damping or an unreported baffle-height schedule. c=2*zeta*m1*sqrt(a*k).",
+      "uncertainty": "Preflight design data for a different Saturn V/Voyager configuration, not AS-506 measured flight damping. Constant lower-envelope approximation, with unresolved amplitude, fill/baffle-height and variant dependence; not fitted to mission acceptance gates."
+    }
+  ]
+}

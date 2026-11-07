@@ -7,6 +7,21 @@ public static class GravityGradient
 {
     public const double TidalCoefficient = 3.0;
 
+    /// <summary>Linearized point-attractor acceleration difference G*displacement, in body axes.</summary>
+    public static Vector3d DifferentialAccelerationBody(double gravitationalParameterM3PerS2,
+        Vector3d positionFromAttractorBodyM, Vector3d displacementFromCenterBodyM)
+    {
+        if (!double.IsFinite(gravitationalParameterM3PerS2) || gravitationalParameterM3PerS2 < 0)
+            throw new ArgumentOutOfRangeException(nameof(gravitationalParameterM3PerS2));
+        DynamicsInputs.RequireFinite(positionFromAttractorBodyM, nameof(positionFromAttractorBodyM));
+        DynamicsInputs.RequireFinite(displacementFromCenterBodyM, nameof(displacementFromCenterBodyM));
+        double radius = positionFromAttractorBodyM.Magnitude;
+        if (!(radius > 0) || !double.IsFinite(radius)) throw new ArgumentOutOfRangeException(nameof(positionFromAttractorBodyM));
+        var n = positionFromAttractorBodyM / radius;
+        double scale = (gravitationalParameterM3PerS2 / radius) / radius / radius;
+        return (n * (TidalCoefficient * n.Dot(displacementFromCenterBodyM)) - displacementFromCenterBodyM) * scale;
+    }
+
     /// <summary>
     /// Returns 3 mu/r^3 n x (I n), in N m. The attractor-to-CoM vector and inertia
     /// tensor must use the same body frame. This is a far-field, point-attractor model;

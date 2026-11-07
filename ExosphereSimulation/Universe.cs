@@ -51,7 +51,7 @@ public enum VesselSimulationTier
 /// Owns all celestial bodies and vessels, advances simulation time,
 /// and dispatches to the appropriate integrator based on warp factor.
 /// </summary>
-public class Universe
+public partial class Universe
 {
     /// <summary>
     /// Control-law cadence used while an external physics controller is active. This matches
@@ -66,7 +66,9 @@ public class Universe
     private readonly IReadOnlyList<CelestialBody> _bodiesView;
     private readonly IReadOnlyList<Vessel> _vesselsView;
     private readonly IReadOnlyList<DockingConnection> _dockingConnectionsView;
-    private readonly record struct DeferredRailAnchor(double Time, Quaterniond Orientation, Vector3d AngularVelocity);
+    private readonly record struct DeferredSloshAnchor(string VesselId, Physics.SloshTankRuntime[] States);
+    private readonly record struct DeferredRailAnchor(double Time, Quaterniond Orientation, Vector3d AngularVelocity,
+        DeferredSloshAnchor[]? Slosh = null);
     private readonly Dictionary<string, DeferredRailAnchor> _deferredRailAnchors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _nextDeferredRailDeadline = new(StringComparer.Ordinal);
     private readonly KeplerPropagator.BodyPropagationWorkspace _bodyPropagationWorkspace = new();
@@ -349,7 +351,12 @@ public class Universe
     {
         if (_vessels.Any(v => v.Id == vessel.Id && !ReferenceEquals(v, vessel)))
             throw new InvalidOperationException($"Duplicate vessel id '{vessel.Id}'.");
-        if (!_vessels.Contains(vessel)) _vessels.Add(vessel);
+        if (!_vessels.Contains(vessel))
+        {
+            if (PropellantSloshEnabled && Coupled6DofIntegrationEnabled && VariableMassTransportEnabled)
+                Physics.SloshVesselState.InitializeEquilibriumModes(vessel);
+            _vessels.Add(vessel);
+        }
     }
 
     /// <summary>
@@ -523,6 +530,11 @@ public class Universe
             v => v.Id == connection.PrimaryVesselId);
         var secondary = _vessels.FirstOrDefault(
             v => v.Id == connection.SecondaryVesselId);
+        if (primary != null && secondary != null)
+        {
+            CatchUpDeferredRailVessel(primary, CurrentTime);
+            ApplyDockingConstraint(connection);
+        }
         _dockingConnections.Remove(connection);
         if (primary == null || secondary == null)
             return true;
@@ -541,6 +553,14 @@ public class Universe
         Vector3d direction = (secondary.Position - primary.Position).Normalized;
         if (direction.MagnitudeSquared < 0.5)
             direction = primary.Orientation.Rotate(Vector3d.Up);
+        if (PropellantSloshEnabled && (primary.SloshStates.Count > 0 || secondary.SloshStates.Count > 0))
+        {
+            var port = primary.Parts.Parts.FirstOrDefault(p => p.InstanceId == connection.PrimaryPortPartId);
+            var point = (primary.Position + secondary.Position) / 2;
+            if (port != null && TryGetDockingFrame(primary, port, out var portPoint, out _, out _)) point = portPoint;
+            Physics.SloshVesselState.Separate(primary, secondary, point, -direction, separationSpeedMps);
+            return true;
+        }
         double totalMass = primary.TotalMass + secondary.TotalMass;
         if (totalMass <= 0.0) return true;
         primary.Velocity -= direction
@@ -626,10 +646,21 @@ public class Universe
         return true;
     }
 
-    private static void CaptureDockingMomentum(
+    private void CaptureDockingMomentum(
         Vessel primary,
         Vessel secondary)
     {
+        if (PropellantSloshEnabled && (HasSloshTanks(primary) || HasSloshTanks(secondary)))
+        {
+            Physics.SloshVesselState.InitializeEquilibriumModes(primary);
+            Physics.SloshVesselState.InitializeEquilibriumModes(secondary);
+            var captured = Physics.SloshDockingDynamics.Capture(Physics.SloshVesselState.Stage(primary),
+                Physics.SloshVesselState.Stage(secondary), Physics.SloshVesselState.FeedMomenta(primary),
+                Physics.SloshVesselState.FeedMomenta(secondary));
+            Physics.SloshVesselState.CommitImpulse(primary, captured.Primary);
+            Physics.SloshVesselState.CommitImpulse(secondary, captured.Secondary);
+            return;
+        }
         double primaryMass = primary.TotalMass;
         double secondaryMass = secondary.TotalMass;
         double totalMass = primaryMass + secondaryMass;
@@ -1227,8 +1258,7 @@ public class Universe
 
             if (_deferredRailAnchors.TryGetValue(vessel.Id, out var anchor))
             {
-                vessel.Orientation = anchor.Orientation;
-                vessel.AngularVelocity = anchor.AngularVelocity;
+                RestoreRailAnchor(vessel, anchor);
             }
             SetDatumFromCenterOfMass(vessel, position, velocity);
             return true;
@@ -1279,8 +1309,7 @@ public class Universe
 
             if (_deferredRailAnchors.TryGetValue(vessel.Id, out var anchor))
             {
-                vessel.Orientation = anchor.Orientation;
-                vessel.AngularVelocity = anchor.AngularVelocity;
+                RestoreRailAnchor(vessel, anchor);
                 double attitudeInterval = targetTime - anchor.Time;
                 if (attitudeInterval > 0)
                 {
@@ -1305,7 +1334,7 @@ public class Universe
         var centerBody = CoastingMassProperties(vessel)?.CenterOfMassBody ?? vessel.CenterOfMassOffsetLocal;
         var offset = vessel.Orientation.Rotate(centerBody);
         vessel.Position = centerOfMass - offset;
-        vessel.Velocity = centerOfMassVelocity - vessel.AngularVelocity.Cross(offset);
+        vessel.Velocity = centerOfMassVelocity - vessel.AngularVelocity.Cross(offset) - SloshMeanVelocityCorrection(vessel);
     }
 
     private bool CatchUpDeferredRailVessel(Vessel vessel, double targetTime)
@@ -1327,7 +1356,7 @@ public class Universe
         }
 
         PropagateVesselOnRails(vessel, lastTime, targetTime);
-        _deferredRailAnchors[vessel.Id] = new(targetTime, vessel.Orientation, vessel.AngularVelocity);
+        _deferredRailAnchors[vessel.Id] = CaptureRailAnchor(vessel, targetTime);
         _nextDeferredRailDeadline.Remove(vessel.Id);
         _tickDeadlineCatchUpDispatches++;
         _tickOnRailsDispatches++;
@@ -1495,6 +1524,7 @@ public class Universe
         || vessel.PropellantVentRateKgPerS > 0
         || vessel.DisturbanceMassFlowKgPerS > 0
         || HasRetainedTransportMomentum(vessel)
+        || HasRetainedSloshSchedule(vessel)
         || HasCoastingSasActuator(vessel);
 
     // A feed can end exactly on a step boundary while its left-limit momentum is
@@ -2262,7 +2292,7 @@ public class Universe
                     }
 
                     PropagateVesselOnRails(vessel, hasLastUpdate ? lastUpdate : CurrentTime, targetTime);
-                    _deferredRailAnchors[vessel.Id] = new(targetTime, vessel.Orientation, vessel.AngularVelocity);
+                    _deferredRailAnchors[vessel.Id] = CaptureRailAnchor(vessel, targetTime);
                     _nextDeferredRailDeadline[vessel.Id] =
                         targetTime + deadline.IntervalSeconds;
                     RecordWorkload(workload);
@@ -2381,7 +2411,7 @@ public class Universe
             if (vessel.OrbitalState is null)
                 return false;
             lastUpdate = CurrentTime;
-            _deferredRailAnchors[vessel.Id] = new(lastUpdate, vessel.Orientation, vessel.AngularVelocity);
+            _deferredRailAnchors[vessel.Id] = CaptureRailAnchor(vessel, lastUpdate);
         }
 
         if (!_nextDeferredRailDeadline.TryGetValue(vessel.Id, out double nextDeadline))
@@ -2614,6 +2644,7 @@ public class Universe
 
         vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
         vessel.DockedStackTransverseInertiaKgM2 = DockedStackTransverseInertia(vessel);
+        bool sloshRequested = PropellantSloshEnabled && VariableMassTransportEnabled && HasSloshTanks(vessel);
         vessel.CaptureTransportWindow = VariableMassTransportEnabled;
         vessel.BeginCoupledPhysicsStep(dt, refBody, DistributedAerodynamicsEnabled, PhysicalBodyFlapsEnabled);
         vessel.CaptureTransportWindow = false;
@@ -2624,14 +2655,15 @@ public class Universe
             try
             {
                 Physics.VariableMassStepModel.TryBuild(vessel.Parts, vessel.TransportWindow, vessel,
-                    DockedMembers(vessel), out transportModel, out transportReason);
+                    DockedMembers(vessel, includeSlosh: false), out transportModel, out transportReason,
+                    includeConstantStores: sloshRequested);
             }
             catch
             {
                 vessel.EndCoupledPhysicsStep();
                 throw;
             }
-            if (transportModel != null && transportModel.Transport.Groups.Count == 0)
+            if (transportModel != null && transportModel.Transport.Groups.Count == 0 && !sloshRequested)
             {
                 transportModel = null;
                 transportReason = "no-outflow";
@@ -2639,13 +2671,26 @@ public class Universe
         }
         vessel.LastVariableMassStatus = transportModel != null ? "active" : transportReason;
         vessel.LastTransportSample = null;
+        if (sloshRequested && transportModel != null)
+        {
+            var slosh = new Physics.SloshStepModel(vessel, transportModel, SloshMembers(vessel));
+            if (slosh.ModeCount > 0)
+            {
+                IntegrateVesselSlosh(vessel, refBody, dt, transportModel, slosh,
+                    referenceStartPosition, referenceStartVelocity, frameAcceleration, evaluationTime);
+                ApplyPostIntegrationPhysics(vessel, refBody, dt);
+                return;
+            }
+        }
+        vessel.LastSloshStatus = !PropellantSloshEnabled ? "disabled"
+            : sloshRequested ? "frozen: " + transportReason : "no-declared-liquid-tanks";
         if (transportModel == null)
         {
             bool knownStoppedFlow = vessel.TransportWindow is { HasCompleteCoverage: true,
                 UsesInfinitePropellantAssist: false } window && window.Debits.Count == 0;
             if (knownStoppedFlow)
             {
-                var mass = DockedCompositeMassProperties(vessel, vessel.Parts.GetMassProperties());
+                var mass = DockedCompositeMassProperties(vessel, vessel.GetMassProperties());
                 (vessel.Velocity, vessel.AngularVelocity) = TransferInternalFlowMomentum(vessel, mass,
                     Vector3d.Zero, Vector3d.Zero);
             }
@@ -2668,7 +2713,7 @@ public class Universe
             // A docked stack is one rigid body: integrate the composite mass, centre of mass
             // and inertia tensor. Contacts are evaluated on the primary's own centre-of-mass
             // state and their torque transferred to the composite centre.
-            var ownMassProperties = vessel.Parts.GetMassProperties();
+            var ownMassProperties = vessel.GetMassProperties();
             var massProperties = DockedCompositeMassProperties(vessel, ownMassProperties);
             var ownCenterShiftBody = ownMassProperties.CenterOfMassBody - massProperties.CenterOfMassBody;
             var orientation = vessel.Orientation;
@@ -2796,7 +2841,7 @@ public class Universe
                 || vessel.TransportRelativeMomentumBody is not { } linear
                 || vessel.TransportRelativeAngularMomentumBody is not { } angular) continue;
             var center = linear == Vector3d.Zero && angular == Vector3d.Zero ? Vector3d.Zero
-                : DockedCompositeMassProperties(vessel, vessel.Parts.GetMassProperties()).CenterOfMassBody;
+                : DockedCompositeMassProperties(vessel, vessel.GetMassProperties()).CenterOfMassBody;
             vessel.EnsureLegacyTransportMomentumShares(center);
         }
     }
@@ -3019,7 +3064,7 @@ public class Universe
         return members == null ? own : Physics.CompositeMassProperties.Combine(own, members);
     }
 
-    private List<Physics.RigidlyAttachedMember>? DockedMembers(Vessel primary)
+    private List<Physics.RigidlyAttachedMember>? DockedMembers(Vessel primary, bool includeSlosh = true)
     {
         List<Physics.RigidlyAttachedMember>? members = null;
         foreach (var connection in _dockingConnections)
@@ -3028,7 +3073,7 @@ public class Universe
             foreach (var secondary in _vessels)
                 if (secondary.Id == connection.SecondaryVesselId && !secondary.IsDestroyed
                     && secondary.Parts.TryGetMassProperties(out var properties))
-                    (members ??= new()).Add(new(properties,
+                    (members ??= new()).Add(new(includeSlosh ? secondary.GetMassProperties() : properties,
                         connection.SecondaryPositionPrimaryLocal, connection.SecondaryOrientationPrimaryLocal));
         }
         return members;
@@ -3308,23 +3353,24 @@ public class Universe
             return;
         var coastMass = CoastingMassProperties(vessel);
         var centerOfMassBody = coastMass?.CenterOfMassBody ?? vessel.CenterOfMassOffsetLocal;
-        if (centerOfMassBody.MagnitudeSquared == 0.0)
+        if (centerOfMassBody.MagnitudeSquared == 0.0 && !HasSloshTanks(vessel))
         {
             PropagateCenterOfMassOnRails(vessel, startTime, targetTime, coastMass);
             return;
         }
         var offset = vessel.Orientation.Rotate(centerOfMassBody);
         vessel.Position += offset;
-        vessel.Velocity += vessel.AngularVelocity.Cross(offset);
+        vessel.Velocity += vessel.AngularVelocity.Cross(offset) + SloshMeanVelocityCorrection(vessel);
         try
         {
             PropagateCenterOfMassOnRails(vessel, startTime, targetTime, coastMass);
         }
         finally
         {
-            offset = vessel.Orientation.Rotate(centerOfMassBody);
+            var finalCenterBody = CoastingMassProperties(vessel)?.CenterOfMassBody ?? vessel.CenterOfMassOffsetLocal;
+            offset = vessel.Orientation.Rotate(finalCenterBody);
             vessel.Position -= offset;
-            vessel.Velocity -= vessel.AngularVelocity.Cross(offset);
+            vessel.Velocity -= vessel.AngularVelocity.Cross(offset) + SloshMeanVelocityCorrection(vessel);
         }
     }
 
@@ -3487,12 +3533,17 @@ public class Universe
 
     private Physics.RigidBodyMassProperties? CoastingMassProperties(Vessel vessel) =>
         Coupled6DofIntegrationEnabled && vessel.Parts.TryGetMassProperties(out var own)
-            ? DockedCompositeMassProperties(vessel, own) : null;
+            ? DockedCompositeMassProperties(vessel, vessel.SloshStates.Count == 0 ? own : vessel.GetMassProperties()) : null;
 
     /// <summary>Euler/tidal attitude along the prescribed centre-of-mass conic.</summary>
     private void AdvanceCoastingAttitude(Vessel vessel, Physics.RigidBodyMassProperties mass,
         CelestialBody reference, double startTime, double dt)
     {
+        if (PropellantSloshEnabled && HasSloshTanks(vessel))
+        {
+            AdvanceCoastingSlosh(vessel, reference, startTime, dt);
+            return;
+        }
         var orbit = vessel.OrbitalState!;
         Vector3d TidalTorque(Quaterniond orientation, double epoch)
         {

@@ -69,6 +69,13 @@ public sealed class PartCatalog
             {
                 provenance.Require(part.Id, "propellantTanks");
                 ValidatePropellantTanks(part);
+                foreach (var tank in part.PropellantTanks)
+                    if (tank.SloshDampingRatio is { } ratio)
+                    {
+                        var record = provenance.Require(part.Id, "sloshDamping:" + tank.Resource);
+                        if (record.Value is { } value && System.Math.Abs(value - ratio) > 1e-12)
+                            throw new InvalidDataException($"Part '{part.Id}' slosh damping differs from provenance.");
+                    }
             }
             if (part.DryMassCenterYM != 0.0)
             {
@@ -93,6 +100,9 @@ public sealed class PartCatalog
                 || !(tank.RadiusM > 0.0) || !double.IsFinite(tank.RadiusM)
                 || !(tank.DensityKgPerM3 > 0.0) || !double.IsFinite(tank.DensityKgPerM3))
                 throw new InvalidDataException($"Part '{part.Id}' {tank.Resource} tank geometry is invalid.");
+            if (tank.SloshDampingRatio is { } damping
+                && (!double.IsFinite(damping) || damping < 0 || kind == PartMassComponentKind.SolidFuel))
+                throw new InvalidDataException($"Part '{part.Id}' {tank.Resource} slosh damping is invalid.");
             double load = kind switch
             {
                 PartMassComponentKind.LiquidFuel => part.FuelCapacityLF,

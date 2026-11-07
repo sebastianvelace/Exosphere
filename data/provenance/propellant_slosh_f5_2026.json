@@ -106,6 +106,39 @@
       "variant": "Smooth one-sided funded-mass intervals in an equivalent flat-bottomed cylinder",
       "conditions": "With lambda=rho*pi*R^2, beta=xi/(lambda*R), the modal mass is 2*tanh(beta*m)/((xi^2-1)*beta), inverse length is xi/R*tanh(beta*m), and the equilibrium station is the SP-8009 value. First and second time derivatives use the same supplied m, m_dot and m_ddot. Inverse length and mass have finite zero-mass one-sided limits; no infinite length is constructed.",
       "uncertainty": "Exact derivatives of the declared coefficient approximation, not validation of a coupled draining-fluid force law. The cited 2012 study explicitly notes limited validation of pendulum models for draining tanks. Flow cuts, regime transitions and momentum transfer still belong to the production adapter."
+    },
+    {
+      "dataId": "propellant-slosh-coasting-integrator",
+      "field": "scaledModalErrorRatePerS",
+      "status": "estimated",
+      "value": 1e-11,
+      "source": "Numerical accuracy policy of CoastingSloshIntegrator; coupled RK4 step doubling with its fourth-order divisor 15, independently checked by momentum/energy, analytic motion and Kepler reconstruction regressions.",
+      "conditions": "Per-second local error budget for body-frame modal displacement and rate, normalized by max(1 SI unit, current magnitude). Uses the existing rigid coasting orientation/rate budgets and maximum angular sweep.",
+      "uncertainty": "Numerical representability/accuracy policy, not physical dissipation or a tank calibration. No mission acceptance tolerance is changed.",
+      "accessedDate": "2026-11-07",
+      "variant": "F5 coupled production first-mode model"
+    },
+    {
+      "dataId": "propellant-slosh-coasting-integrator",
+      "field": "scaledRoundoffBudget",
+      "status": "estimated",
+      "value": 1.4210854715202004e-14,
+      "source": "64 times binary64 machine epsilon; candidate manifold retractions can differ by roundoff even in an otherwise identical tiny ending interval. Exact continued/reloaded Kepler and independent conservation regressions constrain this numerical floor.",
+      "conditions": "Floor for scaled step-doubling agreement, separate from the per-second truncation budget. Prevents endless halving when the last interval requires sub-roundoff agreement.",
+      "uncertainty": "Numerical roundoff policy, not a physical damping coefficient or a relaxed historical gate.",
+      "accessedDate": "2026-11-07",
+      "variant": "F5 coupled production first-mode model"
+    },
+    {
+      "dataId": "propellant-slosh-continuation",
+      "field": "adiabaticRelativeRateLimit",
+      "status": "estimated",
+      "value": 0.1,
+      "source": "Declared reduced-model domain policy in SloshStepModel. NASA 20120010782 discusses limited validation of draining pendulum models: https://ntrs.nasa.gov/api/citations/20120010782/downloads/20120010782.pdf . Coefficients derive from NASA SP-8009 Table I, https://ntrs.nasa.gov/api/citations/19690005221/downloads/19690005221.pdf . Neither source supplies this numeric policy value.",
+      "conditions": "Monitor epsilon=abs(k_dot)/(k*sqrt(a*k)) for positive axial proper acceleration. At epsilon=0.1, hold the continuous curvature while continuing funded modal-mass/height jets. With nonpositive proper acceleration and drainage, hold curvature immediately. Persist the hold until depletion and transfer internal momentum at rate cuts.",
+      "uncertainty": "Engineering quasi-static-domain indicator and finite mechanical continuation, NOT an empirical threshold or validated low-g/rapid-drain fluid model. The nominal mode coefficients and historical comparison bands are unchanged.",
+      "accessedDate": "2026-11-07",
+      "variant": "F5 coupled production first-mode model"
     }
   ]
 }

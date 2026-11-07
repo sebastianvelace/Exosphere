@@ -5,7 +5,8 @@ using Exosphere.Simulation.Physics;
 
 /// <summary>Rigid state at the construction datum, with modal displacement/rate states.</summary>
 public sealed record Slosh6DofState(RigidBody6DofState Datum, IReadOnlyList<SloshDisplacementState> Modes);
-public readonly record struct SloshTankParameters(CylindricalSloshParameters Parameters, Vector3d FloorBodyM);
+public readonly record struct SloshTankParameters(CylindricalSloshParameters Parameters, Vector3d FloorBodyM,
+    Quaterniond? TankToBody = null);
 public sealed record Slosh6DofProfile(BodyMassSample Baseline, IReadOnlyList<SloshTankParameters> Tanks);
 public sealed record Slosh6DofStage(Slosh6DofState State, Slosh6DofProfile Profile,
     SloshMassSnapshot Mass, IReadOnlyList<SloshTransportCorrection> Corrections);
@@ -68,7 +69,7 @@ public static class Slosh6DofIntegrator
         {
             var tank = profile.Tanks[i];
             modes[i] = state.Modes[i].Sample(tank.Parameters.CurvaturePerM).State;
-            corrections[i] = SloshTransportCorrection.SampleDisplacement(tank.Parameters, tank.FloorBodyM, modes[i]);
+            corrections[i] = SloshTransportCorrection.SampleDisplacement(tank.Parameters, tank.FloorBodyM, modes[i], tank.TankToBody);
         }
         var projected = new Slosh6DofState(new(state.Datum.Position, state.Datum.Velocity,
             state.Datum.Orientation.Normalize(), state.Datum.AngularVelocityBody), modes);
@@ -89,9 +90,10 @@ public static class Slosh6DofIntegrator
         {
             displacements[i] = stage.State.Modes[i].RateBodyMps;
             var correction = stage.Corrections[i];
-            rates[i] = correction.AccelerationBiasBodyMps2
-                - Vector3d.Up * stage.Profile.Tanks[i].Parameters.HeightAboveFloorM.Acceleration
-                + correction.TangentX * a.ModalAccelerations[i].X + correction.TangentZ * a.ModalAccelerations[i].Z;
+            var tank = stage.Profile.Tanks[i]; var tankFrame = tank.TankToBody ?? Quaterniond.Identity;
+            rates[i] = tankFrame.Inverse().Rotate(correction.AccelerationBiasBodyMps2
+                + correction.TangentX * a.ModalAccelerations[i].X + correction.TangentZ * a.ModalAccelerations[i].Z)
+                - Vector3d.Up * tank.Parameters.HeightAboveFloorM.Acceleration;
         }
         var q = d.Orientation * new Quaterniond(0, d.AngularVelocityBody.X,
             d.AngularVelocityBody.Y, d.AngularVelocityBody.Z);

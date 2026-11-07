@@ -53,7 +53,7 @@ public static class RigidBodyForceEvaluator
         in RigidBodyForceContext context)
     {
         ArgumentNullException.ThrowIfNull(vessel);
-        return Evaluate(vessel, state, context, vessel.Parts.GetMassProperties());
+        return Evaluate(vessel, state, context, vessel.GetMassProperties());
     }
 
     /// <summary>
@@ -74,8 +74,8 @@ public static class RigidBodyForceEvaluator
 
         double pressure = context.ReferenceBody?.Atmosphere?.GetPressure(
             context.ReferenceBody.GetAltitude(state.Position)) ?? 0.0;
-        var propulsionBody = vessel.Parts.GetTotalThrust(pressure)
-            + vessel.RcsThrusterForceBody;
+        var mainPropulsionBody = vessel.Parts.GetTotalThrust(pressure);
+        var propulsionBody = mainPropulsionBody + vessel.RcsThrusterForceBody;
         forceWorld += state.Orientation.Rotate(propulsionBody);
 
         Vector3d distributedTorqueBody = Vector3d.Zero;
@@ -129,7 +129,8 @@ public static class RigidBodyForceEvaluator
         forceWorld += context.ExternalForceWorld;
 
         var torqueBody = vessel.Parts.GetTotalTorque(pressure)
-            + (vessel.Parts.CenterOfMass - massProperties.CenterOfMassBody).Cross(propulsionBody);
+            + (vessel.Parts.CenterOfMass - massProperties.CenterOfMassBody).Cross(mainPropulsionBody)
+            + (vessel.RcsTorqueReferenceBody - massProperties.CenterOfMassBody).Cross(vessel.RcsThrusterForceBody);
         torqueBody += state.Orientation.Inverse().Rotate(context.ExternalTorqueWorld);
         torqueBody += vessel.DisturbanceTorqueBody;
         torqueBody += vessel.RcsThrusterTorqueBody;

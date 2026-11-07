@@ -1,10 +1,12 @@
 # F5 propellant slosh: first-mode foundation and integration design
 
-Status: permanent first-mode and isolated carrier model with registered analytic/historical
-gates, source records and regression tests. F5 is open; no production slosh state is
-integrated or saved yet. F4 mission revalidation is complete; F5 production activation
-still requires the coupled and historical evidence below. The obsolete uncompiled test draft has been replaced by
-`ExosphereSimulation.Tests/PropellantSloshTests.cs`.
+Status: F5 closed on 2026-11-07. Production integration includes funded variable-fill
+coupling, conservative coasts, Save V2, separation/docking impulses and source-recorded
+tank damping. Complete CI passes 1,588 tests with no failures/skips, three zero-warning
+builds and Godot startup/menu/graphics checks. The additional profile matrix passes 50
+cases; the actual Godot Flight 7 ascent reaches a stable orbit. F6 source-backed historical
+recalibration remains open. Earlier derivation checkpoints below are retained as history;
+the production integration section describes current behavior and validity limits.
 
 ## Source and model scope
 
@@ -201,7 +203,7 @@ regime is omitted. See `data/flight_profiles/saturn_as501_slosh_reference.json` 
 `data/provenance/propellant_slosh_f5_2026.json`. A source-frequency pass does not validate
 production body reaction, locked inertia, changing fill, unsteady coasts or save/load.
 
-## Constant-fill coupled kernel (production activation still pending)
+## Constant-fill coupled kernel (implementation checkpoint)
 
 `Slosh6DofDynamics` now assembles the complete 6+2N kinetic matrix. It integrates no
 resource inventory and does not change Universe dispatch yet. Cartesian modal coordinates
@@ -374,7 +376,7 @@ Two orthonormal tangents provide the unknown acceleration columns. The prescribe
 acceleration is the final scalar above times n. At k=0 the chart becomes the plane d_y=0
 with finite one-sided derivatives, so no infinite length or zero-mass regularization is
 needed. Candidate retraction must use stable lower-hemisphere sag rather than subtracting
-unit directions at small curvature. This representation is derived but not implemented yet.
+unit directions at small curvature. This representation was subsequently implemented in the production continuation below.
 
 Nonsettling and large-amplitude motion remain outside the settled-fluid model's stated
 physical domain. A conservative mathematical continuation must be explicitly labelled as
@@ -418,3 +420,77 @@ three 0-warning/0-error builds, contracts and Godot startup/menu/graphics checks
 
 No production Universe caller, per-store modal persistence/topology, tank damping data or
 nonsettling regime policy is activated by these kernels. F5 remains open; F6 follows it.
+
+
+## Active production integration
+
+The Universe path now advances the datum, body attitude and source-owned modal states from
+one funded F4 profile. Optional Save V2 fields retain modal coordinates/rates and ending
+one-sided parameter jets. Tank frames rotate with docked members. Surface/aero forces use
+material velocities, while the conic uses the moving mass's mean velocity. Deferred rail
+anchors include immutable source-owned modal snapshots; saving a modal coast commits and
+resets its anchor so reload and continued integration use the same next partition.
+
+Separation impulses act at the original declared joint point. The complete kinetic matrix
+supplies rigid and modal velocity jumps; fallback opening-speed commands use joint mobility,
+while a declared impulse keeps its physical N s magnitude. Inelastic docking solves common
+rigid motion with all bob tangential inertial velocities continuous. The resulting capture
+conserves P/H and dissipates energy. Modes remain with their stores through splitting and
+undocking. Independent particle reconstructions verify these assertions in production tests.
+
+### Bounded drain continuation
+
+A spherical analogue with the native inverse length k approaching zero cannot retain an
+upper-hemisphere trajectory with finite geometry. Resetting its state or silently dropping
+momentum is not an acceptable empty-store policy. The production adapter now selects an
+explicit conservative continuation outside its quasi-static domain:
+
+* Under a nonpositive actual axial proper acceleration, a draining mode holds its current k.
+* Under positive axial proper acceleration a, the scheduling indicator is
+  epsilon=abs(k_dot)/(k*sqrt(a*k)). The estimated policy limit is 0.1; it is not a measured
+  hardware tolerance or a change to a historical acceptance band. For a constant funded
+  withdrawal, epsilon increases monotonically as fill decreases: with t=tanh(beta*m), it
+  is proportional to t^(-3/2)-t^(1/2). Locate the unique crossing within the already funded
+  smooth engine/flow interval, split there, and retain the continuous k value.
+* Continue the native modal-mass and equilibrium-height jets. At the k-rate cut, transfer
+  internal momenta conservatively and preserve the dynamic tangent velocity. Do not create
+  an extra mass debit or a restoring field in free fall.
+* Latch the held curvature until that store empties; save its positive value and reason,
+  plus the ending left-side jets. No automatic geometry teleport or state reset is used to
+  claim reacquisition of a settled-fluid model. The status identifies the continuation.
+
+This is a bounded mechanical fallback, not an empirically validated rapid-drain, nonlinear
+wave or low-g fluid solution. NASA 20120010782 explicitly notes limited validation of
+pendulum models for draining tanks. Positive coupled kinetic energy and independent P/H
+balance remain required. Both hemispheres now reach exhaustion with finite state and exact
+save/reload in directed production tests. The analytic-to-held boundary has equal parameter
+values and its own one-sided rates. The original pure native-coefficient tests still verify
+the empty-store plane limit; no coefficient formula or historical tolerance was changed.
+
+The bounded-drain regressions pass in both hemispheres. Tank damping is now declared only
+for the three AS-506 tank parts, with explicit source limitations and estimated provenance
+in `data/provenance/saturn5_slosh_damping_1968_1969.json`. S-IC uses the lower envelope of
+nominal MSFC design damping; the S-II LH2 estimate comes from AS-504 probe decay. These
+are neither AS-506 measured damping nor validated low-g free-surface behavior.
+
+RCS wrenches retain their allocation-time centroid, before the funded monopropellant draw;
+each RK4 candidate translates that same physical wrench to its instantaneous centroid.
+An independent nozzle-force reconstruction first failed by 0.000204 N m and now passes.
+Eligible vessels initialize zero-displacement/rate modes when added to the Universe, so
+separation before the first tick also uses the coupled impulse response. Older saves start
+at that same locked distribution. Contact inputs continue to use the locked part centroid
+as their geometric reference, with the wrench shifted to the instantaneous liquid centroid.
+
+Complete production CI passed on 2026-11-07: 1,588/1,588 tests, no skips, three builds
+with zero warnings/errors, startup plus menu/graphics checks. Test time was 49 m 37 s while
+the independent profile matrix and CPU-rendered Godot validation ran concurrently.
+The matrix passed 50 cases and its preserved evidence passes `--verify-only` with matching
+source/data/test-assembly hashes. The isolated Godot Flight 7 ascent passed all original
+state gates: 1,925 frames, all seven capture milestones, `ASCENT_ORBIT_OK`, final conic
+approximately 150 x 161 km above mean Earth radius. Its supported integrated presentation
+preset and 640x360 framebuffer change rendering only; the actual run used the production
+physics scheduler and guidance. The main project autoload was restored and rebuilt clean.
+
+F6 remains open: passing the old Atlas trajectory does not validate its prior effective
+engine or mistaken spacecraft mass. Its source audit and remaining residuals are separate
+from the verified F5 production integration.
