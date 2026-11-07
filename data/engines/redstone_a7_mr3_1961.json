@@ -3,7 +3,7 @@
   "name": "Rocketdyne A-7",
   "variant": "Mercury-Redstone 3, May 1961",
   "asOfDate": "1961-05-05",
-  "fuel": "RP-1",
+  "fuel": "Ethyl alcohol/water",
   "oxidizer": "LOX",
   "mixtureRatioOxidizerToFuel": 1.30,
   "ratedThrustSeaLevelN": 346944,

@@ -9,10 +9,14 @@ using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Propulsion;
 using Xunit;
+using Xunit.Abstractions;
 
 public sealed class MercuryFreedom7Tests
 {
     private static readonly DirectoryInfo Root = FindRepoRoot();
+    private readonly ITestOutputHelper _output;
+
+    public MercuryFreedom7Tests(ITestOutputHelper output) => _output = output;
 
     [Fact]
     public void HistoricalVariantClosesPublishedMassDimensionsAndA7Thrust()
@@ -36,10 +40,14 @@ public sealed class MercuryFreedom7Tests
         Assert.Equal(25.3, graph.VehicleLength, 8);
         Assert.Equal(2.1, graph.MaximumDiameter, 8);
 
-        var engine = LoadEngines().Models["redstone-a7-mr3-1961"];
+        var engines = LoadEngines();
+        var engine = engines.Models["redstone-a7-mr3-1961"];
         Assert.Equal(346_944.0, engine.RatedThrustSeaLevelN);
-        Assert.Equal("RP-1", engine.Fuel);
+        Assert.Equal("Ethyl alcohol/water", engine.Fuel);
         Assert.Equal("LOX", engine.Oxidizer);
+        var feed = engines.Clusters["redstone-a7-single-mr3-1961"].FeedNetwork;
+        Assert.Equal(engine.Fuel, feed.FuelResource);
+        Assert.Equal(engine.Oxidizer, feed.OxidizerResource);
     }
 
     [Fact]
@@ -56,6 +64,7 @@ public sealed class MercuryFreedom7Tests
         Assert.Equal(-80.5736, sites["cape_canaveral_lc5"].Longitude, 4);
         provenance.RequireFields(
             "redstone-a7-mr3-1961",
+            "propellantIdentity",
             "ratedThrustSeaLevelN",
             "ratedThrustVacuumN",
             "specificImpulseSeaLevelS",
@@ -375,6 +384,7 @@ public sealed class MercuryFreedom7Tests
             $"range={maxDownrange:F1}m duration={splashdownTime:F1}s " +
             $"maxG={peakG:F2}@{peakGAltitude:F0}m/{peakGTime:F1}s " +
             $"cosA={peakGCosAlpha:F3}";
+        _output.WriteLine(evidenceText);
         // Redstone sea-level TWR ≈ 1.18: T+20 is ~0.6–1 km; several km is T+40.
         Assert.True(alt20 >= 400.0, evidenceText);
         Assert.True(alt40 >= 2_000.0, evidenceText);

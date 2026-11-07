@@ -11,7 +11,7 @@
     }
   ],
   "feedNetwork": {
-    "fuelResource": "RP-1",
+    "fuelResource": "Ethyl alcohol/water",
     "oxidizerResource": "LOX",
     "crossfeedEnabled": true,
     "branches": [

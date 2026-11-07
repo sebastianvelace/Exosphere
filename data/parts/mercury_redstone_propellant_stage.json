@@ -1,7 +1,7 @@
 {
   "id": "mercury_redstone_propellant_stage",
   "name": "Mercury-Redstone Propellant Stage",
-  "description": "Elongated Redstone LOX/fuel tanks and load-bearing airframe for MR-3.",
+  "description": "Elongated Redstone LOX and ethyl-alcohol/water tanks and load-bearing airframe for MR-3.",
   "category": "fuel_tank",
   "vehicle_family": "mercury",
   "vehicle_role": "booster_tank",

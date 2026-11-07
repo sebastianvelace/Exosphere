@@ -2,6 +2,14 @@
   "manifestId": "mercury-redstone3-freedom7-vehicle-1961",
   "records": [
     {
+      "dataId": "redstone-a7-mr3-1961", "field": "propellantIdentity",
+      "status": "published",
+      "source": "NASA TM X-53107, The Mercury-Redstone Project (December 1964), section 3, p. 3-2 (PDF p. 28): https://ntrs.nasa.gov/api/citations/19670028606/downloads/19670028606.pdf ; NASA Redstone history: https://www.nasa.gov/history/70-years-ago-first-redstone-launch-from-cape-canaveral/",
+      "accessedDate": "2026-11-07", "variant": "Mercury-Redstone A-7, including MR-3",
+      "conditions": "ethyl-alcohol/water fuel and liquid oxygen; NASA history describes 75 percent ethyl alcohol and 25 percent water; engine identity and cluster feed use the same label",
+      "uncertainty": "composition percentage basis is not specified by the cited history; no density or thermochemistry is inferred. The NASA 2016 vehicle summary labels the propellant LOX/RP-1, contradicting the original project report; the original report takes precedence. Existing Isp, flow ratio and loading estimates remain separate."
+    },
+    {
       "dataId": "redstone-a7-mr3-1961", "field": "ratedThrustSeaLevelN",
       "status": "published", "source": "NASA Mercury-Redstone Launch Vehicle; NASA Historical Data Book Volume II",
       "accessedDate": "2026-07-28", "variant": "Rocketdyne NAA 75-110 A-7",
