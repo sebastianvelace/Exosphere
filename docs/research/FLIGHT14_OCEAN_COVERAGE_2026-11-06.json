@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 2,
+  "scope": "Geographic ocean coverage as a union of source-verified rectangles; not a bathymetric collision mesh, navigation product or water-load model.",
+  "source": "NOAA NCEI ETOPO 2022 v1 15 arc-second bed elevation, image service raster 2530",
+  "metadataUrl": "https://www.ncei.noaa.gov/metadata/geoportal/rest/metadata/item/gov.noaa.ngdc.mgg.dem:etopo_2022/html",
+  "bounds": {
+    "minimumLatitudeDegrees": 22.3,
+    "maximumLatitudeDegrees": 35,
+    "minimumLongitudeDegrees": -161,
+    "maximumLongitudeDegrees": -140
+  },
+  "cellSizeArcSeconds": 15,
+  "limitations": [
+    "Finite raster geographic screening, not a coastal navigation product.",
+    "The flat sea surface, sealed-body buoyancy and water drag approximations remain unchanged.",
+    "This is a simulator operating domain, not a claimed measured Flight 14 landing target."
+  ],
+  "verticalReference": "Sea Level as reported by the NOAA image service",
+  "requestUrl": "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/computeStatisticsHistograms?geometry=%7B%22xmin%22%3A+-161%2C+%22ymin%22%3A+22.3%2C+%22xmax%22%3A+-140%2C+%22ymax%22%3A+35%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&geometryType=esriGeometryEnvelope&pixelSize=%7B%22x%22%3A+0.004166666666666667%2C+%22y%22%3A+0.004166666666666667%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&mosaicRule=%7B%22mosaicMethod%22%3A+%22esriMosaicLockRaster%22%2C+%22lockRasterIds%22%3A+%5B2530%5D%7D&f=pjson",
+  "retrievedAtUtc": "2026-11-06T22:57:42.258969+00:00",
+  "rawResponseSha256": "18cc4458a3f7b21014181159ff55df2ae316536c63ca23da97e09100bc387452",
+  "statistics": {
+    "min": -7024,
+    "max": -66.5522232055664,
+    "mean": -5286.470042628955,
+    "standardDeviation": 432.28359705169555,
+    "sum": -81210329877.26259,
+    "median": -5359.669355355057,
+    "mode": -5414.237573212268,
+    "skipX": 1,
+    "skipY": 1,
+    "count": 15361920,
+    "covariances": "0.000000"
+  },
+  "previousEvidence": "FLIGHT14_OCEAN_COVERAGE_2026-11-04.json",
+  "diagnosticSurfaceCrossings": [
+    {
+      "fixture": "F4 continuous moving-solar-system diagnostic, 106.2 km command / 24 s bank response / committed ignition",
+      "latitudeDegrees": 22.473102,
+      "longitudeDegrees": -155.403348,
+      "status": "Lowest-point sea-plane crossing before geographic guard; not a measured or accepted splashdown witness."
+    },
+    {
+      "fixture": "F4 original 104.4 km / 20 s profile, continuous moving-solar-system diagnostic with committed ignition",
+      "latitudeDegrees": 21.504359,
+      "longitudeDegrees": -163.085303,
+      "status": "Lowest-point sea-plane crossing before geographic guard; physical continuation is verified separately from its real landing-start save."
+    },
+    {
+      "fixture": "F4 routed-momentum ledger, continuous moving-solar-system diagnostic, original numeric profiles",
+      "latitudeDegrees": 22.131289,
+      "longitudeDegrees": -158.401513,
+      "status": "Lowest-point sea-plane crossing before geographic guard; not a measured landing target."
+    },
+    {
+      "fixture": "F4 routed-momentum ledger, continuous isolated-Earth diagnostic with booster return, original numeric profiles",
+      "latitudeDegrees": 22.176061,
+      "longitudeDegrees": -158.100198,
+      "status": "Lowest-point sea-plane crossing before geographic guard; not a measured landing target."
+    }
+  ],
+  "additionalRegions": [
+    {
+      "bounds": {
+        "minimumLatitudeDegrees": 20,
+        "maximumLatitudeDegrees": 22,
+        "minimumLongitudeDegrees": -164,
+        "maximumLongitudeDegrees": -162
+      },
+      "statistics": {
+        "min": -5307,
+        "max": -1786.8851318359375,
+        "mean": -4726.388902436359,
+        "standardDeviation": 231.19802903484768,
+        "sum": -1088960003.1213372,
+        "median": -4727.216374655331,
+        "mode": -4658.1945144952515,
+        "skipX": 1,
+        "skipY": 1,
+        "count": 230400,
+        "covariances": "0.000000"
+      },
+      "requestUrl": "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/computeStatisticsHistograms?geometry=%7B%22xmin%22%3A+-164%2C+%22ymin%22%3A+20%2C+%22xmax%22%3A+-162%2C+%22ymax%22%3A+22%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&geometryType=esriGeometryEnvelope&pixelSize=%7B%22x%22%3A+0.004166666666666667%2C+%22y%22%3A+0.004166666666666667%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&mosaicRule=%7B%22mosaicMethod%22%3A+%22esriMosaicLockRaster%22%2C+%22lockRasterIds%22%3A+%5B2530%5D%7D&f=pjson",
+      "retrievedAtUtc": "2026-11-06T23:07:39.706229+00:00",
+      "rawResponseSha256": "79997a11f438fbece2ea87ed9f7209d46922ac46167ea9460150ef805ec0dcd3"
+    },
+    {
+      "bounds": {
+        "minimumLatitudeDegrees": 22,
+        "maximumLatitudeDegrees": 22.3,
+        "minimumLongitudeDegrees": -159,
+        "maximumLongitudeDegrees": -158
+      },
+      "statistics": {
+        "min": -4927.49560546875,
+        "max": -1692.271728515625,
+        "mean": -4229.673774245931,
+        "standardDeviation": 690.501808025533,
+        "sum": -73088762.81896968,
+        "median": -4521.50672679228,
+        "mode": -4864.059843175552,
+        "skipX": 1,
+        "skipY": 1,
+        "count": 17280,
+        "covariances": "0.000000"
+      },
+      "requestUrl": "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/computeStatisticsHistograms?geometry=%7B%22xmin%22%3A+-159%2C+%22ymin%22%3A+22%2C+%22xmax%22%3A+-158%2C+%22ymax%22%3A+22.3%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&geometryType=esriGeometryEnvelope&pixelSize=%7B%22x%22%3A+0.004166666666666667%2C+%22y%22%3A+0.004166666666666667%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&mosaicRule=%7B%22mosaicMethod%22%3A+%22esriMosaicLockRaster%22%2C+%22lockRasterIds%22%3A+%5B2530%5D%7D&f=pjson",
+      "retrievedAtUtc": "2026-11-06T23:51:47.077616+00:00",
+      "rawResponseSha256": "965586f309713eb87fd1b1286f6de03a1a389b3ecb5f102a9cee205f5558387d"
+    }
+  ]
+}

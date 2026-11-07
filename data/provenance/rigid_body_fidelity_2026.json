@@ -182,7 +182,7 @@
       "variant": "dry air",
       "conditions": "mu = beta*T^1.5/(T+S), kg/(m s K^0.5)",
       "uncertainty": "defining constant",
-      "value": 1.458e-6
+      "value": 1.458e-06
     },
     {
       "dataId": "sutherland-viscosity-air",
@@ -383,10 +383,10 @@
       "field": "earliestDeorbitMissionSeconds",
       "status": "calibrated",
       "source": "Flight 14 broadcast altitude anchors T+9884 s 94.6 km and T+9894 s; observed early-deorbit window T+7864..7925 s",
-      "accessedDate": "2026-11-03",
+      "accessedDate": "2026-11-06",
       "variant": "Starship Flight 14 engineering return",
-      "conditions": "deorbit ignition time, the continuous calibration lever of the return profile; re-fitted when attitude control became actuator-only (F3): the declared jets correcting the deorbit burn moved the periapsis 370 m lower and entry 20 s earlier",
-      "uncertainty": "residuals within \u00b1500 m of a datum-conditional display (now \u2212320 / \u2212201 m)",
+      "conditions": "Original estimated earliest deorbit command T+7905 s, retained within the observed T+7864..7925 s window. Actual startup waits for a 2-degree pointing cone and the existing rate-settling bound; a committed burn no longer cycles at the ignition rate threshold.",
+      "uncertainty": "Not a measured ignition timestamp. The original +/-500 m conditional geodetic-display comparison remains unchanged; final F4 diagnostics retain the original 104.4 km command.",
       "value": 7905.0
     },
     {
@@ -394,10 +394,10 @@
       "field": "targetPeriapsisAltitudeM",
       "status": "calibrated",
       "source": "Flight 14 broadcast altitude anchors T+9884 s 94.6 km and T+9894 s 93.9 km with the deorbit ignition held inside the observed window; re-closed after the measured (Jorgensen) crossflow drag lowered pre-interface drag (residuals -60 / +100 m)",
-      "accessedDate": "2026-11-04",
+      "accessedDate": "2026-11-06",
       "variant": "Starship Flight 14 engineering return",
-      "conditions": "deorbit burn periapsis target, m",
-      "uncertainty": "the 102 km (T+9790) and 88.1 km (T+9986) displays sit -1.8 / +1.7 km: the sink rate through 94 km is shallower than observed (lift orientation before 90 km not yet calibrated)",
+      "conditions": "Original 104.4 km mean-radius periapsis command retained after F4 momentum/material-velocity and finite-startup corrections. An interim 106.2 km refit was discarded after resolving the upstream controller defects. This numerical command is not a measured flown orbit.",
+      "uncertainty": "Cutoff quantized by 20 ms control steps; altitude datum is unspecified and the solution is nonunique. The additional T+9790 102 km and T+9986 88.1 km displays remain F6 checks: the preceding fit reported -1.8/+1.7 km residuals there, not re-measured by this paired-display calibration.",
       "value": 104400.0
     },
     {
@@ -479,12 +479,23 @@
     },
     {
       "dataId": "starship-flight14-descent",
+      "field": "verticalResponseSeconds",
+      "status": "estimated",
+      "source": "Original Flight 14 descent-profile engineering policy; checked against datum-conditional displays T+10369 74.1 km, T+10541 67.8 km and T+10961 44.5 km in docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json. Not a measured flight-control time constant.",
+      "accessedDate": "2026-11-06",
+      "variant": "Flight 14 engineering descent after F4 transport corrections",
+      "conditions": "Original response time retained in the bank corridor acceleration request after F4 flow and finite-startup control corrections, with the original 0.0049 descent fraction and physical aerodynamics. A 24 s sensitivity diagnostic also stayed inside the existing gates; no response refit is needed.",
+      "uncertainty": "Control history is not identifiable from these displays. This is an estimated guidance response, not a measured hardware constant or flown SpaceX control law. Original 3 km altitude, angular-rate and terminal-speed gates remain unchanged.",
+      "value": 20.0
+    },
+    {
+      "dataId": "starship-flight14-descent",
       "field": "downwardSpeedFraction",
       "status": "calibrated",
       "source": "Flight 14 broadcast altitude displays T+10369 74.1 km, T+10541 67.8 km and T+10961 44.5 km; docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json",
-      "accessedDate": "2026-11-04",
+      "accessedDate": "2026-11-06",
       "variant": "Flight 14 engineering descent with declared RCS and physical flaps",
-      "conditions": "Fraction of atmosphere-relative speed used for the requested descent corridor (minimum 20 m/s). Calibrated after using the distributed aerodynamic map and retaining the actual handoff bank; no kinematic state is assigned.",
+      "conditions": "Original fraction 0.0049 of atmosphere-relative speed requested for the descent corridor (minimum 20 m/s), retained with the original 20 s response after F4 transport and finite-startup corrections. The distributed hull/flap map and actual handoff bank remain in use; no kinematic state is assigned.",
       "uncertainty": "Altitude datum unspecified (3 km gate); control history is not identifiable from three displays. Displayed speed frame remains unspecified; late speed calibration remains F6 work.",
       "value": 0.0049
     },
@@ -501,12 +512,22 @@
     },
     {
       "dataId": "starship-flight14-landing",
+      "field": "additionalWaterRegions",
+      "status": "derived",
+      "source": "NOAA NCEI ETOPO 2022 15 arc-second bed elevation (DOI 10.25921/fd45-gt74); full native-grid request and statistics in docs/research/FLIGHT14_OCEAN_COVERAGE_2026-11-06.json, additionalRegions.",
+      "accessedDate": "2026-11-06",
+      "variant": "Disjoint verified ocean operating regions for the Flight 14 engineering return profile",
+      "conditions": "20..22 degrees N, 164..162 degrees W; all 230,400 native cells sampled with skipX=skipY=1 and no missing cells. Elevations -5307..-1786.89 m. Runtime coverage is the union with the separately verified main rectangle, not an enclosing rectangle across nearby islands. The separate east-of-Kauai rectangle, 22..22.3 degrees N and 159..158 degrees W, screens all 17,280 native cells without skips or missing cells; elevations -4927.50..-1692.27 m. It includes the propagated isolated and moving-world crossings after fragmentation-momentum correction. Kauai and the unscreened gaps remain excluded.",
+      "uncertainty": "Finite-raster geographic screening only, not a navigation or collision-mesh product. No measured landing coordinates, steering target or relaxed speed/attitude/resource acceptance is asserted."
+    },
+    {
+      "dataId": "starship-flight14-landing",
       "field": "waterContactRegion",
       "status": "derived",
-      "source": "NOAA NCEI ETOPO 2022 15 arc-second bed elevation (DOI 10.25921/fd45-gt74); pinned native-grid statistics and request in docs/research/FLIGHT14_OCEAN_COVERAGE_2026-11-04.json",
-      "accessedDate": "2026-11-04",
+      "source": "NOAA NCEI ETOPO 2022 15 arc-second bed elevation (DOI 10.25921/fd45-gt74); pinned native-grid statistics and request in docs/research/FLIGHT14_OCEAN_COVERAGE_2026-11-06.json",
+      "accessedDate": "2026-11-06",
       "variant": "Estimated Pacific water-contact operating domain",
-      "conditions": "22.5..35 degrees N, 161..140 degrees W. All 15,120,000 native cells sampled, no skipped or missing cells; elevations -7024..-66.55 m. This geographic operating domain covers both independently propagated contacts: isolated Earth at 23.137 N, 157.901 W and the moving-Solar-System loaded preview at 22.528 N, 160.292 W. It replaces the old 25..35 N, 165..140 W coverage, excluding Kauai and Nihoa rather than asserting measured Flight 14 targeting. Contact-speed, attitude, resource and water-load acceptance limits remain unchanged.",
+      "conditions": "22.3..35 degrees N, 161..140 degrees W. All 15,361,920 native cells sampled with skipX=skipY=1 and no missing cells; elevations -7024..-66.55 m. Extends the earlier 22.5-degree minimum with source-verified ocean coverage after F4 changed the propagated surface crossing. Nearby Kauai, Nihoa and Oahu remain outside. This is a geographic operating domain, not a measured or commanded Flight 14 landing target; speed, attitude, resource and water-load limits are unchanged.",
       "uncertainty": "Finite 15 arc-second geographic screen only; not a measured landing target, coastal navigation dataset or seabed collision mesh. Sea-surface and water-load approximations remain unchanged."
     }
   ]

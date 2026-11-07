@@ -1,0 +1,49 @@
+{
+  "manifestId": "flight14-orbital-ignition-2026",
+  "records": [
+    {
+      "dataId": "starship-flight14-orbital-ignition",
+      "field": "maximumPointingErrorDegrees",
+      "status": "estimated",
+      "source": "Exosphere pre-existing Flight14OrbitalBurn 5 degree / 0.03 rad/s ignition policy and Flight14ReturnTests 0.15 rad/s continuous-return acceptance bound; engineering policy, not measured SpaceX guidance.",
+      "accessedDate": "2026-11-06",
+      "variant": "Flight 14 finite engine startup and continuous single-engine orbital maneuver",
+      "conditions": "Existing thrust-axis pointing bound; required before ignition and throughout a committed burn.",
+      "uncertainty": "Controller safety/settling policy, not a hardware limit or an observed flown control history. Historical altitude, engine restart metadata and mission rate acceptance limits are unchanged.",
+      "value": 5.0
+    },
+    {
+      "dataId": "starship-flight14-orbital-ignition",
+      "field": "maximumIgnitionAngularRateRadPerS",
+      "status": "estimated",
+      "source": "Exosphere pre-existing Flight14OrbitalBurn 5 degree / 0.03 rad/s ignition policy and Flight14ReturnTests 0.15 rad/s continuous-return acceptance bound; engineering policy, not measured SpaceX guidance.",
+      "accessedDate": "2026-11-06",
+      "variant": "Flight 14 finite engine startup and continuous single-engine orbital maneuver",
+      "conditions": "Existing angular-settling bound before committing ignition. A committed finite startup is not repeatedly shut down at this settling threshold.",
+      "uncertainty": "Controller safety/settling policy, not a hardware limit or an observed flown control history. Historical altitude, engine restart metadata and mission rate acceptance limits are unchanged.",
+      "value": 0.03
+    },
+    {
+      "dataId": "starship-flight14-orbital-ignition",
+      "field": "maximumBurnAngularRateRadPerS",
+      "status": "estimated",
+      "source": "Exosphere pre-existing Flight14OrbitalBurn 5 degree / 0.03 rad/s ignition policy and Flight14ReturnTests 0.15 rad/s continuous-return acceptance bound; engineering policy, not measured SpaceX guidance.",
+      "accessedDate": "2026-11-06",
+      "variant": "Flight 14 finite engine startup and continuous single-engine orbital maneuver",
+      "conditions": "Existing continuous Flight 14 return acceptance rate, now also an explicit abort bound during a committed orbital burn. Exceeding this or the pointing bound blocks the burn; it does not automatically relight.",
+      "uncertainty": "Controller safety/settling policy, not a hardware limit or an observed flown control history. Historical altitude, engine restart metadata and mission rate acceptance limits are unchanged.",
+      "value": 0.15
+    },
+    {
+      "dataId": "starship-flight14-orbital-ignition",
+      "field": "maximumIgnitionPointingErrorDegrees",
+      "status": "estimated",
+      "source": "Finite-startup pointing reserve inside the pre-existing 5 degree orbital burn bound; moving-Solar-System diagnostic exposed a startup committed nearly at 5 degrees that crossed the burn bound. Exosphere engineering control policy, not SpaceX telemetry.",
+      "accessedDate": "2026-11-06",
+      "variant": "Flight 14 continuous single-engine orbital maneuver",
+      "conditions": "Require at most 2 degrees pointing error before committing ignition, leaving 3 degrees reserve for finite startup and gimbal response. The ongoing pointing bound stays 5 degrees and the ignition rate bound stays 0.03 rad/s.",
+      "uncertainty": "Estimated settling margin; not a measured hardware limit or a reconstruction of flown software. Mission rate and historical/landing acceptance limits remain unchanged.",
+      "value": 2.0
+    }
+  ]
+}

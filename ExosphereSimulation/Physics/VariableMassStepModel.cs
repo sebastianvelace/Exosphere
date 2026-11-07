@@ -17,11 +17,34 @@ public sealed class VariableMassStepModel
     public BodyMassDistribution Distribution => Transport.Distribution;
     /// <summary>Rigidly attached members (docked vessels) folded in as constant components.</summary>
     public int AttachedMemberCount { get; }
+    private readonly IReadOnlyDictionary<ResourceStoreId, int> _storeIndex;
 
-    private VariableMassStepModel(OpenSystemTransport transport, int attached)
+    private VariableMassStepModel(OpenSystemTransport transport, int attached,
+        IReadOnlyDictionary<ResourceStoreId, int> storeIndex)
     {
         Transport = transport;
         AttachedMemberCount = attached;
+        _storeIndex = storeIndex;
+    }
+
+    internal void CaptureMomentumShares(double time, MassBoundarySide side, Vessel vessel)
+    {
+        int count = Distribution.Components.Count;
+        if (vessel.TransportLinearScratch.Length < count)
+            vessel.TransportLinearScratch = new Vector3d[count];
+        if (vessel.TransportAngularScratch.Length < count)
+            vessel.TransportAngularScratch = new Vector3d[count];
+        Transport.SampleMomentumByComponent(time, side, vessel.TransportLinearScratch.AsSpan(0, count),
+            vessel.TransportAngularScratch.AsSpan(0, count));
+        var shares = vessel.TransportMomentumShares ??= [];
+        shares.Clear();
+        foreach (var (store, index) in _storeIndex)
+        {
+            var linear = vessel.TransportLinearScratch[index];
+            var angular = vessel.TransportAngularScratch[index];
+            if (linear != Vector3d.Zero || angular != Vector3d.Zero)
+                shares.Add(new(store.PartInstanceId, linear, angular));
+        }
     }
 
     /// <summary>Why the last build attempt fell back to frozen mass (null when it succeeded).</summary>
@@ -32,6 +55,9 @@ public sealed class VariableMassStepModel
         if (window == null) { reason = "no-resource-window"; return false; }
         if (!window.HasCompleteCoverage) { reason = "incomplete-coverage: " + window.CoverageError; return false; }
         if (window.UsesInfinitePropellantAssist) { reason = "infinite-propellant-assist"; return false; }
+        // Universe already discards models without flow. Avoid constructing and validating
+        // an entire constant distribution on every coast tick before discarding it.
+        if (window.Debits.Count == 0) { reason = "no-outflow"; return false; }
         double dt = window.DurationSeconds;
         var positions = parts.GetTopologyPartLocalPositionsForMass();
         double fallbackLength = System.Math.Max(1.0, parts.VehicleLength / System.Math.Max(1, parts.PartList.Count));
@@ -160,7 +186,7 @@ public sealed class VariableMassStepModel
 
         try
         {
-            model = new(new OpenSystemTransport(new BodyMassDistribution(dt, components), groups), attachedCount);
+            model = new(new OpenSystemTransport(new BodyMassDistribution(dt, components), groups), attachedCount, storeIndex);
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {

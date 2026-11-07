@@ -1,127 +1,87 @@
-# Handoff F4 → F5 (rama `claude/refine-local-plan-90r917`)
+# F4 to F5 continuation
 
-Base: `d130a70` (checkpoint F4 de `codex/f4-completion`). Este commit contiene el cierre de F4
-en producción y el arranque de F5. Reemplaza a `HANDOFF_F4_completion.md` como estado vigente.
-Sin merge a `main`. Los cambios de `.atl/` no se tocaron.
+Branch: `codex/f5-slosh-foundation`, based on `ea94c64`. No merge to main.
+Preserve the pre-existing `.atl/` changes. Author and committer are
+Sebas <sebastianvelace@gmail.com>; conventional commits without attribution trailers.
 
-## Estado de verificación (léelo primero)
+## Current status
 
-- CI completa (`tools/ci_check.sh`) **antes** de la corrección de amortiguación de alabeo:
-  1428/1430; los únicos 2 fallos eran Flight 14 (`attitude-settling-envelope-exceeded`).
-- Corregido después (`rollDampingGain`), con verificación dirigida: pruebas Flight 14 afectadas,
-  Saturn V / Apollo 11 (19/19), compuerta histórica F4 y analíticas F4 en verde.
-- La corrida completa CI3 (con esa corrección, los datos de Saturn V y la compuerta histórica)
-  terminó después del push: **1427/1431, 4 fallos, todos Flight 14 aguas abajo de la entrada**:
-  - `Flight14ReturnTests.LoadedPadToEntryConsumesTheSameReserveWithoutReseeding` (fps 30 y 120):
-    residuos de altitud de broadcast −2040 m (T+9884) y −1934 m (T+9894) frente a ±500 m.
-  - `Flight14DescentHistoricalTests.PhysicalFlapEntryReproducesTheBroadcastDescentAndBellyFlopSpeed`:
-    residuo −6004 m en T+10961.
-  - `Flight14ExplorationTests.MovingSolarSystemPreviewPropagatesLoadedShipToWaterEntryAndFreezes`:
-    `BlockReason` no nulo (ver el log de la prueba).
-  Lectura probable: el transporte de masa variable (fuerza de transporte, impulsos de
-  alimentación en los cortes, alabeo por drenaje) cambia la trayectoria pad→entrada y el
-  desorbitado llega más bajo; no son fallos de integración. Corregir recalibrando la guía (o
-  el amortiguamiento de alabeo en los quemados de Flight 14) con causa física; **no aflojar
-  las tolerancias históricas**. Es lo primero que hay que hacer, seguido de la CI completa.
-- Estándar esperado: 0 warnings, 0 errores, todas las pruebas en verde.
+F4 is verified and closed: complete `bash tools/ci_check.sh` passes 1504/1504 tests,
+no skips, all three builds with zero warnings/errors, contracts and Godot startup/menu/
+graphics capture/reload checks. Log: `/tmp/exo-f4-f5-warp-ci.log`.
+Do not infer closure from an old directed result. The incoming full CI failed four
+mission cases; the earlier continuation's complete run passed 1473/1474, then exposed
+orbital restart cycling. Subsequent review reproduced a fragmentation conservation bug.
+Both defects are repaired; the final all-vehicle mission suite passes with the original
+acceptance bounds and numeric return/descent profiles.
 
-## Lo que se hizo — F4 (cerrado, pendiente de confirmar CI completa)
+## F4 corrections
 
-### Geometría de masa compartida
-- `Parts/PartMassGeometry.cs` (nuevo): una sola descomposición por pieza: estructura seca
-  (`dry_mass_center_y_m`, `dry_gyration_m` → cilindro equivalente), columna líquida asentada por
-  recurso sobre el fondo plano equivalente del tanque declarado (`propellant_tanks`;
-  λ = ρπR², h = m/λ, centroide = fondo + h/2, k² transversal = (3R² + h²)/12), cilindro
-  uniforme si no hay tanque, y puntos de `header_tanks`.
-- `PartGraph.BuildMassProperties` y `Part.MassCenterOffsetYM` usan esa descomposición.
-- `PartCatalog` exige procedencia para `dryGyration`, `propellantTanks`, `ventOutlet` y
-  `nozzleExit`, y valida los tanques (`ValidatePropellantTanks`).
+- Transfer retained internal-flow momentum when a known feed stops; compensate datum
+  velocity for the angular reaction when an off-axis feed opens.
+- Use material velocity for aero/contact, excluding the moving-centroid coordinate term.
+  Integrated centroid position/velocity telemetry retains its coordinate convention.
+- Partition routed momentum by debited store and carry angular shares about the datum
+  through staging, joint breaks and payload deployment. Save V2 adds optional shares,
+  validates finite values/owners and preserves legacy known/unknown distinctions.
+  The independent stock-stack reproduction changed from 164.998404 kg m²/s angular
+  error to exactly zero. The initial conservation/persistence set passed 29/29; final independent F4 verification
+  now includes the scheduler regressions below.
+- Retained flow moments/nonempty shares require one funded physical step before analytic
+  warp/coast. Otherwise a known stopped feed remains stored instead of reacting on the body.
+  Unpowered vent/disturbance flow commands also wake physical integration from their first tick.
+  The minimal vacuum-orbit reproduction left 1.882353 mm/s of velocity discrepancy before
+  this barrier; active/non-active and linear/angular regressions cover the transition.
+- Commit orbital ignition after initial settling: 2-degree pointing, original 0.03 rad/s
+  start rate. Running burns retain 5-degree pointing and the original 0.15 rad/s mission
+  envelope; a violation aborts permanently rather than automatically relighting.
+- Skip constructing a transport model for a complete no-debit window already discarded
+  by Universe. Unknown/assisted/unsupported flow still falls back explicitly.
 
-### Salidas y flujo interno
-- Salida de tobera: punto de empuje menos `NozzleExitAxialOffsetM` del modelo de motor, normal
-  = −dirección, radio = `NozzleExitDiameterM`/2 (`Part.TryGetNozzleExit`).
-- `vent_outlet` por pieza (Starship), toberas RCS desde los recibos, y salida de perturbación
-  (`Vessel.DisturbanceOutletBodyM`; Gemini 8 `StartStuckThruster` usa el propulsor declarado).
-- Convención de flujo interno: punto de pérdida (superficie libre o centroide) → salida del
-  almacén (fondo) → conducto recto a la salida. p_rel = Σ q(e − t) cumple continuidad exacta.
+The original numeric return/descent profiles remain: T+7905 command, 104.4 km radial
+target, fraction 0.0049 and 20 s bank response. Interim numeric fits were discarded after
+fixing finite startup. Original historical/contact/attitude/resource limits remain.
 
-### Transporte lineal/angular, cambios de flujo y CoM
-- `Physics/OpenSystemTransport.cs` (nuevo): F = m(c̈ + 2ω×ċ) − ṗ_rel − 2ω×p_rel; torque
-  −İω − J_out ω − ω×h_rel − ḣ_rel − ċ×p_rel; tensor de jet damping D = İ + J_out.
-- `BodyMassDistribution.Sample` con centroides móviles; `FixedShapeMassComponent` con columnas.
-- `Physics/VariableMassStepModel.cs` (nuevo): construye el modelo por paso desde la ventana de
-  fondos (grupos por pool de alimentación, otros motores, venteo, RCS, perturbación) o devuelve
-  una razón de fallback (`Vessel.LastVariableMassStatus`).
-- Cortes de flujo: P y H continuos (impulso de golpe de ariete) en nudos internos y entre pasos
-  (`Vessel.TransportRelativeMomentumBody`/`...AngularMomentumBody`, guardados en `SaveGameV2`).
+The ocean operating domain is the union of three NOAA ETOPO 2022 source-verified
+rectangles, not their enclosing box: 22.3..35 N / 161..140 W;
+20..22 N / 164..162 W; 22..22.3 N / 159..158 W east of Kauai. Every native 15 arc-second
+cell was screened (15,361,920 / 230,400 / 17,280 cells, no skips/missing cells;
+maxima -66.55 / -1786.89 / -1692.27 m). Requests/statistics/hashes are pinned in
+`docs/research/FLIGHT14_OCEAN_COVERAGE_2026-11-06.json`. Nearby islands and unscreened
+gaps remain excluded. Geographic coverage supplies neither steering nor measured targeting.
 
-### Producción
-- `Universe.VariableMassTransportEnabled` (por defecto `true`); camino acoplado
-  `IntegrateVesselVariableMass`. Legacy split y agua quedan en masa congelada.
-- Física nueva visible: un líquido drenando gana alabeo (D_yy < 0). Los controladores que
-  deben sostener el alabeo pasan `rollDampingGain` (`AttitudeGuidance.ComputeAxisPointingCommand`;
-  Flight 14 ascenso y quemado orbital).
-- Pruebas de agotamiento que comprueban la frontera congelada desactivan el transporte.
+The corrected continuous isolated/moving diagnostics preserve their real carrier, booster,
+engine states and resource debits; they prune released noninteracting satellites and do
+not populate checkpoint caches. The latest continuous runs, including the warp barrier, both complete `SplashdownReached`
+east of Kauai and ten seconds of water response. Their entry states match the earlier
+real pre-integration save/replay verification exactly:
 
-### Datos y procedencia
-- Saturn V AS-506: S-IC/S-II/S-IVB con centro seco, giración, tanques (fondos planos de igual
-  volumen, NASA SP-106) y headers de líneas de succión del S-IC (masas FER bajo tanque).
-  `data/provenance/saturn5_as506_mass_geometry_1969.json`; estaciones de tanques S-II/S-IVB
-  marcadas como estimadas.
-- Starship: `vent_outlet` estimado; convenciones en `data/provenance/rigid_body_f4_outlets_2026.json`.
-- `docs/physics/estimates_register.md` regenerado.
+| World | Entry speed | Upright alignment at entry | Remaining propellant | Starts before -> after |
+| --- | ---: | ---: | ---: | --- |
+| Moving solar system | 4.4581 m/s | 0.998795 | 1503.34 kg | 3/1/1 -> 4/2/2 |
+| Isolated Earth | 4.4229 m/s | 0.998877 | 1753.13 kg | 3/1/1 -> 4/2/2 |
 
-### Compuertas F4
-- Analíticas: `SettledColumnMassTests` (5), `OpenSystemTransportTests` (4: continuidad,
-  remoción co-rotante, ecuación del cohete con impulsos de alimentación, ley de jet damping
-  integrada de forma independiente).
-- Histórica: `SaturnVJetDampingHistoricalTests` contra el FER AS-506 (MPR-SAT-FE-69-9, tablas
-  20-10 y 5-I) y el plano MSFC/Boeing (salida F-1 a −2.930 m). Resultado: liberación CG 30.244
-  vs 30.276 m, J 14.471e6 vs 14.388e6; corte CG 46.956 vs 46.453 m, J/q +2.0 %; ΔI +5.6 %.
-  No usa el coeficiente del actuador SPS.
-- Documentación: `fidelity_gates.md`, `PHYSICS_MODEL.md`, `variable_mass_torques.md`,
-  `rigid_body_fidelity_plan.md`, `ROADMAP.md` y `CLAUDE.md` marcan F4 cerrado.
+Both complete ten seconds of coupled water response. Subsequent heeling belongs to the
+sealed-hull estimate; it does not validate an upright recovered vehicle or flooding timing.
+The full CI retains every vehicle and is the authoritative complete-chain acceptance.
+The preceding ocean/ledger/provenance directed verification passed 59/59. The latest staged F4 unit also
+compiles independently without the new F5 changes and passes 89 directed tests
+(`/tmp/exo-f4-index-check-final.log`). Warp/coast/tier regressions pass 54/54, and all seven
+new cases fail on the pre-fix isolated copy (`/tmp/exo-f4-flow-rails-red.log`).
 
-## Lo que se hizo — F5 (iniciado)
+Current continuous evidence: `/tmp/exo-f4-moving-warp-probe.log`,
+`/tmp/exo-f4-isolated-warp-probe.log`. Earlier replay/diagnostic evidence:
+`/tmp/exo-f4-ledger-moving-landing-replay.log`,
+`/tmp/exo-f4-ledger-isolated-landing-replay.log`,
+`/tmp/exo-f4-final-ocean-targeted.log` and `/tmp/exo-f4-f5-warp-ci.log`.
+Older calibration/probe logs in the worklog predate the latest fragmentation correction.
 
-- `ExosphereSimulation/Physics/PropellantSlosh.cs`: primer modo lateral por tanque cilíndrico
-  (NASA SP-8009 / SP-106): ω₁² = (ξ₁a/R)tanh(ξ₁h/R), m₁/m, altura de m₁, L₁ = a/ω₁², m₀ fijo
-  que conserva el centroide de la columna (m₀ + m₁ = m, sin masa añadida).
-  `SloshPendulumCoupling` (portador plano + péndulo: momento lateral y derivadas). Compila.
-- Borrador de pruebas en `docs/physics/drafts/PropellantSloshTests.cs.draft` (fuera del proyecto
-  de pruebas a propósito; aún no compila ni tiene filas en `fidelity_gates.md`): raíz de J₁′,
-  conservación de masa/centroide, límites profundo y somero, momento conservado y frecuencia
-  libre-libre, e histórica AS-501 Fig. 11-15.
-- Fuentes reunidas: SP-106 (NTRS 19670006555), SP-8009 (NTRS 19690005221), FER AS-501
-  (Fig. 11-15: LOX ≈0.35 Hz a 0 s → ≈0.51 Hz a ~115 s; combustible ≈0.35 → ≈0.46 Hz a ~100 s →
-  ≈0.42 Hz a 130 s), FER AS-504 (S-II LOX 0.5–1.0 Hz, LH2 0.2–0.4 Hz, ζ LH2 ≈ 0.02; S-IVB
-  ≈0.5–0.65 Hz).
+## Next unit: F5 foundation
 
-## Lo que falta
+The incoming first-mode kernel and uncompiled draft need permanent regression tests,
+source records, registered open gates and an integration design before production slosh.
+Do not count a second copy of the liquid mass or substitute gravity for proper acceleration.
+Full 6-DoF body/modal coupling, damping data and exact modal persistence remain pending.
 
-### F4
-1. Correr `bash tools/ci_check.sh` completo y corregir lo que falle.
-2. Actualizar o retirar `HANDOFF_F4_completion.md`, `docs/physics/f4_completion_worklog.md` y
-   `docs/physics/variable_mass_resource_adapter.md`, que aún describen el estado WIP.
-3. Brechas de datos documentadas para F6: CG de la nave espacial ~2.3 m alto frente a FER
-   91.658 m, estaciones de tanques S-II/S-IVB estimadas, flujo del F-1 en altura, y AS-503 sin la
-   misma geometría.
-
-### F5
-1. Mover el borrador a `ExosphereSimulation.Tests/PropellantSloshTests.cs` y arreglarlo. La
-   prueba histórica usa un `LastCoupled6DofSpecificForceWorld` que no existe; usar
-   `vessel.GetProperAcceleration(earth)` proyectada sobre el eje (hace falta pasar el cuerpo
-   desde `SaturnVAscentFlight.Fly` o resolverlo en la prueba). Confirmar también que
-   `FindPropellantTank` y los nombres de propiedades de `PropellantTankDef` coinciden.
-2. Registrar las filas F5 (analytic/historical, estado "open") en `docs/physics/fidelity_gates.md`
-   para que `FidelityGateRegistryTests` pase.
-3. Procedencia: registros para las constantes SP-8009/SP-106 y la curva AS-501 en
-   `data/provenance/`, y regenerar `docs/physics/estimates_register.md`.
-4. Documento de diseño `docs/physics/propellant_slosh.md`: péndulo por tanque extraído de la
-   masa de la columna (m₀ + m₁ = m, CG conservado), cómo preservar la inercia rígida, ecuaciones
-   de acoplamiento en el 6-DoF, amortiguación (Miles con deflectores / ζ medido), límite de
-   costa no asentada (a ≤ 0) y estado en save/load.
-5. Integración en producción: estado del péndulo por tanque en el integrador acoplado, sin masa
-   ficticia; compuerta histórica de frecuencias AS-501 y luego amplitudes/amortiguación.
-6. CI completa, commit como `Sebas <sebastianvelace@gmail.com>` (autor y committer, sin
-   trailers) y push.
+See `docs/physics/f4_completion_worklog.md` for the investigation history and
+`docs/physics/fidelity_gates.md` for authoritative phase status.

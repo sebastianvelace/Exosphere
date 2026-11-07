@@ -31,7 +31,7 @@
       "accessedDate": "2026-11-04",
       "variant": "Open-system angular-momentum balance about instantaneous centre of mass",
       "conditions": "Transport torque -I_dot*omega - J_out*omega - omega cross h_relative - d(h_relative)/dt_body - c_dot cross p_relative; positive mdot denotes outward flow. The last term is the moving-CoM-origin correction when relative flow velocities are defined in the material body frame. Ordinary thrust moments and Euler gyroscopic torque are supplied separately. All derivatives and vectors must refer to the same body frame and centre.",
-      "uncertainty": "Zero relative-flow momentum requires an explicit axisymmetric/no-swirl or negligible-internal-flow assumption. The production resource/exit/CoM adapter is not yet implemented; this record does not claim variable-mass transport is enabled in missions."
+      "uncertainty": "The supported coupled production path evaluates relative-flow momentum from the declared store-to-outlet route (rigid_body_f4_outlets_2026.json); zero relative-flow momentum still requires an explicit symmetry or negligible-flow assumption. Actual feed-line bends and swirl are not resolved. Legacy/water and unsupported funding/outlet cases retain the documented frozen-mass fallback."
     },
     {
       "dataId": "rigid-body-coasting-integrator",

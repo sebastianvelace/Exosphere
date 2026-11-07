@@ -2,19 +2,39 @@ namespace Exosphere.Simulation.Physics;
 
 using Exosphere.Simulation.Math;
 
+/// <summary>A source-verified rectangular water operating domain, in geodetic degrees.</summary>
+public readonly record struct WaterRegion(double MinimumLatitudeDegrees, double MaximumLatitudeDegrees,
+    double MinimumLongitudeDegrees, double MaximumLongitudeDegrees)
+{
+    public bool IsValid => double.IsFinite(MinimumLatitudeDegrees) && double.IsFinite(MaximumLatitudeDegrees)
+        && double.IsFinite(MinimumLongitudeDegrees) && double.IsFinite(MaximumLongitudeDegrees)
+        && MinimumLatitudeDegrees >= -90 && MaximumLatitudeDegrees <= 90
+        && MinimumLatitudeDegrees < MaximumLatitudeDegrees
+        && MinimumLongitudeDegrees >= -180 && MaximumLongitudeDegrees <= 180
+        && MinimumLongitudeDegrees < MaximumLongitudeDegrees;
+
+    public bool Contains(double latitudeDegrees, double longitudeDegrees) => IsValid
+        && latitudeDegrees >= MinimumLatitudeDegrees && latitudeDegrees <= MaximumLatitudeDegrees
+        && longitudeDegrees >= MinimumLongitudeDegrees && longitudeDegrees <= MaximumLongitudeDegrees;
+}
+
 /// <summary>Opt-in, calm-water terminal entry estimate. Geometry is relative to the visible skirt datum.</summary>
 public sealed record WaterContactDefinition(double RadiusM, double CylinderHeightM,
     double LowestPointYM, double CenterOfMassYM, double DensityKgPerM3,
     double DragCoefficient, double WettingDepthM, double MinimumLatitudeDegrees,
     double MaximumLatitudeDegrees, double MinimumLongitudeDegrees, double MaximumLongitudeDegrees,
-    double? SkirtDatumYM = null)
+    double? SkirtDatumYM = null, IReadOnlyList<WaterRegion>? AdditionalRegions = null)
 {
     public bool Covers(CelestialBody body, Vector3d position, double time)
     {
         if (body.Id != "earth") return false;
         body.GetGeodeticCoordinatesAtTime(position, time, out double lat, out double lon, out _);
-        return lat >= MinimumLatitudeDegrees && lat <= MaximumLatitudeDegrees
-            && lon >= MinimumLongitudeDegrees && lon <= MaximumLongitudeDegrees;
+        if (lat >= MinimumLatitudeDegrees && lat <= MaximumLatitudeDegrees
+            && lon >= MinimumLongitudeDegrees && lon <= MaximumLongitudeDegrees) return true;
+        if (AdditionalRegions != null)
+            for (int i = 0; i < AdditionalRegions.Count; i++)
+                if (AdditionalRegions[i].Contains(lat, lon)) return true;
+        return false;
     }
 }
 

@@ -9,10 +9,13 @@ using Xunit.Abstractions;
 
 public sealed class Flight14ReturnTests(ITestOutputHelper output)
 {
-    [Theory]
-    [InlineData(30)]
-    [InlineData(120)]
-    public void LoadedPadToEntryConsumesTheSameReserveWithoutReseeding(int fps)
+    [Fact]
+    public void LoadedPadToEntryConsumesTheSameReserveWithoutReseeding() =>
+        VerifyLoadedPadToEntry(30, output);
+
+    // xUnit parallelizes classes, but serializes the rows of a theory. Both cadences
+    // share this exact assertion body while their long independent missions run in parallel.
+    internal static void VerifyLoadedPadToEntry(int fps, ITestOutputHelper writer)
     {
         var run = Flight14LaunchDiagnostic.CreateWithReturn(DataDirectory());
         var returning = run.ReturnController!;
@@ -98,7 +101,7 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
         Assert.Equal(observations.Length, samples.Count);
         string residuals = string.Join(", ", Enumerable.Range(0, observations.Length)
             .Select(i => $"T+{observations[i].Time:F0}: {samples[i].Altitude - observations[i].Altitude:F0} m"));
-        output.WriteLine($"broadcast altitude residuals: {residuals}");
+        writer.WriteLine($"broadcast altitude residuals: {residuals}");
         for (int i = 0; i < observations.Length; i++)
         {
             Assert.InRange(samples[i].Time - observations[i].Time, 0, 1.0 / fps + 0.02);
@@ -110,10 +113,10 @@ public sealed class Flight14ReturnTests(ITestOutputHelper output)
         double intervalDescent = (samples[1].Altitude - samples[0].Altitude)
             / (samples[1].Time - samples[0].Time);
         Assert.InRange(intervalDescent, -110, -40);
-        output.WriteLine($"{fps} FPS: deorbit={returning.DeorbitCommandElapsedSeconds:F2}..{returning.DeorbitShutdownElapsedSeconds:F2}s "
+        writer.WriteLine($"{fps} FPS: deorbit={returning.DeorbitCommandElapsedSeconds:F2}..{returning.DeorbitShutdownElapsedSeconds:F2}s "
             + $"entry120={returning.EntryInterface.MissionElapsedSeconds:F2}s entry90={returning.DiagnosticEnd.MissionElapsedSeconds:F2}s "
             + $"reserve={returning.PreDeorbitPropellantKg:F2}->{returning.PostDeorbitPropellantKg:F2}kg");
-        output.WriteLine($"Conditional geodetic display residuals: {samples[0].Altitude-observations[0].Altitude:F2}, "
+        writer.WriteLine($"Conditional geodetic display residuals: {samples[0].Altitude-observations[0].Altitude:F2}, "
             + $"{samples[1].Altitude-observations[1].Altitude:F2}m; interval vertical speed={intervalDescent:F2}m/s");
     }
 

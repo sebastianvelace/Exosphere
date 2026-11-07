@@ -1,6 +1,7 @@
 namespace Exosphere.Simulation.Flight;
 
 using System.Text.Json;
+using Exosphere.Simulation.Physics;
 
 /// <summary>Estimated terminal control envelope, independent of broadcast clocks.</summary>
 public sealed class Flight14LandingDefinition
@@ -19,6 +20,7 @@ public sealed class Flight14LandingDefinition
     public double MaximumWaterLatitudeDegrees { get; set; }
     public double MinimumWaterLongitudeDegrees { get; set; }
     public double MaximumWaterLongitudeDegrees { get; set; }
+    public WaterRegion[] AdditionalWaterRegions { get; set; } = [];
     public double FlipAltitudeM { get; set; }
     public double DiagnosticEndAltitudeM { get; set; }
     public double MaximumEndAirspeedMps { get; set; }
@@ -84,5 +86,8 @@ public sealed class Flight14LandingDefinition
             || MinimumWaterLongitudeDegrees < -180 || MaximumWaterLongitudeDegrees > 180
             || MinimumWaterLongitudeDegrees >= MaximumWaterLongitudeDegrees))
             throw new InvalidDataException("Invalid Flight 14 water entry estimate.");
+        if (ContinueToWaterContact && (AdditionalWaterRegions == null
+            || AdditionalWaterRegions.Any(region => !region.IsValid)))
+            throw new InvalidDataException("Invalid additional Flight 14 water region.");
     }
 }

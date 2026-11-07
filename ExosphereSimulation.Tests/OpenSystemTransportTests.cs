@@ -40,6 +40,31 @@ public sealed class OpenSystemTransportTests
         Assert.InRange((sample.RelativeLinearMomentumBodyKgMps - identity).Magnitude, 0, 1e-9);
         Assert.Equal(500, sample.OutflowKgPerS, 12);
         Assert.Equal(-500, mass.MassRateKgPerS, 12);
+        // Independently reconstruct each route from its geometric endpoints, then
+        // translate the sum from the fixed datum to the instantaneous mass centre.
+        var linearByStore = new Vector3d[3];
+        var angularByStore = new Vector3d[3];
+        foreach (var (time, side) in new[] { (0.0, MassBoundarySide.Right),
+            (0.7, MassBoundarySide.Right), (2.0, MassBoundarySide.Left) })
+        {
+            transport.SampleMomentumByComponent(time, side, linearByStore, angularByStore);
+            var exit = new Vector3d(0.75, -5, 0.1);
+            var loss = new Vector3d(0, -3 + (2000 - 400 * time) / lambda, 0);
+            Assert.InRange((linearByStore[1] - (exit - loss) * 400).Magnitude, 0, 1e-10);
+            Assert.InRange((angularByStore[1] - (loss.Cross(new(0, -3, 0))
+                + new Vector3d(0, -3, 0).Cross(exit)) * 400).Magnitude, 0, 1e-10);
+            Assert.InRange((linearByStore[2] - (exit - fixedStore.PositionBodyM) * 100).Magnitude, 0, 1e-10);
+            var at = distribution.Sample(time, side);
+            var aggregate = transport.Sample(time, side, at, Vector3d.Zero);
+            var p = linearByStore.Aggregate(Vector3d.Zero, (sum, value) => sum + value);
+            var h = angularByStore.Aggregate(Vector3d.Zero, (sum, value) => sum + value)
+                - at.CenterOfMassBodyM.Cross(p);
+            Assert.InRange((p - aggregate.RelativeLinearMomentumBodyKgMps).Magnitude, 0, 1e-9);
+            Assert.InRange((h - aggregate.RelativeAngularMomentumBodyKgM2PerS).Magnitude, 0, 1e-9);
+        }
+        transport.SampleMomentumByComponent(2, MassBoundarySide.Right, linearByStore, angularByStore);
+        Assert.All(linearByStore, value => Assert.Equal(Vector3d.Zero, value));
+        Assert.All(angularByStore, value => Assert.Equal(Vector3d.Zero, value));
     }
 
     [Fact]

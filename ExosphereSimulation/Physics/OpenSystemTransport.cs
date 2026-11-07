@@ -93,6 +93,49 @@ public sealed class OpenSystemTransport
                 component.PositionBodyM)
             : (component.PositionBodyM, component.PositionBodyM);
 
+    /// <summary>
+    /// Partitions the same routed momentum by debited component. Each route follows its
+    /// store at fragmentation; angular contributions use the datum, not the moving CoM.
+    /// Caller-owned buffers avoid per-step allocations for this persistent bookkeeping.
+    /// </summary>
+    public void SampleMomentumByComponent(double time, MassBoundarySide side,
+        Span<Vector3d> linearBody, Span<Vector3d> angularAboutDatumBody)
+    {
+        if (linearBody.Length < Distribution.Components.Count
+            || angularAboutDatumBody.Length < Distribution.Components.Count)
+            throw new ArgumentException("Momentum buffers do not cover the mass components.");
+        linearBody.Clear();
+        angularAboutDatumBody.Clear();
+        foreach (var group in Groups)
+        {
+            double rate = 0;
+            foreach (var debit in group.Debits)
+                if (TransportFlowGroup.Active(debit.StartSeconds, debit.EndSeconds, time, side))
+                    rate += debit.RateKgPerS;
+            if (rate == 0) continue;
+            double weights = 0;
+            var exit = Vector3d.Zero;
+            foreach (var outlet in group.Outlets)
+                if (TransportFlowGroup.Active(outlet.StartSeconds, outlet.EndSeconds, time, side))
+                {
+                    weights += outlet.WeightKgPerS;
+                    exit += outlet.ExitBodyM * outlet.WeightKgPerS;
+                }
+            if (!(weights > 0))
+                throw new InvalidOperationException($"Flow group '{group.Id}' loses mass with no open outlet.");
+            exit /= weights;
+            foreach (var debit in group.Debits)
+            {
+                if (!TransportFlowGroup.Active(debit.StartSeconds, debit.EndSeconds, time, side)) continue;
+                var component = Distribution.Components[debit.ComponentIndex];
+                var (loss, outlet) = StorePoints(component, component.SampleMass(time, side).Mass);
+                linearBody[debit.ComponentIndex] += (exit - loss) * debit.RateKgPerS;
+                angularAboutDatumBody[debit.ComponentIndex] +=
+                    (loss.Cross(outlet) + outlet.Cross(exit)) * debit.RateKgPerS;
+            }
+        }
+    }
+
     public OpenSystemTransportSample Sample(double time, MassBoundarySide side, BodyMassSample mass,
         Vector3d angularVelocityBody)
     {

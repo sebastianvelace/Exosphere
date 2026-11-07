@@ -1492,7 +1492,19 @@ public class Universe
         || HasAttitudeCommand(vessel)
         || vessel.TranslationCommand.MagnitudeSquared > 1e-12
         || vessel.DisturbanceTorqueBody.MagnitudeSquared > 1e-12
+        || vessel.PropellantVentRateKgPerS > 0
+        || vessel.DisturbanceMassFlowKgPerS > 0
+        || HasRetainedTransportMomentum(vessel)
         || HasCoastingSasActuator(vessel);
+
+    // A feed can end exactly on a step boundary while its left-limit momentum is
+    // still recorded. Give its stop one funded physical step before Kepler/coast
+    // scheduling can bypass the transfer. Per-store shares may cancel in aggregate
+    // but must also be cleared before later fragmentation can repartition them.
+    private static bool HasRetainedTransportMomentum(Vessel vessel) =>
+        vessel.TransportMomentumShares is { Count: > 0 }
+        || vessel.TransportRelativeMomentumBody is { } linear && linear != Vector3d.Zero
+        || vessel.TransportRelativeAngularMomentumBody is { } angular && angular != Vector3d.Zero;
 
     // A passive attitude propagator cannot discard active rate damping or its propellant.
     // Read-only classification: a pending arming decision gets one normal physics step.
@@ -2464,6 +2476,7 @@ public class Universe
         vessel.Velocity = framedVelocity;
         // The split baseline keeps frozen mass; it carries no feed momentum to a later step.
         vessel.TransportRelativeMomentumBody = vessel.TransportRelativeAngularMomentumBody = null;
+        vessel.TransportMomentumShares = null;
         vessel.LastVariableMassStatus = "legacy-frozen";
         vessel.BeginLegacyPhysicsStep(dt, refBody, vessel.LastContactTorqueWorld);
         try
@@ -2534,6 +2547,7 @@ public class Universe
         // Water motion keeps the frozen post-debit snapshot (no propulsive flow is expected
         // afloat); it carries no feed momentum to a later step.
         vessel.TransportRelativeMomentumBody = vessel.TransportRelativeAngularMomentumBody = null;
+        vessel.TransportMomentumShares = null;
         vessel.LastVariableMassStatus = "water-frozen";
         vessel.Position = body.Position+(vessel.Position-startPosition);
         vessel.Velocity = body.Velocity+(vessel.Velocity-startVelocity);
@@ -2627,12 +2641,20 @@ public class Universe
         vessel.LastTransportSample = null;
         if (transportModel == null)
         {
-            // A step without tracked flow carries no relative momentum. Only a step whose flow
-            // is genuinely zero settles it; a fallback with untracked flow forgets it, so the
-            // next tracked step neither invents nor drops a feed impulse.
-            bool flowing = vessel.TransportWindow?.Debits.Count > 0;
-            vessel.TransportRelativeMomentumBody = flowing ? null : Vector3d.Zero;
-            vessel.TransportRelativeAngularMomentumBody = flowing ? null : Vector3d.Zero;
+            bool knownStoppedFlow = vessel.TransportWindow is { HasCompleteCoverage: true,
+                UsesInfinitePropellantAssist: false } window && window.Debits.Count == 0;
+            if (knownStoppedFlow)
+            {
+                var mass = DockedCompositeMassProperties(vessel, vessel.Parts.GetMassProperties());
+                (vessel.Velocity, vessel.AngularVelocity) = TransferInternalFlowMomentum(vessel, mass,
+                    Vector3d.Zero, Vector3d.Zero);
+            }
+            // Unknown/untracked flow cannot establish a zero relative momentum. A known
+            // stopped feed transfers its momentum first, then records the settled value.
+            vessel.TransportRelativeMomentumBody = knownStoppedFlow ? Vector3d.Zero : null;
+            vessel.TransportRelativeAngularMomentumBody = knownStoppedFlow ? Vector3d.Zero : null;
+            if (knownStoppedFlow) (vessel.TransportMomentumShares ??= []).Clear();
+            else vessel.TransportMomentumShares = null;
         }
         if (transportModel != null)
         {
@@ -2745,6 +2767,41 @@ public class Universe
     }
 
     /// <summary>
+    /// Abrupt internal-flow change at a fixed geometry: P=m*(V_datum+omega cross R*c)+R*p
+    /// and H=R*(I*omega_body+h) stay continuous. The angular reaction also changes the datum's
+    /// velocity relative to the CoM; omitting that compensation creates net linear momentum.
+    /// </summary>
+    private static (Vector3d DatumVelocity, Vector3d AngularVelocity) TransferInternalFlowMomentum(
+        Vessel vessel, in Physics.RigidBodyMassProperties mass, Vector3d nextLinearBody, Vector3d nextAngularBody)
+    {
+        var velocity = vessel.Velocity;
+        var angular = vessel.AngularVelocity;
+        if (vessel.TryGetTransportMomentum(mass.CenterOfMassBody, out var previousLinear, out var previousAngular))
+        {
+            var deltaAngularBody = mass.InverseInertiaBody.Multiply(previousAngular - nextAngularBody);
+            var deltaDatumBody = (previousLinear - nextLinearBody) / mass.Mass
+                - deltaAngularBody.Cross(mass.CenterOfMassBody);
+            velocity += vessel.Orientation.Rotate(deltaDatumBody);
+            angular += vessel.Orientation.Rotate(deltaAngularBody);
+        }
+        return (velocity, angular);
+    }
+
+    /// <summary>Older V2 saves only stored aggregate CoM moments; retain that legacy share.</summary>
+    internal void RestoreTransportMomentumShares()
+    {
+        foreach (var vessel in _vessels)
+        {
+            if (vessel.TransportMomentumShares != null
+                || vessel.TransportRelativeMomentumBody is not { } linear
+                || vessel.TransportRelativeAngularMomentumBody is not { } angular) continue;
+            var center = linear == Vector3d.Zero && angular == Vector3d.Zero ? Vector3d.Zero
+                : DockedCompositeMassProperties(vessel, vessel.Parts.GetMassProperties()).CenterOfMassBody;
+            vessel.EnsureLegacyTransportMomentumShares(center);
+        }
+    }
+
+    /// <summary>
     /// Coupled 6-DoF step with F4 variable-mass transport. The integrated state is the
     /// instantaneous centre of mass of the remaining body (coordinate position and velocity);
     /// mass, centre and inertia are sampled at every RK4 stage from the step's funded profile,
@@ -2784,22 +2841,11 @@ public class Universe
 
             var start = distribution.Sample(0.0, Physics.MassBoundarySide.Right);
             var orientation = vessel.Orientation;
-            var angularVelocityWorld = vessel.AngularVelocity;
-            var materialVelocity = vessel.Velocity;
-            // A flow change between steps (ignition, throttle, shutdown) conserves the total
-            // momenta P = m v_material + R p_rel and H = I ω + h_rel: the feed's fluid momentum
-            // change reacts on the structure (the water-hammer impulse of an abrupt valve).
             var opening = transport.Sample(0.0, Physics.MassBoundarySide.Right, start,
-                orientation.Inverse().Rotate(angularVelocityWorld));
-            if (vessel.TransportRelativeMomentumBody is { } previousMomentum
-                && vessel.TransportRelativeAngularMomentumBody is { } previousAngularMomentum)
-            {
-                materialVelocity -= orientation.Rotate(opening.RelativeLinearMomentumBodyKgMps - previousMomentum)
-                    / start.MassKg;
-                var startInertia = start.ToRigidBodyMassProperties();
-                angularVelocityWorld -= orientation.Rotate(startInertia.InverseInertiaBody.Multiply(
-                    opening.RelativeAngularMomentumBodyKgM2PerS - previousAngularMomentum));
-            }
+                orientation.Inverse().Rotate(vessel.AngularVelocity));
+            var (materialVelocity, angularVelocityWorld) = TransferInternalFlowMomentum(vessel,
+                start.ToRigidBodyMassProperties(), opening.RelativeLinearMomentumBodyKgMps,
+                opening.RelativeAngularMomentumBodyKgM2PerS);
             var centerOffsetWorld = orientation.Rotate(start.CenterOfMassBodyM);
             var centerPosition = vessel.Position + centerOffsetWorld;
             var centerVelocity = materialVelocity + angularVelocityWorld.Cross(centerOffsetWorld)
@@ -2826,7 +2872,10 @@ public class Universe
             Physics.RigidBodyForces Forces(Physics.RigidBody6DofState candidate, Physics.RigidBodyMassProperties mass)
             {
                 var absolute = ToAbsoluteState(refBody, candidate);
-                var own = ShiftCenterOfMass(absolute, OwnShift(stage));
+                // The integrator follows the moving liquid centroid. Surface forces need
+                // the structure's material velocity at that point, excluding R * c-dot.
+                var material = MaterialState(absolute, stage);
+                var own = ShiftCenterOfMass(material, OwnShift(stage));
                 var landingContact = EvaluateLandingContact(vessel, refBody, own);
                 var catchContact = EvaluateCatchContact(vessel, own, evaluationTime);
                 var waterContact = EvaluateCoupledWaterContact(vessel, refBody, own, evaluationTime);
@@ -2844,7 +2893,7 @@ public class Universe
                     distributedAerodynamics: DistributedAerodynamicsEnabled,
                     physicalBodyFlaps: PhysicalBodyFlapsEnabled,
                     gravityGradientEnabled: GravityGradientEnabled);
-                var forces = Physics.RigidBodyForceEvaluator.Evaluate(vessel, absolute, context, mass);
+                var forces = Physics.RigidBodyForceEvaluator.Evaluate(vessel, material, context, mass);
                 var open = transport.Sample(stageTime, stageSide, stage, candidate.AngularVelocityBody);
                 return new Physics.RigidBodyForces(
                     forces.ForceWorld + candidate.Orientation.Rotate(open.ForceBodyN),
@@ -2896,6 +2945,7 @@ public class Universe
                 finalState.AngularVelocityBody);
             vessel.TransportRelativeMomentumBody = vessel.LastTransportSample.Value.RelativeLinearMomentumBodyKgMps;
             vessel.TransportRelativeAngularMomentumBody = vessel.LastTransportSample.Value.RelativeAngularMomentumBodyKgM2PerS;
+            model.CaptureMomentumShares(dt, Physics.MassBoundarySide.Left, vessel);
 
             LastCoupled6DofTelemetry = new Physics.Coupled6DofTelemetry(
                 Integrated: true,
@@ -2909,7 +2959,7 @@ public class Universe
                 FinalOrientation: absoluteFinal.Orientation,
                 FinalAngularVelocityWorld: absoluteFinal.AngularVelocityWorld);
 
-            var ownFinal = ShiftCenterOfMass(absoluteFinal, OwnShift(end));
+            var ownFinal = ShiftCenterOfMass(MaterialState(absoluteFinal, end), OwnShift(end));
             var contactAfter = EvaluateLandingContact(vessel, refBody, ownFinal);
             vessel.LastSurfaceContact = contactAfter;
             vessel.LastContactForceWorld = contactAfter?.ForceWorld ?? Vector3d.Zero;
@@ -2924,6 +2974,11 @@ public class Universe
                 vessel.LastContactForceWorld += waterAfter.ForceWorld;
                 vessel.LastContactTorqueWorld += waterAfter.TorqueWorld;
             }
+
+            static Physics.RigidBody6DofState MaterialState(in Physics.RigidBody6DofState state,
+                in Physics.BodyMassSample sample) => new(state.Position,
+                    state.Velocity - state.Orientation.Rotate(sample.CenterOfMassRateBodyMps),
+                    state.Orientation, state.AngularVelocityBody);
         }
         finally
         {

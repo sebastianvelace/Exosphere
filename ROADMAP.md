@@ -441,7 +441,7 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      aprobados; referencia Flight 14 idéntica a la unidad anterior. Falta cerrar venteos
      simultáneos, RCS y demás fuentes antes de construir el inventario completo y activar
      transporte en misiones.
-   - **F4 cerrada (2026-11-06).** Ventanas de recursos completas validadas (CI 1421/1421).
+   - **F4 cerrada y revalidada (2026-11-06).** Ventanas de recursos completas validadas (CI 1421/1421).
      Geometría de masa compartida (`PartMassGeometry`: centro y giro secos, columnas líquidas
      asentadas sobre el fondo plano equivalente de cada tanque, headers puntuales) y transporte
      de masa variable en producción (`VariableMassStepModel` + `OpenSystemTransport`): masa,
@@ -452,6 +452,16 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      Hallazgo: un vehículo líquido que drena gana alabeo; la Ship del Flight 14 ahora amortigua
      su tasa de alabeo en ascenso y quemados orbitales. Huecos de datos para F6: estaciones de
      los módulos del spacecraft, tanques del S-II/S-IVB, flujo del F-1 en altura y el AS-503.
+   - La CI del cierre propuesto reveló regresiones históricas de Flight 14. Se corrigieron
+     transferencia de momento al detener flujo, compensación del datum al abrir flujo fuera
+     del eje y velocidad material para fuerzas de superficie. El encendido orbital ahora
+     conserva el compromiso de arranque y exige margen previo de apuntamiento, sin gastar
+     reencendidos por aplicar repetidamente la condición de asentamiento. Los parámetros
+     numéricos originales de regreso/descenso se conservan. La cobertura de agua es la unión
+     de tres rectángulos oceánicos verificados por NOAA, con exclusión de islas y los mismos
+     límites físicos de contacto. La fragmentación conserva las contribuciones de momento
+     por almacén, incluidas sus referencias y su guardado. CI completa 1504/1504 sin omisiones;
+     builds 0/0, contratos, arranque, menús y captura/recarga de Godot aprobados.
    - Siguiente: F5 (slosh por tanque, iniciada) y F6 (recalibración histórica) de
      `docs/physics/rigid_body_fidelity_plan.md`; aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.

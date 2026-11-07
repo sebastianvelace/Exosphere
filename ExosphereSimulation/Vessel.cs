@@ -671,11 +671,41 @@ public class Vessel
     /// <summary>
     /// Feed-flow relative momenta (body frame) at the end of the last coupled step, carried to
     /// the next step so a flow change conserves total momentum. Null: unknown (no impulse applied).
-    /// A new vessel starts with no flow (zero). Not saved: a reload resumes with null, without a
-    /// feed impulse.
+    /// A new vessel starts with no flow (zero). Save V2 also carries per-store datum moments
+    /// so fragmentation can preserve each feed's momentum and its reference point.
     /// </summary>
     internal Vector3d? TransportRelativeMomentumBody { get; set; } = Vector3d.Zero;
     internal Vector3d? TransportRelativeAngularMomentumBody { get; set; } = Vector3d.Zero;
+    internal List<Physics.TransportMomentumShare>? TransportMomentumShares { get; set; }
+    internal Vector3d[] TransportLinearScratch = [];
+    internal Vector3d[] TransportAngularScratch = [];
+
+    internal void EnsureLegacyTransportMomentumShares(Vector3d centerBody)
+    {
+        if (TransportMomentumShares != null || TransportRelativeMomentumBody is not { } linear
+            || TransportRelativeAngularMomentumBody is not { } angular) return;
+        TransportMomentumShares = [];
+        if (linear != Vector3d.Zero || angular != Vector3d.Zero)
+            TransportMomentumShares.Add(new(null, linear, angular + centerBody.Cross(linear)));
+    }
+
+    internal bool TryGetTransportMomentum(Vector3d centerBody, out Vector3d linear, out Vector3d angular)
+    {
+        if (TransportMomentumShares is { } shares)
+        {
+            linear = Vector3d.Zero; angular = Vector3d.Zero;
+            foreach (var share in shares)
+            {
+                linear += share.LinearBodyKgMps;
+                angular += share.AngularAboutDatumBodyKgM2PerS;
+            }
+            angular -= centerBody.Cross(linear);
+            return true;
+        }
+        linear = TransportRelativeMomentumBody ?? Vector3d.Zero;
+        angular = TransportRelativeAngularMomentumBody ?? Vector3d.Zero;
+        return TransportRelativeMomentumBody.HasValue && TransportRelativeAngularMomentumBody.HasValue;
+    }
 
     private void BeginResourceFunding(double dt)
     {
@@ -1861,6 +1891,7 @@ public class Vessel
             .FirstOrDefault();
         double impulseNs = decoupler?.Definition.SeparationImpulseNs ?? 0.0;
 
+        var transportCenter = Parts.CenterOfMass;
         var before = Parts.ComputePartLocalPositions();
         var detached = Parts.FireNextStage();
         if (detached == null) return null;
@@ -1870,7 +1901,7 @@ public class Vessel
         // Every part keeps its place at the instant of separation; each fragment's datum
         // moves to its own new lowest point and inherits the rigid-body velocity there.
         // The decoupler impulse then opens them along the stack axis.
-        PlaceSplitFragmentsRigidly(before, debris);
+        PlaceSplitFragmentsRigidly(before, debris, transportCenter);
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
         double opening = impulseNs > 0.0
             ? impulseNs * (TotalMass + debris.TotalMass)
@@ -1898,6 +1929,7 @@ public class Vessel
     {
         ClearHotStageOverlapState();
 
+        var transportCenter = Parts.CenterOfMass;
         var before = Parts.ComputePartLocalPositions();
         var detached = Parts.SplitAtJoint(joint);
         if (detached == null) return null;
@@ -1905,7 +1937,7 @@ public class Vessel
         var debris = CreateDebrisVessel(detached, Name + " (structural debris)");
 
         // Fragments start where their parts were, with a gentle opening along vessel +Y.
-        PlaceSplitFragmentsRigidly(before, debris);
+        PlaceSplitFragmentsRigidly(before, debris, transportCenter);
         var axis = Orientation.Rotate(Vector3d.Up).Normalized;
         const double relativeOpenMs = 0.5;
         ApplyMassSplitKinematics(debris, axis, 0.0, relativeOpenMs);
@@ -1958,11 +1990,38 @@ public class Vessel
     /// frame and takes the rigid-body velocity v + ω×Δ there; angular velocity is shared.
     /// Mass, centre of mass, linear and angular momentum are conserved exactly.
     /// </summary>
-    private void PlaceSplitFragmentsRigidly(Dictionary<Part, Vector3d> before, Vessel fragment)
+    private void PlaceSplitFragmentsRigidly(Dictionary<Part, Vector3d> before, Vessel fragment,
+        Vector3d previousCenterBody)
     {
+        EnsureLegacyTransportMomentumShares(previousCenterBody);
+        if (TransportMomentumShares is { } shares)
+        {
+            fragment.TransportMomentumShares = [];
+            var fragmentIds = fragment.Parts.Parts.Select(part => part.InstanceId).ToHashSet(StringComparer.Ordinal);
+            for (int i = shares.Count - 1; i >= 0; i--)
+                if (shares[i].PartInstanceId is { } owner && fragmentIds.Contains(owner))
+                {
+                    fragment.TransportMomentumShares.Add(shares[i]);
+                    shares.RemoveAt(i);
+                }
+        }
+        else
+        {
+            fragment.TransportRelativeMomentumBody = null;
+            fragment.TransportRelativeAngularMomentumBody = null;
+        }
         var (position, velocity) = (Position, Velocity);
         Rebase(this);
         Rebase(fragment);
+        Refresh(this);
+        Refresh(fragment);
+
+        static void Refresh(Vessel vessel)
+        {
+            if (!vessel.TryGetTransportMomentum(vessel.Parts.CenterOfMass, out var linear, out var angular)) return;
+            vessel.TransportRelativeMomentumBody = linear;
+            vessel.TransportRelativeAngularMomentumBody = angular;
+        }
 
         void Rebase(Vessel vessel)
         {
@@ -1971,6 +2030,10 @@ public class Vessel
             {
                 if (!before.TryGetValue(part, out var original)) continue;
                 var shiftWorld = Orientation.Rotate(original - local);
+                if (vessel.TransportMomentumShares is { } routed)
+                    for (int i = 0; i < routed.Count; i++)
+                        routed[i] = routed[i] with { AngularAboutDatumBodyKgM2PerS =
+                            routed[i].AngularAboutDatumBodyKgM2PerS - (original - local).Cross(routed[i].LinearBodyKgMps) };
                 vessel.Position = position + shiftWorld;
                 vessel.Velocity = velocity + AngularVelocity.Cross(shiftWorld);
                 return;
@@ -2017,6 +2080,7 @@ public class Vessel
         var part = Parts.Parts.FirstOrDefault(p => p.InstanceId == rootPartInstanceId);
         if (part == null) return null;
 
+        var transportCenter = Parts.CenterOfMass;
         var before = Parts.ComputePartLocalPositions();
         var detached = Parts.DetachSubtree(rootPartInstanceId);
         if (detached == null) return null;
@@ -2046,7 +2110,7 @@ public class Vessel
         foreach (var detachedPart in detached.Parts) payload.Parts.AddPart(detachedPart);
         foreach (var joint in detached.Joints) payload.Parts.AddJoint(joint);
 
-        PlaceSplitFragmentsRigidly(before, payload);
+        PlaceSplitFragmentsRigidly(before, payload, transportCenter);
 
         Vector3d velocityAxis = relativeVelocity.Magnitude > 1e-9
             ? -relativeVelocity.Normalized

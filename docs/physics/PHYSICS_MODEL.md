@@ -1,9 +1,9 @@
 # Exosphere physics model
 
-> **Current technical source of truth — 2026-09-25**
+> **Current technical source of truth — 2026-11-06**
 >
 > This document describes the physics that is implemented today, the deliberately simplified
-> parts, and the gates required before the experimental coupled 6-DoF path can become default.
+> parts, and the evidence gates for the production coupled 6-DoF path.
 > It complements the code and tests; it does not replace them.
 
 ## Design contract
@@ -146,9 +146,36 @@ offset, v_datum = v_c − ω×(R c) − R ċ. Practice replenishment, an undecla
 incomplete window fall back to the frozen post-debit snapshot for that step
 (`Vessel.LastVariableMassStatus`); the legacy split path and water motion stay frozen.
 
+A known stopped feed transfers retained internal momentum to the structure before its
+stored flow momentum becomes zero. At an off-axis opening, the angular reaction also
+changes datum velocity by `-R*(deltaOmegaBody cross c)`. Aerodynamic/contact evaluators
+use material velocity at the candidate centre, excluding `R*cdot` from its coordinate
+velocity; otherwise moving liquid invents surface airspeed. Centroid position integration
+and telemetry retain coordinate velocity. `VariableMassFlowTransitionTests` covers these
+transitions and stationary drainage in atmosphere versus vacuum.
+
+Each flow route also retains its linear momentum and angular momentum about the fixed
+body datum, owned by its debited store. Fragmentation partitions these shares by part and
+translates the angular reference with the datum; total P/H about a common inertial point
+is unchanged. This is a source-store ownership approximation for the declared route, not
+a severed-pipe transient solver. Optional Save V2 shares preserve this state on reload;
+older known aggregates remain an unowned primary-fragment share. Unknown flow stays
+unknown. `TransportMomentumSplitTests` covers staging, breakage, payload release and reload.
+Retained moments/nonempty shares also require one funded physical step before analytic
+warp/coast dispatch, including non-active vessels, so a flow stop is not deferred or
+revived by a later split. Live vent/disturbance flow commands also prevent Kepler from
+skipping their first debit. Once inactive and cleared, the ordinary Kepler policy resumes.
+
 Consequence: a draining liquid vehicle spins up in roll (İ_axial = ṁ R²/2 outweighs the
 near-axis exhaust's J_out), so mission controllers that must hold roll damp the roll rate
 (`AttitudeGuidance.ComputeAxisPointingCommand(rollDampingGain)`).
+
+Flight 14 orbital startup is committed after pointing/rate settling (2 degrees, 0.03 rad/s).
+The running burn retains the existing 5-degree pointing and 0.15 rad/s mission bounds;
+a violation aborts rather than cycling into automatic relight. The tighter initial cone
+reserves travel for finite spool/gimbal response. These are provenance-backed engineering
+policies, not measured SpaceX control limits. Original return/descent numeric settings
+remain T+7905 earliest command, 104.4 km radial target, fraction 0.0049 and response 20 s.
 
 Tides. `GravityGradient` moments act in coupled, water and Kepler-attitude propagation from
 every attractor with the integrated central tensor (A7).
@@ -577,6 +604,18 @@ all motors are one physical point.
 
 ## Current realism status
 
+The coupled off-rails adapter is enabled by default (`Universe.Coupled6DofIntegrationEnabled`),
+with distributed aerodynamics, physical body flaps and funded actuator control. Legacy
+integration remains available for comparison. F4 transport acts on supported coupled steps;
+its unsupported/legacy/water boundaries are documented above. F5 currently supplies an
+isolated first-mode foundation, without production modal state or coupling. Authoritative
+phase status is in `fidelity_gates.md`; migration evidence is in `coupled_6dof_migration.md`.
+
+### Early migration evidence (historical snapshot, 2026-09-25)
+
+The table below records the early migration's narrow gates and then-open limits. Its
+opt-in/open labels describe that historical checkpoint, not current activation switches.
+
 | Area | Current state | Confidence |
 |---|---|---|
 | Orbital gravity, SOI and Kepler rails | Implemented and regression-tested | High within patched-conic scope |
@@ -619,15 +658,25 @@ For the coupled migration, the required order is:
 6. controlled EDL parity;
 7. real-framebuffer confirmation after numerical parity, never before.
 
-The coupled path remains disabled by default until the final three gates are closed.
+That original migration sequence led to default activation (step 30 in
+`coupled_6dof_migration.md`). New shared-physics changes still require their specific
+numerical/mission gates and complete CI; the old opt-in labels above are historical.
 
 ## Flight 14 bounded water-entry estimate
 
 The playable engineering exploration opts into `WaterContactSolver` during its
 terminal flip. The older powered-return diagnostic still stops at 100 m by default.
 No shared vessel receives water loads without explicit configuration and a matching
-Earth body-fixed region. The current region (25..35 N, 165..140 W) is open northern
-Pacific context, not measured SpaceX coordinates or geographic targeting.
+Earth body-fixed region. Coverage is a union of source-verified rectangles: the main
+22.3..35 N, 161..140 W domain and an additional 20..22 N, 164..162 W western domain, plus 22..22.3 N, 159..158 W east of Kauai.
+`Flight14LandingDefinition.AdditionalWaterRegions` supplies disjoint additions; combining
+their enclosing bounds would incorrectly enable water across islands and gaps.
+NOAA ETOPO 2022 native 15 arc-second statistics cover every cell of each rectangle
+(15,361,920 / 230,400 / 17,280 cells, no skips/missing cells; maxima -66.55 / -1786.89 / -1692.27 m).
+Pinned requests/statistics are in `../research/FLIGHT14_OCEAN_COVERAGE_2026-11-06.json`.
+The coverage is simulator operating context, not a bathymetric collision mesh, navigation
+product, measured SpaceX coordinates or geographic steering target. Physical contact
+criteria and nearby-island exclusions remain independent of this coverage extension.
 
 The skirt datum matches the standalone renderer. The lowest exposed nozzle witness
 is at -3.78 m; a sealed cylinder uses the declared vehicle diameter/length,

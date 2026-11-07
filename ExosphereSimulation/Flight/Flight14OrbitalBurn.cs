@@ -14,6 +14,11 @@ public enum Flight14BurnStatus { Aligning, Burning, Completed, TargetAlreadySati
 /// </summary>
 public sealed class Flight14OrbitalBurn
 {
+    public const double MaximumPointingErrorDegrees = 5.0;
+    public const double MaximumIgnitionPointingErrorDegrees = 2.0;
+    public const double MaximumIgnitionAngularRateRadPerS = 0.03;
+    public const double MaximumBurnAngularRateRadPerS = 0.15;
+
     private readonly Flight14BurnKind _kind;
     private readonly double _targetPeriapsisAltitudeM;
     private readonly string _seaLevelModelId;
@@ -128,11 +133,27 @@ public sealed class Flight14OrbitalBurn
             vessel.Orientation, Vector3d.Up, aim, vessel.AngularVelocity,
             proportionalGain: 2.0, dampingGain: 25.0, rollDampingGain: 25.0);
         double alignment = vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(aim);
-        // Use the established orbital maneuver damping, rather than the fast TVC
-        // defaults: an unpowered turn has much less angular authority. Wait for
-        // angular settling as well as pointing so ignition does not amplify the turn.
-        if (alignment < System.Math.Cos(5 * MathUtils.DEG_TO_RAD)
-            || vessel.AngularVelocity.Magnitude > 0.03)
+        bool committed = Status == Flight14BurnStatus.Burning;
+        bool outsidePointing = alignment < System.Math.Cos(MaximumPointingErrorDegrees * MathUtils.DEG_TO_RAD);
+        double angularRate = vessel.AngularVelocity.Magnitude;
+        // Settling gates the initial ignition commitment, not every startup/burn tick.
+        // Cycling back to alignment would shut down and relight the same engine.
+        // Keep the pointing bound and the existing mission rate bound in flight;
+        // exceeding either aborts this burn instead of automatically relighting it.
+        if (committed && outsidePointing)
+        {
+            Block(vessel, "burn-pointing-envelope-exceeded");
+            return;
+        }
+        if (committed && angularRate > MaximumBurnAngularRateRadPerS)
+        {
+            Block(vessel, "burn-rate-envelope-exceeded");
+            return;
+        }
+        // Reserve pointing travel for the finite engine startup and gimbal response.
+        bool outsideIgnitionPointing = alignment < System.Math.Cos(
+            MaximumIgnitionPointingErrorDegrees * MathUtils.DEG_TO_RAD);
+        if (!committed && (outsideIgnitionPointing || angularRate > MaximumIgnitionAngularRateRadPerS))
         {
             vessel.Throttle = 0;
             _alignmentSeconds += deltaSeconds;

@@ -23,6 +23,10 @@ public sealed class FidelityProvenanceTests
 
     public static TheoryData<string, string, double> CodeConstants() => new()
     {
+        { "starship-flight14-orbital-ignition", "maximumPointingErrorDegrees", Flight14OrbitalBurn.MaximumPointingErrorDegrees },
+        { "starship-flight14-orbital-ignition", "maximumIgnitionPointingErrorDegrees", Flight14OrbitalBurn.MaximumIgnitionPointingErrorDegrees },
+        { "starship-flight14-orbital-ignition", "maximumIgnitionAngularRateRadPerS", Flight14OrbitalBurn.MaximumIgnitionAngularRateRadPerS },
+        { "starship-flight14-orbital-ignition", "maximumBurnAngularRateRadPerS", Flight14OrbitalBurn.MaximumBurnAngularRateRadPerS },
         { "rigid-body-coasting-integrator", "scaledOrientationErrorRatePerS", CoastingAttitudeIntegrator.ScaledOrientationErrorRatePerS },
         { "rigid-body-coasting-integrator", "angularRateErrorRatePerS", CoastingAttitudeIntegrator.AngularRateErrorRatePerS },
         { "rigid-body-coasting-integrator", "maximumTrialRotationRad", CoastingAttitudeIntegrator.MaximumTrialRotationRad },

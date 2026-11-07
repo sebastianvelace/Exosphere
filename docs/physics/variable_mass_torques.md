@@ -1,6 +1,6 @@
 # F4: variable-mass and tidal torque kernels
 
-Status (2026-11-06): F4 is closed. Tidal torque acts in coupled off-rails, water-motion and
+Status (2026-11-06): F4 is reverified and closed in production. Tidal torque acts in coupled off-rails, water-motion and
 Kepler-attitude propagation; variable-mass transport acts on the coupled off-rails path by
 default (`Universe.VariableMassTransportEnabled`). See "Production activation" below.
 
@@ -74,7 +74,10 @@ frame after the model has physically spun up the payload. This conservative fall
 cost CPU time. Extending batching requires rotational accuracy evidence rather than
 removing the tidal torque or raising a mission acceptance tolerance.
 
-## Integration boundary
+## Foundation integration boundary (historical, before activation)
+
+This section records the foundation checkpoint and its then-pending activation checklist.
+The current production contract and later corrections follow below.
 
 The new `RigidBody6DofIntegrator.Step` overload samples mass and inertia at all four RK4
 stage times and passes the same snapshot to the force callback. The callback remains pure.
@@ -171,8 +174,11 @@ analytic ċ, c̈ and İ (m c̈ = Σ 2 ṁ_i ċ_i − 2 ṁ ċ; İ adds m_i J_i' 
 stage-sampled mass properties, splits at every knot (store debits, outlet intervals, engine
 exhaustion) and recovers each sub-interval's exact end so the one-sided rates belong to it.
 At a knot or between steps P = m v_material + R p_rel and H = I ω + h_rel are continuous
-(`Vessel.TransportRelativeMomentumBody` carries the previous step's values; saved in
-SaveGameV2 so checkpoints resume bit-exactly; null in older saves means no impulse). Docked
+(per-store datum shares carry the previous step's values; optional SaveGameV2 fields
+preserve them on reload). Fragmentation follows source-store ownership and translates each
+angular share with the datum. Older known aggregates become an unowned share retained on
+the primary fragment; unknown momentum stays unknown. See the resource adapter's
+fragmentation contract and `TransportMomentumSplitTests`. Docked
 members enter as constant components and contacts use the own-body centre at each stage.
 Frozen fallback (status in `Vessel.LastVariableMassStatus`): no flow, practice assist, an
 undeclared outlet, an incomplete window, the legacy split path and water motion.
@@ -205,3 +211,27 @@ stores (Table 20-1 "below tank" masses); S-II/S-IVB tanks estimated. Known data 
 spacecraft module stations (the model's spacecraft CG is 2.3 m above the FER's 91.658 m),
 S-II/S-IVB tank stations, the F-1 high-altitude flow, and the AS-503 vehicle (not yet given
 the same geometry).
+
+## Flow transitions and material velocity corrections (2026-11-06)
+
+Stopping a known internal feed transfers its retained linear/angular momentum to the
+structure before recording zero flow. Opening an off-axis feed also compensates the datum
+velocity for the angular reaction: `deltaVdatum = R * (deltaP / m - deltaOmega cross c)`.
+Unknown or assisted flow retains an unknown marker rather than asserting zero momentum.
+
+The integrated centroid has coordinate velocity `Vdatum + omega cross R*c + R*cdot`.
+Aerodynamic and contact forces use the material velocity at that position, excluding
+`R*cdot`; otherwise draining a stationary tank invents surface airspeed. RK4 position
+and centroid telemetry retain coordinate velocity. `VariableMassFlowTransitionTests`
+cover the two transitions and a stationary draining tank in atmosphere versus vacuum.
+
+The original numeric Flight 14 return/descent settings remain after correcting finite
+startup: T+7905 earliest command, 104.4 km radial target, 0.0049 descent fraction and 20 s
+bank response. Orbital ignition is committed inside a tighter 2-degree startup cone;
+the ongoing 5-degree pointing and 0.15 rad/s mission bounds are retained. The ignition
+0.03 rad/s settling criterion is not repeatedly applied as an automatic shutdown/relight
+command during a running burn. In-flight violations abort permanently. The policy is an
+engineering estimate with provenance, not a measured flown control law. Complete mission
+revalidation passes 1504/1504 tests without skips, three 0/0 builds, contracts and
+Godot startup/menu/graphics checks. Fragmentation and persistence evidence are recorded in
+`variable_mass_resource_adapter.md` and `f4_completion_worklog.md`.

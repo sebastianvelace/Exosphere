@@ -167,6 +167,86 @@ public sealed class Flight14OrbitalBurnTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void CommittedIgnitionDoesNotCycleForAWithinEnvelopeRollTransient()
+    {
+        var (_, ship, earth, _) = Fixture(Flight14BurnKind.Insertion);
+        var burn = Burn(Flight14BurnKind.Insertion);
+        burn.Advance(ship, earth, 0.02, 0);
+        Assert.Equal(Flight14BurnStatus.Burning, burn.Status);
+        // A startup transient exceeds the pre-ignition settling rate, while the
+        // thrust axis remains aligned and the existing mission rate bound is met.
+        ship.AngularVelocity = ship.Orientation.Rotate(Vector3d.Up) * 0.04;
+        burn.Advance(ship, earth, 0.02, 0.02);
+        Assert.Equal(Flight14BurnStatus.Burning, burn.Status);
+        Assert.Equal(1, ship.Throttle);
+    }
+
+    [Fact]
+    public void CommittedBurnRetainsTheExistingPointingBound()
+    {
+        var (_, ship, earth, _) = Fixture(Flight14BurnKind.Insertion);
+        var burn = Burn(Flight14BurnKind.Insertion);
+        burn.Advance(ship, earth, 0.02, 0);
+        var axis = ship.Orientation.Rotate(Vector3d.Right);
+        ship.Orientation = Quaterniond.FromAxisAngle(axis, 3 * MathUtils.DEG_TO_RAD) * ship.Orientation;
+        burn.Advance(ship, earth, 0.02, 0.02);
+        Assert.Equal(Flight14BurnStatus.Burning, burn.Status);
+        Assert.Equal(1, ship.Throttle);
+    }
+
+    [Fact]
+    public void InitialIgnitionLeavesPointingMarginForFiniteStartup()
+    {
+        var (_, ship, earth, _) = Fixture(Flight14BurnKind.Insertion);
+        var axis = ship.Orientation.Rotate(Vector3d.Right);
+        ship.Orientation = Quaterniond.FromAxisAngle(axis, 3 * MathUtils.DEG_TO_RAD) * ship.Orientation;
+        var burn = Burn(Flight14BurnKind.Insertion);
+        burn.Advance(ship, earth, 0.02, 0);
+        Assert.Equal(Flight14BurnStatus.Aligning, burn.Status);
+        Assert.Equal(0, ship.Throttle);
+    }
+
+    [Fact]
+    public void InitialIgnitionStillRequiresTheSettledRate()
+    {
+        var (_, ship, earth, _) = Fixture(Flight14BurnKind.Insertion);
+        ship.AngularVelocity = ship.Orientation.Rotate(Vector3d.Up) * 0.04;
+        var burn = Burn(Flight14BurnKind.Insertion);
+        burn.Advance(ship, earth, 0.02, 0);
+        Assert.Equal(Flight14BurnStatus.Aligning, burn.Status);
+        Assert.Equal(0, ship.Throttle);
+    }
+
+    [Fact]
+    public void CommittedBurnAbortsLostPointingWithoutAutomaticallyRelighting()
+    {
+        var (_, ship, earth, _) = Fixture(Flight14BurnKind.Insertion);
+        var aligned = ship.Orientation;
+        var burn = Burn(Flight14BurnKind.Insertion);
+        burn.Advance(ship, earth, 0.02, 0);
+        ship.Orientation = Quaterniond.Identity;
+        burn.Advance(ship, earth, 0.02, 0.02);
+        Assert.Equal(Flight14BurnStatus.Blocked, burn.Status);
+        Assert.Equal(0, ship.Throttle);
+        ship.Orientation = aligned;
+        burn.Advance(ship, earth, 0.02, 0.04);
+        Assert.Equal(Flight14BurnStatus.Blocked, burn.Status);
+        Assert.Equal(0, ship.Throttle);
+    }
+
+    [Fact]
+    public void CommittedBurnAbortsAboveTheExistingMissionRateBound()
+    {
+        var (_, ship, earth, _) = Fixture(Flight14BurnKind.Insertion);
+        var burn = Burn(Flight14BurnKind.Insertion);
+        burn.Advance(ship, earth, 0.02, 0);
+        ship.AngularVelocity = ship.Orientation.Rotate(Vector3d.Up) * 0.16;
+        burn.Advance(ship, earth, 0.02, 0.02);
+        Assert.Equal(Flight14BurnStatus.Blocked, burn.Status);
+        Assert.Equal(0, ship.Throttle);
+    }
+
+    [Fact]
     public void MisalignedEngineWaitsForPhysicalAttitudeResponse()
     {
         var (_, ship, earth, _) = Fixture(Flight14BurnKind.Insertion);

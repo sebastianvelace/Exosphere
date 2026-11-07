@@ -98,7 +98,8 @@ public sealed class Flight14LandingBurn
                     _ship.VehicleLength, _definition.LowestPointYM, _ship.Parts.CenterOfMass.Y-bottom,
                     _definition.WaterDensityKgPerM3, _definition.WaterDragCoefficient, _definition.WettingDepthM,
                     _definition.MinimumWaterLatitudeDegrees, _definition.MaximumWaterLatitudeDegrees,
-                    _definition.MinimumWaterLongitudeDegrees, _definition.MaximumWaterLongitudeDegrees, bottom);
+                    _definition.MinimumWaterLongitudeDegrees, _definition.MaximumWaterLongitudeDegrees, bottom,
+                    _definition.AdditionalWaterRegions.ToArray());
             }
         }
         if (!double.IsFinite(witness.GeodeticAltitudeM) || !double.IsFinite(witness.AtmosphereRelativeSpeedMps)

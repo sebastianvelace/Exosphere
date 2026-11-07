@@ -59,6 +59,8 @@ public sealed class VesselSaveV2
     /// <summary>Feed-flow relative momenta at the save (F4); null in older saves.</summary>
     public VectorSaveV2? TransportRelativeMomentum { get; set; }
     public VectorSaveV2? TransportRelativeAngularMomentum { get; set; }
+    /// <summary>Per-store flow moments about the datum; null in older or untracked saves.</summary>
+    public List<TransportMomentumShareSaveV2>? TransportMomentumShares { get; set; }
     public double VentedPropellantKg { get; set; }
     /// <summary>Slewed body-flap channels (pitch, yaw, roll) of the aggregate flap model.</summary>
     public VectorSaveV2 FlapActuators { get; set; } = new();
@@ -84,6 +86,13 @@ public sealed class VesselSaveV2
     public List<JointSaveV2> Joints { get; set; } = new();
     public List<CrewSaveV2> Crew { get; set; } = new();
     public string? PayloadManifestId { get; set; }
+}
+
+public sealed class TransportMomentumShareSaveV2
+{
+    public string? PartInstanceId { get; set; }
+    public VectorSaveV2 Linear { get; set; } = new();
+    public VectorSaveV2 AngularAboutDatum { get; set; } = new();
 }
 
 public sealed class PartSaveV2
@@ -315,6 +324,7 @@ public static class SaveGameV2Codec
         universe.TimeScale = save.TimeScale;
         if (save.ActiveVesselId != null && !universe.SetActiveVessel(save.ActiveVesselId))
             throw new InvalidDataException($"Active vessel '{save.ActiveVesselId}' is missing.");
+        universe.RestoreTransportMomentumShares();
     }
 
     public static void Validate(SaveGameV2 save)
@@ -384,6 +394,24 @@ public static class SaveGameV2Codec
                         || injection.TriggerAfterStateSeconds < 0.0)
                         throw new InvalidDataException(
                             $"Invalid scheduled failure for '{injection.EngineInstanceId}'.");
+                }
+            }
+            if (vessel.TransportRelativeMomentum is { } momentum)
+                foreach (double value in new[] { momentum.X, momentum.Y, momentum.Z }) RequireFinite(value, vessel.Id);
+            if (vessel.TransportRelativeAngularMomentum is { } angularMomentum)
+                foreach (double value in new[] { angularMomentum.X, angularMomentum.Y, angularMomentum.Z }) RequireFinite(value, vessel.Id);
+            if (vessel.TransportMomentumShares is { } shares)
+            {
+                if (vessel.TransportRelativeMomentum == null || vessel.TransportRelativeAngularMomentum == null)
+                    throw new InvalidDataException($"Tracked flow shares require known aggregate momentum on '{vessel.Id}'.");
+                foreach (var share in shares)
+                {
+                    if (share == null || share.Linear == null || share.AngularAboutDatum == null
+                        || share.PartInstanceId is { } owner && !ownedPartIds.Contains(owner))
+                        throw new InvalidDataException($"Invalid flow-momentum owner on '{vessel.Id}'.");
+                    foreach (double value in new[] { share.Linear.X, share.Linear.Y, share.Linear.Z,
+                        share.AngularAboutDatum.X, share.AngularAboutDatum.Y, share.AngularAboutDatum.Z })
+                        RequireFinite(value, vessel.Id);
                 }
             }
         }
@@ -543,6 +571,12 @@ public static class SaveGameV2Codec
                 ? VectorSaveV2.From(momentum) : null,
             TransportRelativeAngularMomentum = vessel.TransportRelativeAngularMomentumBody is { } angular
                 ? VectorSaveV2.From(angular) : null,
+            TransportMomentumShares = vessel.TransportMomentumShares?.Select(share => new TransportMomentumShareSaveV2
+            {
+                PartInstanceId = share.PartInstanceId,
+                Linear = VectorSaveV2.From(share.LinearBodyKgMps),
+                AngularAboutDatum = VectorSaveV2.From(share.AngularAboutDatumBodyKgM2PerS),
+            }).ToList(),
             VentedPropellantKg = vessel.VentedPropellantKg,
             PitchYawRoll = VectorSaveV2.From(vessel.PitchYawRoll),
             FlapActuators = VectorSaveV2.From(new Vector3d(
@@ -628,6 +662,8 @@ public static class SaveGameV2Codec
             PropellantVentRateKgPerS = saved.PropellantVentRateKgPerS,
             TransportRelativeMomentumBody = saved.TransportRelativeMomentum?.ToVector(),
             TransportRelativeAngularMomentumBody = saved.TransportRelativeAngularMomentum?.ToVector(),
+            TransportMomentumShares = saved.TransportMomentumShares?.Select(share => new Physics.TransportMomentumShare(
+                share.PartInstanceId, share.Linear.ToVector(), share.AngularAboutDatum.ToVector())).ToList(),
             VentedPropellantKg = saved.VentedPropellantKg,
             PitchYawRoll = saved.PitchYawRoll.ToVector(),
             SASEnabled = saved.SasEnabled,

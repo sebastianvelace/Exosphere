@@ -190,7 +190,7 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   the shared feed; owning demands are reserved before shared draw), allocated by `Physics/RcsAllocation` (couples first, inertia-weighted);
   `rcs_arms_with_stage` and `rcs_arms_when_isolated` arm systems at separation; flaps take
   their share before the jets, and under thrust a slewing gimbal (≥ 1°/s) owns its axes.
-  F4 is closed: tidal moments act in coupled off-rails/water stages and Kepler attitude
+  F4 is reverified in production: tidal moments act in coupled off-rails/water stages and Kepler attitude
   (`Universe.GravityGradientEnabled`); variable-mass transport acts on the coupled off-rails
   path (`Universe.VariableMassTransportEnabled`, default on). Mass properties come from one
   decomposition (`Parts/PartMassGeometry`: `dry_mass_center_y_m`, `dry_gyration_m`,
@@ -205,6 +205,14 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   (`CaptureRcsFunding`, `CapturePropellantFunding`, `CaptureResourceFunding`) remain
   observational. See `docs/physics/variable_mass_torques.md`. Remaining work (slosh F5,
   historical recalibration F6) is tracked in `docs/physics/rigid_body_fidelity_plan.md`.
+  Material aero/contact velocity excludes the moving-centroid `R*cdot` term. Known feed
+  stops transfer internal momentum before clearing it; off-axis openings compensate datum
+  velocity for the angular reaction. Per-store relative-flow shares retain their angular
+  reference at the datum, follow their source parts through splits, and persist in optional
+  Save V2 fields; unknown flow remains unknown. Flight 14 orbital ignition commits inside 2 degrees
+  and 0.03 rad/s; a running burn retains 5 degrees / 0.15 rad/s and aborts violations without
+  automatic relight. Water coverage can be a union of individually NOAA-screened rectangles
+  (`AdditionalWaterRegions`); each needs complete native-grid evidence and island exclusions.
 
 ## Workflow
 

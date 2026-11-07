@@ -300,7 +300,7 @@ The isolated-Earth continuation reaches water at 4.422 m/s.
 0 warnings / 0 errors, Flight startup, MainMenu and Construction smoke tests, and the
 real-framebuffer graphics-settings capture/reload check. F3 is closed with the analytic
 RCS/SAS gates, the Gemini 8 historical recovery gate, exact checkpoint continuation and
-the original Flight 14 descent/contact limits. F4 is closed (2026-11-06); F5 has started; F6 remains planned.
+the original Flight 14 descent/contact limits. F4 is reverified and closed (2026-11-06); F5 has started; F6 remains planned.
 
 ## F4 findings (2026-11-04, in progress)
 
@@ -431,9 +431,18 @@ Each phase lands as reviewable commits with xUnit tests, an entry in
 `coupled_6dof_migration.md` or `PHYSICS_MODEL.md`, and a full `tools/ci_check.sh` run.
 
 
-## F4 closure (2026-11-06)
+## F4 production closure and revalidation (2026-11-06)
 
-F4 closes on the production variable-mass path: one shared mass decomposition
+The proposed closure failed the existing Flight 14 altitude/descent gates. Directed
+regressions exposed flow-stop momentum loss, an off-axis opening datum correction and
+confusion between centroid-coordinate and material velocity in surface forces. These
+corrections, store-owned momentum through fragmentation and finite-startup handling now
+pass complete CI: 1504/1504 tests without skips, three 0/0 builds, contracts and Godot
+startup/menu/graphics checks. Original numeric return/descent profiles and historical/contact
+limits are retained. Water coverage uses three separately NOAA-screened ocean rectangles
+with island/gap exclusions. F4 is closed; production slosh remains F5 work.
+
+The incoming implementation provides the production variable-mass path: one shared mass decomposition
 (`PartMassGeometry`: dry centre/gyration, settled tank columns on equivalent flat bottoms,
 header points), a per-step model of every funded flow and its outlet
 (`VariableMassStepModel`), the open-system force and moment (`OpenSystemTransport`), stage-
