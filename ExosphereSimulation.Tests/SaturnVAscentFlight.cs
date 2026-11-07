@@ -27,8 +27,11 @@ internal static class SaturnVAscentFlight
     public static SaturnVAscentResult Fly(double liftoffEpoch = 0.0, Vector3d? planeNormal = null,
         double separationErrorDeg = 0.0, double separationRateRadPerS = 0.0,
         string variantFile = "apollo8_saturn5_as503_1968.json", SaturnVAscentSchedule? scheduleOverride = null,
-        Action<Vessel, double, bool>? afterTick = null)
+        Action<Vessel, double, bool>? afterTick = null,
+        Action<Vessel, CelestialBody, double, bool>? afterTickWithBody = null, double? untilElapsedSeconds = null)
     {
+        if (untilElapsedSeconds is { } limit && (!double.IsFinite(limit) || limit <= 0))
+            throw new ArgumentOutOfRangeException(nameof(untilElapsedSeconds));
         var root = DataDirectory();
         var catalog = PartCatalog.LoadFromDirectory(Path.Combine(root, "parts"));
         var vessel = VehicleVariantDefinition.LoadFromJson(Path.Combine(root, "vehicles",
@@ -126,6 +129,8 @@ internal static class SaturnVAscentFlight
             universe.Tick(0.02);
             // Elapsed time after the step, and whether the S-IC is still on the stack.
             afterTick?.Invoke(vessel, universe.CurrentTime - liftoff, !sicSeparated);
+            afterTickWithBody?.Invoke(vessel, earth, universe.CurrentTime - liftoff, !sicSeparated);
+            if (untilElapsedSeconds.HasValue && universe.CurrentTime - liftoff >= untilElapsedSeconds.Value) break;
         }
 
         var orbit = OrbitalElements.FromStateVector(vessel.Position - earth.Position,

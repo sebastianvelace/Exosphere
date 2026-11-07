@@ -578,6 +578,19 @@ The VAB still represents a stage as an engine part while the simulation expands 
 engine count into physical instances. This is a deliberate data/UI boundary, not a claim that
 all motors are one physical point.
 
+## Propellant slosh foundation (F5, open)
+
+`Physics/PropellantSlosh` implements the first lateral cylindrical-tank mode from NASA
+SP-8009/SP-106. Its isolated planar carrier coupling conserves lateral momentum; optional
+internal viscous damping removes energy without an external reaction. The modal mass is
+withdrawn from the same liquid inventory rather than added to vehicle mass. Registered
+analytic limits and an AS-501 probe-frequency comparison cover this foundation.
+
+This kernel has no production modal state, 6-DoF coupling or persistence yet. The design
+in `propellant_slosh.md` specifies locked-inertia preservation, one mass for both lateral
+coordinates, variable-fill momentum balance and source-backed per-tank damping before
+activation. Flight trajectories continue to use F4 settled columns.
+
 ## Thermal, structural and contact physics
 
 - Reentry heating is driven by atmospheric density, speed and a Sutton–Graves-style stagnation

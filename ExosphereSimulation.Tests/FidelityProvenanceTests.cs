@@ -27,6 +27,8 @@ public sealed class FidelityProvenanceTests
         { "starship-flight14-orbital-ignition", "maximumIgnitionPointingErrorDegrees", Flight14OrbitalBurn.MaximumIgnitionPointingErrorDegrees },
         { "starship-flight14-orbital-ignition", "maximumIgnitionAngularRateRadPerS", Flight14OrbitalBurn.MaximumIgnitionAngularRateRadPerS },
         { "starship-flight14-orbital-ignition", "maximumBurnAngularRateRadPerS", Flight14OrbitalBurn.MaximumBurnAngularRateRadPerS },
+        { "propellant-slosh-cylinder", "firstModeRoot", PropellantSlosh.FirstModeRoot },
+        { "propellant-slosh-cylinder", "shallowSeriesLimit", PropellantSlosh.ShallowSeriesLimit },
         { "rigid-body-coasting-integrator", "scaledOrientationErrorRatePerS", CoastingAttitudeIntegrator.ScaledOrientationErrorRatePerS },
         { "rigid-body-coasting-integrator", "angularRateErrorRatePerS", CoastingAttitudeIntegrator.AngularRateErrorRatePerS },
         { "rigid-body-coasting-integrator", "maximumTrialRotationRad", CoastingAttitudeIntegrator.MaximumTrialRotationRad },
@@ -123,6 +125,39 @@ public sealed class FidelityProvenanceTests
         {
             data.Delete(recursive: true);
         }
+    }
+
+    [Fact]
+    public void SloshReferenceRetainsTheMeasuredRangeAndItsRegisteredUncertainty()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(Root.FullName,
+            "data", "flight_profiles", "saturn_as501_slosh_reference.json")));
+        var data = document.RootElement;
+        string id = data.GetProperty("id").GetString()!;
+        var registry = Registry();
+        registry.Require(id, "frequencyCurve");
+        foreach (var (jsonField, provenanceField) in new[]
+        {
+            ("relative_comparison_tolerance", "relativeComparisonTolerance"),
+            ("graph_reading_uncertainty_hz", "graphReadingUncertaintyHz"),
+            ("time_reading_uncertainty_s", "timeReadingUncertaintyS"),
+        })
+            Assert.Equal(registry.Require(id, provenanceField).Value!.Value, data.GetProperty(jsonField).GetDouble());
+        double previous = -1;
+        var times = new List<double>();
+        foreach (var row in data.GetProperty("samples").EnumerateArray())
+        {
+            double time = row.GetProperty("range_time_s").GetDouble();
+            Assert.True(double.IsFinite(time) && time > previous);
+            foreach (string field in new[] { "lox_hz", "fuel_hz" })
+            {
+                double frequency = row.GetProperty(field).GetDouble();
+                Assert.True(double.IsFinite(frequency) && frequency > 0);
+            }
+            times.Add(time); previous = time;
+        }
+        Assert.True(times.Count >= 4);
+        Assert.Contains(130.0, times); // Keep the late falling measured branch in the gate.
     }
 
     private static DirectoryInfo FindRepoRoot()

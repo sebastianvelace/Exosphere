@@ -21,6 +21,8 @@ public static class PropellantSlosh
 {
     /// <summary>First zero of the Bessel derivative J₁′ (first antisymmetric mode).</summary>
     public const double FirstModeRoot = 1.8411837813406593;
+    /// <summary>Numerical series boundary, not a physical tank calibration.</summary>
+    public const double ShallowSeriesLimit = 0.001;
 
     public static SloshModeParameters FirstMode(double radiusM, double depthM, double liquidMassKg,
         double axialSpecificForceMps2)
@@ -30,21 +32,39 @@ public static class PropellantSlosh
         if (!(liquidMassKg > 0) || !double.IsFinite(liquidMassKg)) throw new ArgumentOutOfRangeException(nameof(liquidMassKg));
         if (!double.IsFinite(axialSpecificForceMps2)) throw new ArgumentOutOfRangeException(nameof(axialSpecificForceMps2));
         const double xi = FirstModeRoot;
-        double depthRatio = depthM / radiusM;
-        double tanh = System.Math.Tanh(xi * depthRatio);
-        double massFraction = 2.0 * tanh / (xi * (xi * xi - 1.0) * depthRatio);
+        double x = xi * (depthM / radiusM);
+        if (!double.IsFinite(x) || x <= 0)
+            throw new ArgumentException("The dimensionless liquid depth is not representable.");
+        double tanh = System.Math.Tanh(x);
+        double massFraction = 2.0 / (xi * xi - 1.0) * (tanh / x);
         double sloshMass = liquidMassKg * massFraction;
         double fixedMass = liquidMassKg - sloshMass;
-        double pendulumLength = radiusM / (xi * tanh);
-        double sloshDepthBelowSurface = 2.0 * radiusM / xi * System.Math.Tanh(xi * depthRatio / 2.0);
-        double sloshHeight = depthM - sloshDepthBelowSurface;
-        // m₀ h₀ + m₁ h₁ = m h/2 (the liquid's own centroid, settled).
-        double fixedHeight = (liquidMassKg * depthM / 2.0 - sloshMass * sloshHeight) / fixedMass;
-        // Settling needs a positive specific force; without it the free surface is unsettled.
+        double pendulumLength = (radiusM / xi) / tanh;
+        double sloshHeight = depthM * OneMinusTanhOverX(x / 2.0);
+        // Normalize the moment equation before multiplication: m*h may overflow even
+        // though both equivalent heights and masses remain representable.
+        double fixedHeight = (depthM / 2.0 - (sloshMass / liquidMassKg) * sloshHeight)
+            / (fixedMass / liquidMassKg);
+        // sqrt(a)/sqrt(L) preserves finite frequencies when a/L would overflow/underflow.
         double frequency = axialSpecificForceMps2 > 0
-            ? System.Math.Sqrt(axialSpecificForceMps2 * xi / radiusM * tanh) : 0.0;
-        return new(frequency, sloshMass, fixedMass, pendulumLength, sloshHeight, fixedHeight,
-            sloshHeight + pendulumLength);
+            ? System.Math.Sqrt(axialSpecificForceMps2) / System.Math.Sqrt(pendulumLength) : 0;
+        double hinge = sloshHeight + pendulumLength;
+        if (!double.IsFinite(sloshMass) || sloshMass <= 0 || fixedMass <= 0
+            || !double.IsFinite(pendulumLength) || pendulumLength <= 0
+            || !double.IsFinite(sloshHeight) || sloshHeight < 0
+            || !double.IsFinite(fixedHeight) || !double.IsFinite(hinge)
+            || !double.IsFinite(frequency) || (axialSpecificForceMps2 > 0 && frequency == 0))
+            throw new ArgumentException("The slosh mode cannot be represented with finite parameters.");
+        return new(frequency, sloshMass, fixedMass, pendulumLength, sloshHeight, fixedHeight, hinge);
+    }
+
+    private static double OneMinusTanhOverX(double x)
+    {
+        if (x >= ShallowSeriesLimit) return 1.0 - System.Math.Tanh(x) / x;
+        double square = x * x;
+        return square * (1.0 / 3.0 + square * (-2.0 / 15.0
+            + square * (17.0 / 315.0 - square * 62.0 / 2835.0)));
+
     }
 }
 
@@ -70,24 +90,53 @@ public static class SloshPendulumCoupling
 {
     /// <summary>Lateral momentum of carrier (mass M, lateral velocity v) plus bob.</summary>
     public static double LateralMomentum(double carrierMassKg, double sloshMassKg, double lengthM,
-        double carrierVelocity, double angle, double angleRate) =>
-        carrierMassKg * carrierVelocity + sloshMassKg * (carrierVelocity + lengthM * angleRate * System.Math.Cos(angle));
+        double carrierVelocity, double angle, double angleRate)
+    {
+        Validate(carrierMassKg, sloshMassKg, lengthM, carrierVelocity, angle, angleRate);
+        double momentum = (carrierMassKg + sloshMassKg) * carrierVelocity
+            + sloshMassKg * (lengthM * (angleRate * System.Math.Cos(angle)));
+        if (!double.IsFinite(momentum)) throw new ArgumentException("The lateral momentum is not representable.");
+        return momentum;
+    }
 
     /// <summary>
-    /// Time derivatives (v̇, θ̈) of the planar carrier-pendulum system with axial specific force a.
-    /// The carrier has no lateral external force; the hinge reaction is internal.
+    /// Time derivatives (v_dot, theta_ddot) with no external lateral force. Optional viscous
+    /// damping acts on the relative angle: it dissipates energy and preserves total momentum.
+    /// Damping ratio is supplied by the caller's tank data; zero is the inviscid limit.
     /// </summary>
     public static (double CarrierAcceleration, double AngularAcceleration) Derivatives(double carrierMassKg,
-        double sloshMassKg, double lengthM, double axialSpecificForce, double angle, double angleRate)
+        double sloshMassKg, double lengthM, double axialSpecificForce, double angle, double angleRate,
+        double dampingRatio = 0)
     {
-        // Lagrangian of M and m₁ with the bob at x = X + L sin θ, settled by a along −y.
+        Validate(carrierMassKg, sloshMassKg, lengthM, 0, angle, angleRate);
+        if (!double.IsFinite(axialSpecificForce) || axialSpecificForce < 0)
+            throw new ArgumentOutOfRangeException(nameof(axialSpecificForce));
+        if (!double.IsFinite(dampingRatio) || dampingRatio < 0)
+            throw new ArgumentOutOfRangeException(nameof(dampingRatio));
         double sin = System.Math.Sin(angle), cos = System.Math.Cos(angle);
         double total = carrierMassKg + sloshMassKg;
-        double denominator = lengthM * (total - sloshMassKg * cos * cos);
-        // Ẍ cos θ + L θ̈ + a sin θ = 0 with (M + m₁) Ẍ = m₁ L (θ̇² sin θ − θ̈ cos θ).
-        double angular = (-total * axialSpecificForce * sin - sloshMassKg * lengthM * angleRate * angleRate * sin * cos)
-            / denominator;
-        double carrier = sloshMassKg * lengthM * (angleRate * angleRate * sin - angular * cos) / total;
+        // M + m*sin²(theta) avoids cancellation in (M+m)-m*cos²(theta).
+        double denominator = carrierMassKg + (sloshMassKg * sin) * sin;
+        double damping = dampingRatio > 0 && angleRate != 0
+            ? 2 * dampingRatio * (System.Math.Sqrt(axialSpecificForce) / System.Math.Sqrt(lengthM)) * angleRate : 0;
+        double drive = axialSpecificForce * sin / lengthM + damping;
+        double centrifugal = (angleRate * sin) * angleRate;
+        double angular = -(drive == 0 ? 0 : (total / denominator) * drive)
+            - (centrifugal == 0 ? 0 : (sloshMassKg / denominator) * centrifugal * cos);
+        double carrier = sloshMassKg / total * lengthM * (centrifugal - angular * cos);
+        if (!double.IsFinite(angular) || !double.IsFinite(carrier))
+            throw new ArgumentException("The pendulum accelerations are not representable.");
         return (carrier, angular);
+    }
+
+    private static void Validate(double carrier, double slosh, double length, double velocity, double angle, double rate)
+    {
+        if (!double.IsFinite(carrier) || carrier <= 0) throw new ArgumentOutOfRangeException(nameof(carrier));
+        if (!double.IsFinite(slosh) || slosh <= 0) throw new ArgumentOutOfRangeException(nameof(slosh));
+        if (!double.IsFinite(carrier + slosh)) throw new ArgumentException("Total mass is not representable.");
+        if (!double.IsFinite(length) || length <= 0) throw new ArgumentOutOfRangeException(nameof(length));
+        if (!double.IsFinite(velocity)) throw new ArgumentOutOfRangeException(nameof(velocity));
+        if (!double.IsFinite(angle)) throw new ArgumentOutOfRangeException(nameof(angle));
+        if (!double.IsFinite(rate)) throw new ArgumentOutOfRangeException(nameof(rate));
     }
 }

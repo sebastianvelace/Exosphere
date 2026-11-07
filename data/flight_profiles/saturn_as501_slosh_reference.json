@@ -1,0 +1,32 @@
+{
+  "id": "saturn-as501-sic-slosh-probes",
+  "source_report": "MPR-SAT-FE-68-1",
+  "source_figure": "11-15, printed page 11-20; measured dotted curves only",
+  "source_url": "https://www.ibiblio.org/apollo/Documents/lvfea-AS501-Apollo4.pdf",
+  "graph_reading_uncertainty_hz": 0.01,
+  "time_reading_uncertainty_s": 1,
+  "relative_comparison_tolerance": 0.1,
+  "comparison_variant": "AS-506, cross-variant cylindrical first-mode comparison; not full AS-501 reconstruction",
+  "samples": [
+    {
+      "range_time_s": 10,
+      "lox_hz": 0.355,
+      "fuel_hz": 0.355
+    },
+    {
+      "range_time_s": 60,
+      "lox_hz": 0.43,
+      "fuel_hz": 0.43
+    },
+    {
+      "range_time_s": 100,
+      "lox_hz": 0.5,
+      "fuel_hz": 0.455
+    },
+    {
+      "range_time_s": 130,
+      "lox_hz": 0.46,
+      "fuel_hz": 0.415
+    }
+  ]
+}

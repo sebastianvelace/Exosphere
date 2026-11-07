@@ -76,12 +76,22 @@ Current continuous evidence: `/tmp/exo-f4-moving-warp-probe.log`,
 `/tmp/exo-f4-final-ocean-targeted.log` and `/tmp/exo-f4-f5-warp-ci.log`.
 Older calibration/probe logs in the worklog predate the latest fragmentation correction.
 
-## Next unit: F5 foundation
+## F5 foundation
 
-The incoming first-mode kernel and uncompiled draft need permanent regression tests,
-source records, registered open gates and an integration design before production slosh.
-Do not count a second copy of the liquid mass or substitute gravity for proper acceleration.
-Full 6-DoF body/modal coupling, damping data and exact modal persistence remain pending.
+Permanent `PropellantSloshTests` replaces the uncompiled draft: 32 cases cover independent
+Bessel root/limits, mass/centroid, isolated nonlinear momentum/energy, free-carrier
+frequency, internal damping, numerical extremes and AS-501 probe frequencies. Historical
+comparison uses reported axial proper acceleration, all four samples including 130 s,
+the measured dotted curves and the original 10% band. Source/uncertainty records and
+the estimates register are installed. Registered F5 gates stay open.
+
+No production modal state, full 6-DoF slosh coupling or modal persistence exists yet.
+`docs/physics/propellant_slosh.md` defines the next implementation unit: a fixed-fill
+6-DoF oracle with one modal mass/two coordinates per tank, locked-inertia identity,
+positive generalized kinetic matrix and independent momentum/energy verification.
+Then add source-backed damping, funded variable-fill terms, nonsettling/coast regimes,
+topology and exact save/load. Do not duplicate liquid mass, invent 1 g in free fall or
+count an inertial reaction twice. F6 historical recalibration/geometry gaps follow F5.
 
 See `docs/physics/f4_completion_worklog.md` for the investigation history and
 `docs/physics/fidelity_gates.md` for authoritative phase status.

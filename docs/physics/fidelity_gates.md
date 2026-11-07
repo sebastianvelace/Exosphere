@@ -22,7 +22,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F2 | closed | Physical body flaps on measured crossflow drag (Flight 14 descent and belly-flop speed) |
 | F3 | closed | Actuator-only attitude control, declared catalog RCS, exact Flight 14 checkpoint and historical descent; full CI 1259/1259 |
 | F4 | closed | Variable-mass transport (shared mass geometry, settled tank columns, outlets, momentum-conserving flow cuts) on the coupled path; tidal moments; AS-506 S-IC jet-damping historical gate |
-| F5 | planned | Propellant slosh |
+| F5 | open | First cylindrical slosh mode and isolated carrier coupling verified; production modal states, damping data and full 6-DoF coupling pending |
 | F6 | planned | Historical recalibration of every profile |
 
 ## Gates
@@ -84,6 +84,13 @@ with `bash tools/fidelity_gate.sh F1`.
 | F4 | analytic | `OpenSystemTransportTests.ABurnFollowsTheRocketEquationWithItsFeedImpulses` | rocket equation and momentum-conserving feed impulses |
 | F4 | analytic | `OpenSystemTransportTests.JetDampingFollowsTheIndependentOpenSystemRotationLaw` | production jet damping against an independent integration |
 | F4 | historical | `SaturnVJetDampingHistoricalTests.As506SicJetDampingMatchesTheFlightReconstructedMassHistory` | AS-506 S-IC jet damping (J_out, İ) from flight-reconstructed mass characteristics and F-1 flowrates (MPR-SAT-FE-69-9) |
+| F5 | analytic | `PropellantSloshTests.TheModeRootIsTheFirstZeroOfTheBesselDerivative` | independently evaluated J1 derivative root |
+| F5 | analytic | `PropellantSloshTests.TheModelKeepsTheColumnsMassAndCentre` | one store mass split, unchanged liquid centroid and pendulum frequency |
+| F5 | analytic | `PropellantSloshTests.DeepAndShallowLimitsMatchTheirClosedForms` | deep/shallow cylindrical first-mode limits |
+| F5 | analytic | `PropellantSloshTests.ACoupledPendulumConservesMomentumAndEnergy` | nonlinear isolated planar carrier-pendulum conservation |
+| F5 | analytic | `PropellantSloshTests.ACoupledPendulumRunsAtTheFreeFreeFrequency` | free-carrier frequency shift |
+| F5 | analytic | `PropellantSloshTests.InternalDampingRemovesEnergyWithoutChangingMomentum` | internal viscous damping removes energy, preserves momentum |
+| F5 | historical | `PropellantSloshTests.As506SicSloshFollowsTheAs501MeasuredFrequencies` | AS-506 cylindrical frequencies vs AS-501 dotted probe curves at 10/60/100/130 s; 10 percent cross-variant comparison band, not amplitude/damping validation |
 
 F3 regression coverage also includes `Flight14EntryCheckpointTests` (exact 60-second
 continuation), `AttitudeActuatorBlendingTests` (shutdown trim, coupled bank reversal,

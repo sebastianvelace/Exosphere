@@ -1,0 +1,90 @@
+{
+  "manifestId": "propellant-slosh-f5-2026",
+  "records": [
+    {
+      "dataId": "propellant-slosh-cylinder",
+      "field": "firstModeRoot",
+      "status": "derived",
+      "source": "NASA SP-8009 (1968), table I, printed p. 12; https://ntrs.nasa.gov/api/citations/19690005221/downloads/19690005221.pdf; NASA SP-106 (1966), chapter 6, https://ntrs.nasa.gov/api/citations/19670006555/downloads/19670006555.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "F5 first lateral cylindrical slosh mode",
+      "conditions": "Numerically evaluated first positive zero of J1 derivative; the SP-8009 table rounds it to 1.841.",
+      "uncertainty": "Numerical root precision below 1e-15; not a vehicle calibration.",
+      "value": 1.8411837813406593
+    },
+    {
+      "dataId": "propellant-slosh-cylinder",
+      "field": "shallowSeriesLimit",
+      "status": "derived",
+      "source": "Taylor series of 1-tanh(x)/x through x^8, evaluated by Horner form.",
+      "accessedDate": "2026-11-06",
+      "variant": "F5 first lateral cylindrical slosh mode",
+      "conditions": "Use the series below this dimensionless half-depth argument to avoid subtracting nearly equal values.",
+      "uncertainty": "First omitted term is O(x^10); below 0.001 its truncation error is below 1e-30; floating-point roundoff remains. This is an arithmetic branch, not a physical threshold.",
+      "value": 0.001
+    },
+    {
+      "dataId": "propellant-slosh-cylinder",
+      "field": "firstModeModel",
+      "status": "derived",
+      "source": "NASA SP-8009 (1968), table I, printed p. 12; https://ntrs.nasa.gov/api/citations/19690005221/downloads/19690005221.pdf; NASA SP-106 (1966), chapter 6, https://ntrs.nasa.gov/api/citations/19670006555/downloads/19670006555.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "F5 first lateral cylindrical slosh mode",
+      "conditions": "Inviscid first-mode mass fraction, mass station below the free surface, pendulum length and natural frequency. m0=m-m1; fixed height preserves the liquid centroid. Axial acceleration is specific force, not gravitational acceleration.",
+      "uncertainty": "Small amplitudes and a settled cylindrical free surface. Excludes nonlinear waves, dome geometry, higher modes and the effects of baffles on inertial parameters. Not a production 6-DoF coupling certificate."
+    },
+    {
+      "dataId": "propellant-slosh-cylinder",
+      "field": "internalDampingConvention",
+      "status": "derived",
+      "source": "NASA SP-8009 (1968), table I, printed p. 12; https://ntrs.nasa.gov/api/citations/19690005221/downloads/19690005221.pdf; NASA SP-106 (1966), chapter 6, https://ntrs.nasa.gov/api/citations/19670006555/downloads/19670006555.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "F5 first lateral cylindrical slosh mode",
+      "conditions": "Equivalent viscous damping c=2*zeta*m1*omega1, or c_theta=2*zeta*m1*L1^2*omega1. The caller supplies zeta; default zero is inviscid. Carrier reaction is part of the coupled equations.",
+      "uncertainty": "A linear equivalent for a specified tank condition; no universal damping ratio is assigned. Tank/baffle damping data and amplitude dependence are still required before production activation."
+    },
+    {
+      "dataId": "saturn-as501-sic-slosh-probes",
+      "field": "frequencyCurve",
+      "status": "derived",
+      "source": "NASA MSFC, MPR-SAT-FE-68-1, AS-501 flight evaluation report, figure 11-15, printed p. 11-20 (PDF p. 282); https://www.ibiblio.org/apollo/Documents/lvfea-AS501-Apollo4.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "F5 first lateral cylindrical slosh mode",
+      "conditions": "Digitized measured dotted S-IC probe curves in data/flight_profiles/saturn_as501_slosh_reference.json at 10, 60, 100 and 130 s. Solid prediction curves are excluded. In particular the measured LOX curve falls to about 0.46 Hz at 130 s.",
+      "uncertainty": "Graph reading about +/-0.01 Hz and +/-1 s. These are approximate values read from the report, not a raw telemetry dataset."
+    },
+    {
+      "dataId": "saturn-as501-sic-slosh-probes",
+      "field": "relativeComparisonTolerance",
+      "status": "estimated",
+      "source": "NASA MSFC, MPR-SAT-FE-68-1, AS-501 flight evaluation report, figure 11-15, printed p. 11-20 (PDF p. 282); https://www.ibiblio.org/apollo/Documents/lvfea-AS501-Apollo4.pdf; inherited F5 draft cross-variant comparison envelope.",
+      "accessedDate": "2026-11-06",
+      "variant": "F5 first lateral cylindrical slosh mode",
+      "conditions": "Compare the AS-506 simulation with AS-501 frequencies using a 10 percent band, covering the digitization, variant and cylindrical-model differences.",
+      "uncertainty": "Engineering comparison envelope, not experimental measurement accuracy. Does not establish amplitude/damping or validate full AS-501 reconstruction. No historical mission acceptance tolerance is changed.",
+      "value": 0.1
+    },
+    {
+      "dataId": "saturn-as501-sic-slosh-probes",
+      "field": "graphReadingUncertaintyHz",
+      "status": "estimated",
+      "source": "NASA MSFC, MPR-SAT-FE-68-1, AS-501 flight evaluation report, figure 11-15, printed p. 11-20 (PDF p. 282); https://www.ibiblio.org/apollo/Documents/lvfea-AS501-Apollo4.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "F5 first lateral cylindrical slosh mode",
+      "conditions": "Approximate frequency reading uncertainty of the measured dotted traces; plot minor grid spacing is 0.05 Hz.",
+      "uncertainty": "About one fifth of a minor-grid interval; scan thickness and overlap limit precision.",
+      "value": 0.01
+    },
+    {
+      "dataId": "saturn-as501-sic-slosh-probes",
+      "field": "timeReadingUncertaintyS",
+      "status": "estimated",
+      "source": "NASA MSFC, MPR-SAT-FE-68-1, AS-501 flight evaluation report, figure 11-15, printed p. 11-20 (PDF p. 282); https://www.ibiblio.org/apollo/Documents/lvfea-AS501-Apollo4.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "F5 first lateral cylindrical slosh mode",
+      "conditions": "Approximate time reading uncertainty at the digitized sample positions.",
+      "uncertainty": "About one tenth of a 10 second minor-grid interval.",
+      "value": 1.0
+    }
+  ]
+}
