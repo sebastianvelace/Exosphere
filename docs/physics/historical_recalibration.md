@@ -42,6 +42,44 @@ resource modes. Headers, solid propellant and uniform fallback stores receive no
 free surface. The matrix report lists this coverage per source part/resource so a catalogue
 test cannot silently certify liquid dynamics on the other vehicles.
 
+## MR-3 propellant identity correction
+
+The A-7 engine and its cluster feed now identify the fuel as ethyl alcohol/water, with
+LOX as oxidizer. [NASA TM X-53107](https://ntrs.nasa.gov/api/citations/19670028606/downloads/19670028606.pdf),
+section 3, printed p. 3-2 (PDF p. 28), explicitly describes selecting alcohol for
+Mercury-Redstone. The original scan was inspected. [NASA's Redstone history](https://www.nasa.gov/history/70-years-ago-first-redstone-launch-from-cape-canaveral/)
+describes the mixture as 75 percent ethyl alcohol and 25 percent water, without specifying
+the percentage basis. The catalogue does not infer density or thermochemistry from that
+statement. The [2016 NASA vehicle summary](https://www.nasa.gov/history/mercury-redstone-launch-vehicle/)
+labels the fuel LOX/RP-1; that summary conflicts with the original program report and is
+the source of the former catalogue label. The original report takes precedence.
+
+This correction leaves the separately estimated Isp, mixture ratio and tank loads at their
+existing values. Production stores carry fuel mass in kg, not a species-dependent volume;
+renaming both engine and feed preserves the same funded mass-flow calculation. The existing
+Freedom 7 launch-to-splashdown regression retains its original acceptance limits and now
+writes its numeric observations to the audit TRX on success, as well as on failure.
+This closes the fuel-identity defect only; it does not validate all MR-3 mass allocations.
+
+After the correction, the complete profile audit passes 50/50 cases over the same nine
+profiles, with no skips or missing selectors. New evidence is retained in
+`/tmp/exo-f6-profile-redstone/report.json` and `profiles.trx`; `--verify-only` confirms the
+current source/data/test identities. The earlier F5-production report remains a separate
+baseline and is not relabelled as current evidence after the input hashes change.
+The complete CI for this unit also passes: 1,588/1,588 tests, no skips, four builds with
+zero warnings/errors, flight startup and Godot main/VAB/graphics checks. Its successful
+log is `/tmp/exo-f6-redstone-ci-retry.log` with exit artifact 0; the earlier SIGTERM
+interruption is not acceptance evidence.
+
+The corrected-data Freedom 7 run passes 6/6 tests. Its retained launch-to-splashdown
+observations are 185.279 km apogee, 452.963 km maximum ground range and 911.1 s duration.
+Against NASA SP-4012 volume II, Table 2-30 (187.42 km, 487.26 km and 922 s), the residuals
+are -2.141 km, -34.297 km and -10.9 s. The test computes altitude at the vessel datum and
+ground range from body-fixed directions times the mean Earth radius; these definitions
+are retained rather than claiming an exact historical ellipsoidal ground-track match.
+Peak model inertial speed is 2,236.7 m/s and peak proper load 12.61 g. Original gates pass;
+the range deficit and approximate component/aerodynamic allocations remain visible F6 work.
+
 ## MA-6 mass-definition defect
 
 The [NASA MA-6 results report](https://www.nasa.gov/wp-content/uploads/2026/01/ma06-tec.pdf),
@@ -69,6 +107,51 @@ unverified booster/tank allocations and cross-variant ratings have not been adop
 The permanent probe records the current discrepancy; it does not change the catalogue or
 claim that this source defect has already been corrected.
 
+### Located Atlas preflight ledger
+
+The original [Detailed Test Objectives for NASA Mission MA-6](https://prdownloads.sourceforge.net/mscorbaddon/Mercury_AtlasTestObjectives.pdf?download=),
+TOR-930(2101)-3, 10 November 1961, Appendix B (PDF pp. 89-92), was downloaded and the
+scanned tables inspected. Its cover bears the later declassification marking. It provides
+a coherent **preflight simulation**, not a measured postflight reconstruction:
+
+| Quantity | Original preflight value | SI conversion |
+| --- | --- | --- |
+| Liftoff vehicle mass | 260,131 lb | 117,993.437 kg |
+| Available LOX / fuel | 168,714 / 73,502 lb | 76,527.383 / 33,339.946 kg |
+| Jettisoned booster / tower | 7,100 / 1,064 lb | 3,220.506 / 482.622 kg |
+| Capsule at separation | 2,951 lb, including 40 lb growth allowance | 1,338.551 kg |
+| Liftoff total thrust / flow | 366,172 lbf / 1,497 lb/s | 1,628,814.205 N / 679.028 kg/s |
+| Booster / sustainer sea-level Isp | 252 / 217 s | Source heading is propulsion system MA-5 |
+| Booster mixture ratio | 2.273 | Source value, not the current 2.25 assumption |
+| Ignition to liftoff | 5.00 s | Loading and trajectory epochs must be kept distinct |
+| BECO | 131.3 s; 207,347 ft; 10,343 ft/s; 64,365 lb | 63.199 km; 3,152.546 m/s; 29,195.473 kg |
+| Booster / tower jettison | 134.1 / 154.1 s | BECO and booster jettison are separate events |
+| SECO / VECO | 303.8 s; 528,427 ft; 25,695 ft/s; 10,465 lb | 161.065 km; 7,831.836 m/s; 4,746.844 kg |
+
+Appendix B gives first-stage pitch rates (deg/s): 0 through 15 s; 0.96 from 15-27 s;
+0.76 from 27-39 s; 0.64 from 39-64 s; 0.72 from 64-79 s; 0.68 from 79-89 s;
+0.40 from 89-105 s; 0.28 from 105-120 s; 0.24 thereafter to staging. Its second-stage
+open-loop turn is 2 deg/s from BECO+5 to BECO+24, before closed-loop guidance. These
+are rates in the original program's frame, not elevations above the moving geodetic
+horizon. Copying their integrated angles into the existing elevation API would change
+their meaning. The source's flight-path convention also has 90 degrees at horizontal
+insertion; it must not be confused with the usual zero-degree flight-path angle.
+
+The published [NASA MA-6 results report](https://www.nasa.gov/wp-content/uploads/2026/01/ma06-tec.pdf),
+Table 6-I, printed p. 71 (PDF p. 74), lists cutoff altitude 528,381 ft (161.051 km),
+speed 25,730 ft/s (7,842.504 m/s), and flight-path angle -0.047 degrees; its Table 6-II
+distinguishes planned from actual event times. The current profile comment's
+82.6 km / 2.00 km/s BECO and 185.8 km cutoff figures are not supported by these
+tables. Preserve original acceptance limits while replacing those unsourced anchors
+with explicit preflight/measured quantities during the native reconstruction.
+
+The archival [MA6 technical-report scan](https://prdownloads.sourceforge.net/mscorbaddon/MA6_TechnicalReport.pdf?download=)
+is a 126-page proposed/review memorandum, not the final NASA TM X-563. Its PDF p. 17
+independently lists 4,265.26 lb at launch and 2,986.78 lb in orbit, consistent with the
+rounded published mass ledger above. Its draft status and preliminary landing time must
+remain visible; it must not silently supersede the published results. Both scans are
+image-only: `pdftotext` returning form feeds does not mean their tables are empty.
+
 ## AS-506 remaining mass-property residual
 
 [MPR-SAT-FE-69-9](https://www.ibiblio.org/apollo/Documents/lvfea-AS506-Apollo11.pdf),
@@ -84,6 +167,12 @@ One aggregate CG constraint does not identify separate CM/SM/LM/SLA/LES stations
 inertia tensors. Shifting every module until that one number agrees would not establish
 physical component geometry. Component stations, the estimated S-II/S-IVB equivalent tank
 locations, high-altitude F-1 flow and the separate AS-503 geometry remain source-data work.
+
+Subsequent primary-source work independently identifies a 3.453503 m error at the CM aft
+interface and derives additional phase mass-property constraints. The read-only geometry
+experiment reduces the aggregate error without changing component masses. See the
+[AS-506 reconstruction worksheet](as506_spacecraft_reconstruction.md) for source frames,
+the measured/postflight table, numerical subtractions and remaining adoption checks.
 
 ## Modern public envelopes
 
@@ -132,5 +221,6 @@ at 640x360; the physical scheduler and guidance were unchanged.
 
 The Falcon/New Glenn engineering probe also passes all three 30 s climbs. It reports the
 source/current spacecraft mass residuals above and explicitly sets historical calibration
-complete to false. The old Mercury tests do not log numeric success-state residuals; their
-pass result must not be promoted to a new measured residual in this table.
+complete to false. The original Mercury snapshot did not log numeric success-state residuals; its
+pass result must not be promoted to a measured residual. Subsequent MR-3 runs now retain
+their numeric observations, as documented above.
