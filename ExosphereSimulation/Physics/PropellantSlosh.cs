@@ -17,7 +17,7 @@ namespace Exosphere.Simulation.Physics;
 /// Inviscid potential flow, small amplitudes and a settled free surface are assumed; baffles
 /// change the damping, not these inertial parameters (SP-106 §6.9).
 /// </summary>
-public static class PropellantSlosh
+public static partial class PropellantSlosh
 {
     /// <summary>First zero of the Bessel derivative J₁′ (first antisymmetric mode).</summary>
     public const double FirstModeRoot = 1.8411837813406593;

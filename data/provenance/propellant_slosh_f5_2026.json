@@ -85,6 +85,27 @@
       "conditions": "Approximate time reading uncertainty at the digitized sample positions.",
       "uncertainty": "About one tenth of a 10 second minor-grid interval.",
       "value": 1.0
+    },
+    {
+      "dataId": "propellant-slosh-sixdof",
+      "field": "normalizedPivotBudgetPerDimension",
+      "status": "estimated",
+      "source": "Numerical conditioning policy for the diagonally scaled Cholesky solve in Slosh6DofDynamics; 64 times binary64 machine epsilon per generalized dimension. Independent Newton/Euler conservation, free-fall and free-carrier tests constrain its supported domain.",
+      "accessedDate": "2026-11-06",
+      "variant": "Constant-fill rigid-carrier and two-coordinate spherical first-mode model",
+      "conditions": "The normalized pivot must exceed n times this budget; matrix asymmetry above the same budget is rejected. Diagonal scaling changes units, not kinetic energy. No eigenvalue clipping, artificial inertia or physical damping is introduced.",
+      "uncertainty": "Numerical representability policy rather than a hardware parameter. An indefinite or numerically singular complete kinetic matrix is outside the supported domain even if the locked 3-by-3 inertia is positive.",
+      "value": 1.4210854715202004e-14
+    },
+    {
+      "dataId": "propellant-slosh-cylinder",
+      "field": "timeVaryingParameterDerivatives",
+      "status": "derived",
+      "source": "Analytic derivatives of NASA SP-8009 Table I coefficients, https://ntrs.nasa.gov/api/citations/19690005221/downloads/19690005221.pdf ; variable-fill mechanical parameters discussed in NASA 20120010782, https://ntrs.nasa.gov/api/citations/20120010782/downloads/20120010782.pdf",
+      "accessedDate": "2026-11-06",
+      "variant": "Smooth one-sided funded-mass intervals in an equivalent flat-bottomed cylinder",
+      "conditions": "With lambda=rho*pi*R^2, beta=xi/(lambda*R), the modal mass is 2*tanh(beta*m)/((xi^2-1)*beta), inverse length is xi/R*tanh(beta*m), and the equilibrium station is the SP-8009 value. First and second time derivatives use the same supplied m, m_dot and m_ddot. Inverse length and mass have finite zero-mass one-sided limits; no infinite length is constructed.",
+      "uncertainty": "Exact derivatives of the declared coefficient approximation, not validation of a coupled draining-fluid force law. The cited 2012 study explicitly notes limited validation of pendulum models for draining tanks. Flow cuts, regime transitions and momentum transfer still belong to the production adapter."
     }
   ]
 }

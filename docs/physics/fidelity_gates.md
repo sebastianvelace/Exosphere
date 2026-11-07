@@ -22,7 +22,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F2 | closed | Physical body flaps on measured crossflow drag (Flight 14 descent and belly-flop speed) |
 | F3 | closed | Actuator-only attitude control, declared catalog RCS, exact Flight 14 checkpoint and historical descent; full CI 1259/1259 |
 | F4 | closed | Variable-mass transport (shared mass geometry, settled tank columns, outlets, momentum-conserving flow cuts) on the coupled path; tidal moments; AS-506 S-IC jet-damping historical gate |
-| F5 | open | First cylindrical slosh mode and isolated carrier coupling verified; production modal states, damping data and full 6-DoF coupling pending |
+| F5 | open | Cylindrical coefficients, full 6-DoF/modal RK4 and funded Reynolds balance verified; production activation, damping data, persistence and topology pending |
 | F6 | planned | Historical recalibration of every profile |
 
 ## Gates
@@ -99,3 +99,11 @@ restored authority and low-pressure handoff), `ReactionControlCatalogTests` (fin
 three-axis authority and mass accounting) and the unchanged Flight 14 historical descent gate.
 Full validation: `bash tools/ci_check.sh`, 1259/1259 tests, three builds at 0 warnings /
 0 errors, Godot startup/scene smoke tests and the graphics capture/reload check.
+
+| F5 | analytic | `Slosh6DofDynamicsTests.ZeroDisplacementRetainsTheLockedMassCentroidAndFullTensorExactly` | full locked mass, centroid and tensor identity |
+| F5 | analytic | `Slosh6DofDynamicsTests.AUniformGravitationalFieldDoesNotRestoreSloshInFreeFall` | uniform-field free fall has no invented restoring acceleration |
+| F5 | analytic | `Slosh6DofDynamicsTests.PositiveLockedInertiaDoesNotHideAnIndefiniteCoupledKineticMatrix` | complete generalized kinetic matrix positivity |
+| F5 | analytic | `Slosh6DofIntegratorTests.CoupledIntegrationConservesIndependentMomentaAcrossTheChartBoundary` | independent 3D P/H/energy through both hemispheres, with internal damping |
+| F5 | analytic | `Slosh6DofIntegratorTests.SmoothIntegrationConvergesAtFourthOrder` | augmented constrained RK4 convergence |
+| F5 | analytic | `Slosh6DofIntegratorTests.IntegratedDrainingMomentaEqualOnlyTheOutletFluxIncludingTheEmptyFlowCut` | independent integrated outlet flux and conservative empty-store retirement |
+| F5 | analytic | `SloshMomentumTransferTests.PrescribedFlowCutsConserveAllSixInertialMomentaWithoutMovingTheHull` | internal parameter/flow handoffs retain P/H and datum pose |

@@ -1,6 +1,8 @@
 # F4 to F5 continuation
 
-Branch: `codex/f5-slosh-foundation`, based on `ea94c64`. No merge to main.
+Published foundation: `codex/f5-slosh-foundation` at `9003d6a`.
+Active continuation: `codex/f5-slosh-production`, based on that verified foundation.
+The user requested completion of F5 and then F6; no merge to main.
 Preserve the pre-existing `.atl/` changes. Author and committer are
 Sebas <sebastianvelace@gmail.com>; conventional commits without attribution trailers.
 
@@ -95,3 +97,79 @@ count an inertial reaction twice. F6 historical recalibration/geometry gaps foll
 
 See `docs/physics/f4_completion_worklog.md` for the investigation history and
 `docs/physics/fidelity_gates.md` for authoritative phase status.
+
+
+## Active production continuation
+
+The fixed-fill coupled Newton/Euler kernel is implemented in
+`ExosphereSimulation/Physics/Slosh6DofDynamics.cs` with independent tests in
+`ExosphereSimulation.Tests/Slosh6DofDynamicsTests.cs`. Initial directed run passes 79
+cases (new 6-DoF kernel, prior first-mode suite and provenance). Matrix positivity,
+exact locked inertia, 3D two-mode momentum/energy, internal damping, free fall and
+free-carrier frequency pass. Numerical conditioning policy is registered and the
+estimates register regenerated. No new production caller, modal persistence, tank damping
+or variable-fill adapter is connected yet; F5 remains open. See the new derivation and
+source review at the end of `docs/physics/propellant_slosh.md`.
+
+Next: validate catalog equilibrium kinetic matrices across fill fractions; review NASA
+AAS 24-012 / SwRI model equivalence; extend the modal state beyond its lower-hemisphere
+chart for nonsettling coast; derive variable-fill transport consistently with F4 rather
+than double-applying inertia or axial torque. Then integrate candidate stages, actual
+specific force/damping, topology and save/load, and run the complete acceptance suite.
+Continue through F6 historical recalibration after F5 is actually closed. Preserve the
+pre-existing .atl changes and keep all work on codex branches. Do not commit before full CI.
+
+
+Further active progress: globally parameterized spherical continuation and analytic
+parameter jets are implemented. The current directed set passes 93 cases, including
+independent 3D conservation across the old chart boundary, parameter time derivatives,
+finite exhaustion limits and real AS-506 equilibrium matrices at full/half/1% fill.
+Starship V3 has no declared `propellant_tanks`; provisional nonempty-mode test cases failed
+for absent geometry, not negative kinetic energy. This gap is documented rather than
+inventing tank stations. Production data/adapter work remains.
+
+The new parameter-transport/datum-wrench derivation is appended to `propellant_slosh.md`.
+Implement and independently test it next, then wire the production modal state, actual
+forces, finite/coast regimes, damping and exact persistence/topology. The current source
+is uncommitted on codex/f5-slosh-production; complete CI is required before committing.
+Main and .atl remain untouched. The user's goal is to finish F5 and F6, not stop at this
+new kernel milestone. No memory tools may be used until runtime identity registration is
+restored by the host hook; do not invent or start a session identity.
+
+
+Latest active milestone: 100 directed cases pass in `/tmp/exo-f5-combined-reynolds.log`.
+Implemented new `SloshTransportCorrection`, `SloshVariableMassDynamics` and shared
+`SloshKineticSystem`; scheduled modal momentum/inertia derivatives and independent net
+outlet-flux balance pass, including a true zero-modal-mass kinematic limit. The generic
+curvature/displacement state constraint and planned production representation are recorded
+at the end of `propellant_slosh.md`. Implement that state/integrator and then the Universe,
+persistence/topology and damping/data adapters. These remain uncommitted and unactivated.
+The user's request remains completion through F5 and F6; do not stop at this kernel milestone.
+
+
+Latest implementation: global `SloshDisplacementState`, `Slosh6DofIntegrator`, and
+`SloshMomentumTransfer` are implemented. Directed validation passed 129 cases in
+`/tmp/exo-f5-conservative-empty-flow.log`, including independent integrated outlet P/H
+through exhaustion. That test exposed and fixed the F4 zero-length column-path derivative
+bug in `OpenSystemTransport.Sample`; old source showed residuals proportional to dt
+(3e-5, 1.5e-5, 7.5e-6 kg m/s for 500/1000/2000 steps), corrected source passes 1e-7.
+A dedicated F4 gate is registered; selected new F5 analytic gates are now registered too.
+No production activation has changed yet. Next: production store-owned state, rate-cut
+metadata, Universe/force/rails integration, source/provenance damping and tank geometry,
+persistence/splits/docking, full mission acceptance, then F6 recalibration. Do not close
+F5 or stop at the new pure-kernel milestone.
+
+
+Complete CI for the pure-kernel unit is now green (2026-11-07): 1559/1559 tests,
+0 skipped, three builds 0 warnings/0 errors, static contracts and Godot startup/menu/graphics.
+Log `/tmp/exo-f5-coupled-kernel-ci.log`; `/tmp/exo-f5-coupled-kernel-ci.exit` is 0.
+
+Production continuation is being developed and tested in an isolated source copy at
+`/tmp/exo-f5-runtime-sandbox` to keep the completed CI inputs stable. Its 26 directed tests
+pass for production P/H/energy conservation, funding/exhaustion, Save V2 exact continuation
+across a flow stop, invalid save rejection and old-save compatibility. The new Universe
+path, per-store state, tank-frame transforms, optional persistence, and partial coast wiring
+compile there. Kepler/deferred coast tests, topology impulses/docking, damping/provenance,
+full mission validation and F6 remain. Incorporate the isolated changes only after the
+kernel checkpoint is committed; compare against `/tmp/exo-f5-runtime-sandbox-base-hashes.json`
+and preserve unrelated edits. The isolated tree is not yet production-verified or published.

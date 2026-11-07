@@ -8,8 +8,8 @@ provenance record is upgraded to `published` with a cited source.
 | Status | Records |
 | --- | ---: |
 | calibrated | 52 |
-| estimated | 232 |
-| derived | 113 |
+| estimated | 233 |
+| derived | 114 |
 | regulatory_envelope | 5 |
 | published | 117 |
 
@@ -211,6 +211,7 @@ provenance record is upgraded to `published` with a cited source.
 | newglenn_second_stage_tank | mass_dry |  | ±35%; not published | Simulator upper-stage structural allocation | newglenn_7x2_public_2026.json |
 | newglenn_second_stage_tank | propellant_mass |  | ±20%; loading is not published | Published GS2 envelope and simulator performance calibration | newglenn_7x2_public_2026.json |
 | newglenn_second_stage_tank | rcsThrusters |  | Number/nozzle directions and stations are reconstructed where unpublished; thrust ±50%, Isp ±20%, usable store ±50%, station ±0.5 m (Falcon/Agena) or ±2 m (New Glenn). No exact flight-calibration claim. | Blue Origin New Glenn Payload User's Guide Rev C (October 2018), section 1.2.2 p. 17: GS2 RCS/settling thrusters at four stations on the thrust structure (publisher document mirrored at https://yellowdragonblog.com/wp-content/uploads/2019/01/new_glenn_payload_users_guide_rev_c.pdf); Dave Limp forward-module RCS validation statement, August 7 2024 (https://twitter.com/davill/status/1821197642766151716). The published architecture does not specify thrust, Isp or usable load. | reaction_control_2026.json |
+| propellant-slosh-sixdof | normalizedPivotBudgetPerDimension | 1.42109e-14 | Numerical representability policy rather than a hardware parameter. An indefinite or numerically singular complete kinetic matrix is outside the supported domain even if the locked 3-by-3 inertia is positive. | Numerical conditioning policy for the diagonally scaled Cholesky solve in Slosh6DofDynamics; 64 times binary64 machine epsilon per generalized dimension. Independent Newton/Euler conservation, free-fall and free-carrier tests constrain its supported domain. | propellant_slosh_f5_2026.json |
 | raptor2-starship-sl-flight7 | gimbalEnvelope |  | ±2 degrees; rates unpublished | Public Starship engine-layout observations | starship_flight7_block2_2025.json |
 | raptor2-starship-sl-flight7 | minimumThrottle |  | ±10 percentage points | Public Raptor 2 engineering reporting | starship_flight7_block2_2025.json |
 | raptor2-starship-sl-flight7 | ratedThrustSeaLevelN |  | ±10%; acceptance thrust unpublished | Exosphere Flight 7 engineering allocation | starship_flight7_block2_2025.json |
@@ -386,6 +387,7 @@ provenance record is upgraded to `published` with a cited source.
 | propellant-slosh-cylinder | firstModeRoot | 1.84118 | Numerical root precision below 1e-15; not a vehicle calibration. | NASA SP-8009 (1968), table I, printed p. 12; https://ntrs.nasa.gov/api/citations/19690005221/downloads/19690005221.pdf; NASA SP-106 (1966), chapter 6, https://ntrs.nasa.gov/api/citations/19670006555/downloads/19670006555.pdf | propellant_slosh_f5_2026.json |
 | propellant-slosh-cylinder | internalDampingConvention |  | A linear equivalent for a specified tank condition; no universal damping ratio is assigned. Tank/baffle damping data and amplitude dependence are still required before production activation. | NASA SP-8009 (1968), table I, printed p. 12; https://ntrs.nasa.gov/api/citations/19690005221/downloads/19690005221.pdf; NASA SP-106 (1966), chapter 6, https://ntrs.nasa.gov/api/citations/19670006555/downloads/19670006555.pdf | propellant_slosh_f5_2026.json |
 | propellant-slosh-cylinder | shallowSeriesLimit | 0.001 | First omitted term is O(x^10); below 0.001 its truncation error is below 1e-30; floating-point roundoff remains. This is an arithmetic branch, not a physical threshold. | Taylor series of 1-tanh(x)/x through x^8, evaluated by Horner form. | propellant_slosh_f5_2026.json |
+| propellant-slosh-cylinder | timeVaryingParameterDerivatives |  | Exact derivatives of the declared coefficient approximation, not validation of a coupled draining-fluid force law. The cited 2012 study explicitly notes limited validation of pendulum models for draining tanks. Flow cuts, regime transitions and momentum transfer still belong to the production adapter. | Analytic derivatives of NASA SP-8009 Table I coefficients, https://ntrs.nasa.gov/api/citations/19690005221/downloads/19690005221.pdf ; variable-fill mechanical parameters discussed in NASA 20120010782, https://ntrs.nasa.gov/api/citations/20120010782/downloads/20120010782.pdf | propellant_slosh_f5_2026.json |
 | raptor2-starship-sl-flight7 | specificImpulseSeaLevelS |  | inherits the rated-point uncertainties; not an independent measurement | Exosphere mass-flow closure on ratedThrustSeaLevelN, ratedThrustVacuumN and specificImpulseVacuumS | starship_flight7_block2_2025.json |
 | raptor2-starship-vac-flight7 | specificImpulseSeaLevelS |  | non-operational condition; the implied nozzle exit area (5.76 m2) is an unverified back-pressure anchor | Exosphere mass-flow closure on ratedThrustSeaLevelN, ratedThrustVacuumN and specificImpulseVacuumS | starship_flight7_block2_2025.json |
 | raptor2-superheavy-flight7 | specificImpulseSeaLevelS |  | inherits the rated-point uncertainties; not an independent measurement | Exosphere mass-flow closure on ratedThrustSeaLevelN, ratedThrustVacuumN and specificImpulseVacuumS | starship_flight7_block2_2025.json |

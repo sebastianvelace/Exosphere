@@ -23,6 +23,7 @@ public sealed class FidelityProvenanceTests
 
     public static TheoryData<string, string, double> CodeConstants() => new()
     {
+        { "propellant-slosh-sixdof", "normalizedPivotBudgetPerDimension", Slosh6DofDynamics.NormalizedPivotBudgetPerDimension },
         { "starship-flight14-orbital-ignition", "maximumPointingErrorDegrees", Flight14OrbitalBurn.MaximumPointingErrorDegrees },
         { "starship-flight14-orbital-ignition", "maximumIgnitionPointingErrorDegrees", Flight14OrbitalBurn.MaximumIgnitionPointingErrorDegrees },
         { "starship-flight14-orbital-ignition", "maximumIgnitionAngularRateRadPerS", Flight14OrbitalBurn.MaximumIgnitionAngularRateRadPerS },

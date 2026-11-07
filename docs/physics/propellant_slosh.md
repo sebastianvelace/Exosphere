@@ -200,3 +200,221 @@ separately. The late LOX sample is approximately 0.46 Hz on the measured dotted 
 regime is omitted. See `data/flight_profiles/saturn_as501_slosh_reference.json` and
 `data/provenance/propellant_slosh_f5_2026.json`. A source-frequency pass does not validate
 production body reaction, locked inertia, changing fill, unsteady coasts or save/load.
+
+## Constant-fill coupled kernel (production activation still pending)
+
+`Slosh6DofDynamics` now assembles the complete 6+2N kinetic matrix. It integrates no
+resource inventory and does not change Universe dispatch yet. Cartesian modal coordinates
+use one spherical bob per tank; positivity of the full scaled matrix is checked, without
+adding artificial inertia or clipping eigenvalues. Equilibrium sampling retains F4 mass,
+centroid and every inertia entry exactly.
+
+The kernel solves absolute datum acceleration A, body angular acceleration alpha and all
+modal accelerations simultaneously. For S=sum(m*r), p=sum(m*r_dot), datum inertia I_D,
+and each relative acceleration r_ddot=E*q_ddot+b:
+
+```
+m*A - cross(S)*alpha + sum(m_i*E_i*q_ddot_i)
+    = F - omega cross (omega cross S) - 2*omega cross p - sum(m_i*b_i)
+cross(S)*A + I_D*alpha + sum(m_i*cross(r_i)*E_i*q_ddot_i)
+    = T_D - omega cross (I_D*omega)
+      - sum(m_i*cross(r_i)*(2*omega cross r_dot_i+b_i))
+m_i*transpose(E_i)*(A - cross(r_i)*alpha + E_i*q_ddot_i)
+    = Q_i + m_i*transpose(E_i)*(g - omega cross (omega cross r_i)
+      - 2*omega cross r_dot_i - b_i)
+```
+
+Here F includes uniform total gravity m*g, T_D includes S cross g, and Q_i contains
+internal generalized damping or other declared modal loads. No separate axial-acceleration
+potential or k3 torque is added. Tests reconstruct momenta/energy independently by removing
+each locked point bob and inserting its actual world-space moving counterpart.
+
+Initial directed validation passes 79 cases across the new kernel, the existing slosh
+foundation and provenance. It covers 3D two-mode free motion, dissipative internal forces,
+free fall in a rotated frame, analytic free-carrier frequency, exact locked identities,
+rigid Euler recovery, chart rejection and an indefinite coupled matrix despite positive
+locked inertia. Log: `/tmp/exo-f5-sixdof-kernel.log`. This is not full production validation.
+
+Additional primary references under review for the production adapter:
+
+- NASA AAS 24-012, *New Perspective on Slosh Dynamics in High-Gravity Regimes for Lunar
+  Missions* (2025), especially model-location comparison and inherent axial torque:
+  https://ntrs.nasa.gov/api/citations/20250000708/downloads/AAS_2025_v11.pdf
+- Orr, AAS 21-433, *Modeling and Simulation of Rotary Sloshing in Launch Vehicles*:
+  https://ntrs.nasa.gov/api/citations/20210000785/downloads/Orr_AAS_2021_rotary_paper.pdf
+- SwRI mechanical-model derivations and errata:
+  https://www2.swri.org/www2/fluid-slosh/slosh-dynamics.htm
+
+The 2025 NASA paper explicitly distinguishes bob and hinge locations and warns against
+adding an axial-offset torque already implicit in a multibody pendulum. Its damping
+comparison also identifies unresolved model differences; it is not used as a measured
+universal damping ratio. The currently implemented SP-8009 modal station remains unchanged
+while the force/moment mappings and draining/low-g assumptions are checked.
+
+
+Catalog equilibrium checks pass for AS-506 at full, 50% and 1% main-store fill, preserving
+locked mass, centroid and tensor exactly. A provisional Starship check initially failed
+because its mode list was empty, not because its kinetic matrix was indefinite: the V3
+Ship and booster have no `propellant_tanks` declarations. Their F4 stores still use uniform
+part cylinders. The catalog test is therefore restricted to actual declared tank geometry.
+Production must report this missing geometry and obtain source-backed or explicitly
+estimated equivalent tank parameters; it must not pretend Starship already has validated
+cylindrical slosh geometry or silently infer measured tank stations from the render mesh.
+
+
+## Spherical continuation and parameter derivatives
+
+The fixed-fill kernel now also accepts a unit direction and tangent direction rate per
+mode (`SloshSphericalState`). A local orthonormal basis is used only in the acceleration
+solve, and the returned acceleration is a physical vector. Candidate-stage retraction
+maintains the unit/tangent constraints. A two-mode conservation test crosses the old
+lower-hemisphere boundary without resetting momentum or adding a restoring field. This
+is a conservative mathematical continuation; no low-g free-surface reconstruction is
+claimed. The original Cartesian model remains an independently integrated coordinate
+comparison within its valid chart.
+
+`SloshParameterSchedule.cs` samples the SP-8009 modal mass, reciprocal length (curvature)
+and equilibrium height with analytic first/second time derivatives from the funded mass
+history. Curvature remains finite at exhaustion, unlike pendulum length. A deep-tank
+sech-squared evaluation retains derivatives lost by `1-tanh(x)^2`. Empty-store left-limit
+rates are retained until the actual flow cut; stopped rates are zero.
+
+Directed validation now passes 93 cases (kernel, spherical continuation, AS-506 catalog,
+parameter derivatives, prior foundation and provenance). Logs:
+`/tmp/exo-f5-spherical-kernel.log` (84 cases), `/tmp/exo-f5-parameter-jets.log` (93 cases).
+No production adapter or full CI has been run for this active continuation yet.
+
+### Variable-fill balance to implement and verify next
+
+The following is the derived adapter design, not an implemented production force law.
+Use a fixed datum. Let the F4 baseline mass distribution have S0=m*c0 and I0 about the
+datum. For a scheduled modal mass mu, equilibrium point r0, displacement d and r=r0+d:
+
+```
+DeltaS = mu*d
+DeltaI_D = mu*(P(r)-P(r0))
+p_s = d(DeltaS)/dt = mu_dot*d + mu*d_dot
+h_s = mu*(r cross d_dot + d cross r0_dot) + mu_dot*(r0 cross d)
+```
+
+The last term chooses a straight source-to-mode virtual redistribution route, analogous
+to F4's declared feed convention. It must be registered as an approximation, not measured
+fluid velocity. With d_ddot=E*a_modal+b, the known derivatives are:
+
+```
+p_s_dot_known = mu_ddot*d + 2*mu_dot*d_dot + mu*b
+h_s_dot_known = mu*(r cross b + d cross r0_ddot)
+                 + mu_dot*((2*r0+d) cross d_dot) + mu_ddot*(r0 cross d)
+DeltaI_D_dot = mu_dot*(P(r)-P(r0))
+                 + mu*(B(r,d_dot)+B(d,r0_dot))
+B(r,v) = 2*(r dot v)*Identity - r*v^T - v*r^T
+```
+
+The acceleration-dependent terms are mu*E*a_modal in linear momentum and
+mu*cross(r)*E*a_modal in angular momentum, so the same symmetric kinetic matrix remains.
+Reynolds balance about the datum, with applied thrust already included, is:
+
+```
+m*A - cross(S)*alpha = F - omega cross (omega cross S) - p_dot - 2*omega cross p
+cross(S)*A + I_D*alpha = T_D - (I_D_dot+J_out_D)*omega
+                        - omega cross (I_D*omega+h) - h_dot
+```
+
+The F4 central transport wrench can be converted without reconstructing outlet tensors:
+`F_feed_D = F_transport_C - m*(c0_ddot+2*omega cross c0_dot)` and
+`T_feed_D = T_transport_C + c0 cross F_feed_D`. Add only the modal corrections above;
+do not reapply F4 inertia loss or its feed impulse. Independent finite-difference and
+open-system momentum tests must validate this design before production use.
+
+For settled Cartesian displacement q=(x,z), inverse length k avoids an infinite-length
+singularity: `s=sqrt(1-k^2*(x^2+z^2))`, `d_y=k*(x^2+z^2)/(1+s)`. Its derivatives include
+`d_y_k=(x^2+z^2)/(s*(1+s))`, `d_y_xk=x/s^3`, and the corresponding z expression. This
+keeps geometry finite at the empty-store left limit k=0. Zero modal mass must be handled
+as a limit/retirement boundary, not by adding mass to make a singular matrix invertible.
+The modal equation, nonsettling continuation, geometry scheduling, damping, topology and
+persisted state still require an explicitly verified production implementation.
+
+
+## Combined funded-balance kernel — implemented, not activated
+
+`SloshTransportCorrection` now implements the modal moment/derivative expressions above;
+independent time differences include nonzero modal acceleration and the empty-store left
+limit. `SloshVariableMassDynamics` combines those corrections with the existing F4 central
+transport wrench, converts it once to the fixed datum, and uses the shared symmetric solve
+in `SloshKineticSystem`. Zero modal masses are omitted from the kinetic matrix and their
+acceleration-per-unit-mass limit is recovered afterwards; no artificial mass is introduced.
+
+The directed set passes 100 cases (`/tmp/exo-f5-combined-reynolds.log`). An independent
+world-space point-replacement/route reconstruction verifies that the combined total linear
+and angular momentum derivatives equal only the prescribed co-rotating outlet flux.
+Constant-fill accelerations recover the conservation-tested kernel. No Universe production
+caller, topology/persistence integration or tank damping/geometry activation has changed.
+
+The scheduled mechanical analogue assumes participating mass leaves co-moving with that
+virtual mode as the resource drains. Its internal return route is straight from the
+modal point to its equilibrium point, then follows the baseline feed convention. This is
+an explicit reduced-model approximation; the algebraic conservation check is not empirical
+validation of rapidly draining, nonlinear or low-g liquid motion.
+
+### Coordinate representation for the production state (next)
+
+A useful global representation avoids infinite pendulum length: store displacement d and
+its derivative v relative to the scheduled equilibrium point, with curvature k=1/L.
+There are two physical coordinates and two physical rates, represented by constrained
+three-vectors. The complete spherical constraint, including both hemispheres, is:
+
+```
+k*(d dot d) - 2*d_y = 0
+n = k*d - up                         (unit normal on the constraint)
+n dot v = -0.5*k_dot*(d dot d)
+n dot d_ddot = -k*(v dot v) - 2*k_dot*(d dot v) - 0.5*k_ddot*(d dot d)
+```
+
+Two orthonormal tangents provide the unknown acceleration columns. The prescribed normal
+acceleration is the final scalar above times n. At k=0 the chart becomes the plane d_y=0
+with finite one-sided derivatives, so no infinite length or zero-mass regularization is
+needed. Candidate retraction must use stable lower-hemisphere sag rather than subtracting
+unit directions at small curvature. This representation is derived but not implemented yet.
+
+Nonsettling and large-amplitude motion remain outside the settled-fluid model's stated
+physical domain. A conservative mathematical continuation must be explicitly labelled as
+such and preserve existing modal momentum. It must not invent a 1-g restoring field or
+silently zero oscillator state. If scheduled geometry would become unrepresentable outside
+that domain, a bounded held-geometry continuation needs an explicit regime and conservative
+transition; it must not masquerade as a validated low-g fluid solution. Parameter values,
+rate changes, modal state and retained internal momenta must survive save/load and splits.
+
+
+## Global state and coupled RK4 — implemented, not activated
+
+`SloshDisplacementState` implements the curvature constraint above with exact candidate
+retraction, a stable lower-hemisphere sag and the finite empty-store plane limit.
+`SloshTransportCorrection.SampleDisplacement` supplies an orthonormal tangent basis and
+normal acceleration bias. These recover the earlier Cartesian physical accelerations,
+including changing fill; tangent components themselves are coordinate-dependent.
+
+`Slosh6DofIntegrator` advances datum position/velocity, attitude/body rate and every modal
+state together. All four candidates see their own projected geometry, mass and loads.
+Profiles and load callbacks are pure; the caller must split at coefficient/flow knots.
+Independent world-particle reconstruction verifies all six inertial momenta and kinetic
+energy through both hemispheres, internal damping decreases energy without momentum loss,
+and time refinement establishes fourth-order convergence. Smooth draining integration
+matches independently accumulated material outlet flux through the exact empty endpoint.
+
+`SloshMomentumTransfer` conserves P/H during an internal rate/geometry handoff at fixed hull
+pose and fixed total mass. It keeps live modal momentum on both sides, so a stopped feed
+cannot erase a moving mode. This is an internal momentum transition, not a license to
+replace a physical mass debit or hide an arbitrary geometry/energy jump.
+
+The integrated exhaustion test exposed a pre-existing F4 endpoint defect:
+`OpenSystemTransport.Sample` skipped the internal column path when loss and outlet points
+coincided at zero fill. Its left-hand path derivative is still nonzero (q squared/lambda),
+so the last RK stage lost it and introduced an artificial impulse proportional to dt.
+Only non-column components now skip this derivative. A dedicated force/datum-moment
+regression and 500/1000/2000-step full momentum balances pass at unchanged tight tolerances.
+The directed set passes 129 cases. Complete CI subsequently passed 1559/1559 tests without skips,
+three 0-warning/0-error builds, contracts and Godot startup/menu/graphics checks
+(`/tmp/exo-f5-coupled-kernel-ci.log`, exit 0, 2026-11-07).
+
+No production Universe caller, per-store modal persistence/topology, tank damping data or
+nonsettling regime policy is activated by these kernels. F5 remains open; F6 follows it.
