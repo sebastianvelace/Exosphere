@@ -250,3 +250,16 @@ damping, variable-fill/coast transitions and exact persistence. No merge to main
 
 Evidence: `/tmp/exo-f4-f5-warp-ci.log` and `/tmp/exo-f4-f5-warp-ci.exit`, plus the
 directed, independent-index and terminal-replay evidence above.
+
+
+## 2026-11-07 — exact exhaustion derivative
+
+The independently integrated F5 outlet-momentum balance exposed an F4 endpoint defect.
+At exactly zero column fill, `OpenSystemTransport.Sample` skipped the store path because
+its loss point coincided with its outlet. The path's left derivative remains nonzero
+(q squared / lambda); omitting it introduces an artificial final-stage impulse of order dt.
+The sampler now skips only non-column components. A dedicated force/datum-moment
+regression and integrated 500/1000/2000-step balances verify the correction without relaxed
+acceptance limits. Complete CI with the accompanying F5 kernels: 1559/1559 tests, no skips,
+three builds 0 warnings/0 errors, contracts and Godot startup/menu/graphics checks passed.
+Evidence: `/tmp/exo-f5-coupled-kernel-ci.log`, exit 0. F4 remains closed; F5 stays open.

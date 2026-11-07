@@ -68,6 +68,33 @@ public sealed class OpenSystemTransportTests
     }
 
     [Fact]
+    public void AnExhaustedColumnsLeftDerivativeDoesNotDisappearWithItsZeroLengthFeedPath()
+    {
+        var dry = new FixedShapeMassComponent("dry", new(0, 4, 0), Matrix3x3d.Diagonal(2, 1, 2), [new MassKnot(0, 4000)]);
+        var column = FixedShapeMassComponent.SettledColumn("liquid", new(0.2, 1, -0.1), Vector3d.Up, 100, 2,
+            [new MassKnot(0, 3), new MassKnot(1, 0)]);
+        var distribution = new BodyMassDistribution(1, [dry, column]);
+        var exit = new Vector3d(0.25, -2, 0.1);
+        var transport = new OpenSystemTransport(distribution,
+            [new("drain", [new(1, 3, 0, 1)], [new(exit, -Vector3d.Up, 0, 3, 0, 1)])]);
+        var mass = distribution.Sample(1, MassBoundarySide.Left);
+        var end = transport.Sample(1, MassBoundarySide.Left, mass, Vector3d.Zero);
+        const double epsilon = 1e-5;
+        var before = transport.Sample(1 - epsilon, MassBoundarySide.Right, distribution.Sample(1 - epsilon), Vector3d.Zero);
+        var pRate = (end.RelativeLinearMomentumBodyKgMps - before.RelativeLinearMomentumBodyKgMps) / epsilon;
+        var expected = mass.CenterOfMassAccelerationBodyMps2 * mass.MassKg - pRate;
+        Assert.InRange((expected - end.ForceBodyN).Magnitude, 0, 1e-9);
+        // Independent finite difference of datum-referenced angular route momentum.
+        var beforeMass = distribution.Sample(1 - epsilon);
+        var endH = end.RelativeAngularMomentumBodyKgM2PerS + mass.CenterOfMassBodyM.Cross(end.RelativeLinearMomentumBodyKgMps);
+        var beforeH = before.RelativeAngularMomentumBodyKgM2PerS
+            + beforeMass.CenterOfMassBodyM.Cross(before.RelativeLinearMomentumBodyKgMps);
+        var torqueDatum = end.TorqueBodyNm + mass.CenterOfMassBodyM.Cross(
+            end.ForceBodyN - mass.CenterOfMassAccelerationBodyMps2 * mass.MassKg);
+        Assert.InRange((torqueDatum + (endH - beforeH) / epsilon).Magnitude, 0, 1e-8);
+    }
+
+    [Fact]
     public void MassShedAtItsOwnStationCarriesNoMoment()
     {
         // A co-rotating point leaving where it sits: inertia loss and exit flux cancel, and the

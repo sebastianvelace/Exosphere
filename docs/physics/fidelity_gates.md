@@ -84,6 +84,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F4 | analytic | `OpenSystemTransportTests.ABurnFollowsTheRocketEquationWithItsFeedImpulses` | rocket equation and momentum-conserving feed impulses |
 | F4 | analytic | `OpenSystemTransportTests.JetDampingFollowsTheIndependentOpenSystemRotationLaw` | production jet damping against an independent integration |
 | F4 | historical | `SaturnVJetDampingHistoricalTests.As506SicJetDampingMatchesTheFlightReconstructedMassHistory` | AS-506 S-IC jet damping (J_out, İ) from flight-reconstructed mass characteristics and F-1 flowrates (MPR-SAT-FE-69-9) |
+| F4 | analytic | `OpenSystemTransportTests.AnExhaustedColumnsLeftDerivativeDoesNotDisappearWithItsZeroLengthFeedPath` | one-sided feed force and datum moment remain continuous at exact column exhaustion |
 | F5 | analytic | `PropellantSloshTests.TheModeRootIsTheFirstZeroOfTheBesselDerivative` | independently evaluated J1 derivative root |
 | F5 | analytic | `PropellantSloshTests.TheModelKeepsTheColumnsMassAndCentre` | one store mass split, unchanged liquid centroid and pendulum frequency |
 | F5 | analytic | `PropellantSloshTests.DeepAndShallowLimitsMatchTheirClosedForms` | deep/shallow cylindrical first-mode limits |

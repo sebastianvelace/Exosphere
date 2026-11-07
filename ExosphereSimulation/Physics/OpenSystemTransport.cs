@@ -201,7 +201,10 @@ public sealed class OpenSystemTransport
             var component = components[i];
             double storeMass = component.SampleMass(time, side).Mass;
             var (loss, outlet) = StorePoints(component, storeMass);
-            if (loss == outlet) continue;
+            // A column's internal path shrinks to zero at exhaustion, but its left
+            // derivative is still nonzero. Keep that derivative in the ending RK stage;
+            // the next interval transfers the stopped feed's momentum separately.
+            if (!component.IsColumn) continue;
             var lossRate = component.ColumnAxisBody * (-q / component.ColumnLinearDensityKgPerM);
             p += (outlet - loss) * q;
             pRate -= lossRate * q;
