@@ -55,7 +55,7 @@ jobs:
         run: dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 
       - name: Test simulation
-        run: dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
+        run: dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --nologo
 
       # Cache del binario de Godot por versión para no descargarlo en cada run.
       # Cache the Godot binary per version to avoid re-downloading every run.

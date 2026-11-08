@@ -41,7 +41,7 @@ Expected result: 0 warnings, 0 errors, all tests passing.
 ```bash
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 dotnet build Exosphere.csproj --nologo -v quiet
-dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --nologo
 ```
 
 Local all-in-one check:

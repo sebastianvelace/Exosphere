@@ -8,12 +8,12 @@ DEFAULT_GODOT="/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64
 GODOT="${GODOT_BIN:-$DEFAULT_GODOT}"
 start_ns="$(date +%s%N)"
 
-dotnet build ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --no-restore --nologo -v quiet
+dotnet build ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --no-restore --nologo -v quiet
 dotnet build Exosphere.csproj --no-restore --nologo -v quiet
 
 run_atmosphere_tests() {
   dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj \
-    --no-restore --no-build --nologo \
+    -c Release --no-restore --no-build --nologo \
     --filter 'FullyQualifiedName~AtmosphereOpticsTests|FullyQualifiedName~AtmosphereRaySamplingTests|FullyQualifiedName~AtmosphericReentryEnvelopeTests|FullyQualifiedName~StandardAtmosphereTests|FullyQualifiedName~AtmosphereThermosphereTests'
 }
 run_atmosphere_tests || run_atmosphere_tests

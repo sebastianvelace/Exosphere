@@ -7,6 +7,7 @@ legacy parity check into a historical trajectory measurement.
 
 import argparse
 import hashlib
+import os
 import json
 from pathlib import Path
 import subprocess
@@ -57,7 +58,8 @@ def identities():
     paths = [p for folder in ("ExosphereSimulation", "ExosphereSimulation.Tests", "data")
         for p in (ROOT / folder).rglob("*") if p.is_file()
         and p.suffix in (".cs", ".csproj", ".json") and not {"bin", "obj"}.intersection(p.parts)]
-    assembly = ROOT / "ExosphereSimulation.Tests/bin/Debug/net8.0/ExosphereSimulation.Tests.dll"
+    configuration = os.environ.get("EXOSPHERE_TEST_CONFIGURATION", "Release")
+    assembly = ROOT / f"ExosphereSimulation.Tests/bin/{configuration}/net8.0/ExosphereSimulation.Tests.dll"
     return {"sourceAndDataSha256": digest(paths), "testAssemblySha256": hashlib.sha256(assembly.read_bytes()).hexdigest()}
 
 

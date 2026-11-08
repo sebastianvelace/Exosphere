@@ -9,11 +9,11 @@ GODOT="${GODOT_BIN:-$DEFAULT_GODOT}"
 
 start_ns="$(date +%s%N)"
 
-dotnet build ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --no-restore --nologo -v quiet
+dotnet build ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --no-restore --nologo -v quiet
 dotnet build Exosphere.csproj --no-restore --nologo -v quiet
 run_construction_tests() {
   dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj \
-    --no-restore --no-build --nologo \
+    -c Release --no-restore --no-build --nologo \
     --filter 'FullyQualifiedName~ConstructionRegressionTests'
 }
 

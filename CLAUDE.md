@@ -9,7 +9,7 @@ Run these after C# changes:
 ```bash
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 dotnet build Exosphere.csproj --nologo -v quiet
-dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --nologo
 ```
 
 Or run the local aggregate:
@@ -26,7 +26,8 @@ bash tools/ci_quick.sh
 bash tools/ci_quick.sh "FullyQualifiedName~Apollo11"
 ```
 
-Use `ci_quick.sh` while iterating and for each local commit; run the full `ci_check.sh`
+Tests run in Release: the physics is bit-identical to Debug (same Flight 14 fingerprint) and the
+full suite takes ~7 min instead of ~29 min. Use `ci_quick.sh` while iterating and for each local commit; run the full `ci_check.sh`
 once before pushing a batch of commits (GitHub Actions also runs the full suite). The full
 check writes `.ci_results/ci.trx`; `python3 tools/test_durations.py .ci_results/ci.trx
 --update-slow-list 60` lists the slowest tests and refreshes the slow list. Flight 14

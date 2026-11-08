@@ -717,7 +717,7 @@ Run the pure simulation checks before changing shared physics:
 
 ```bash
 dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
-dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo --no-restore
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --nologo --no-restore
 dotnet build Exosphere.csproj --nologo -v quiet
 ```
 

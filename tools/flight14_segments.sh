@@ -10,4 +10,4 @@ cd "$(dirname "$0")/.."
 extra="${1:-}"
 filter="FullyQualifiedName~Flight14EntryCheckpointTests|FullyQualifiedName~Flight14DescentTests.LoadedMission|FullyQualifiedName~Flight14LandingBurnTests"
 if [[ -n "$extra" ]]; then filter="FullyQualifiedName~Flight14EntryCheckpointTests|FullyQualifiedName~${extra}"; fi
-dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo --filter "${filter}"
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --nologo --filter "${filter}"

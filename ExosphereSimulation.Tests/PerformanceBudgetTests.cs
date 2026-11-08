@@ -16,8 +16,8 @@ public sealed class PerformanceBudgetTests(ITestOutputHelper output)
     // Measured 2026-11-08 after O1 part 1: 60 KB per step (from 212 KB). The budget leaves
     // room for ordinary changes; O1b (persistent per-step model) lowers it toward 1 KB.
     private const double AllocationBudgetKbPerStep = 80.0;
-    // Debug build on the CI host measures ~1.35 ms (Release ~0.2 ms); 20 ms catches an
-    // order-of-magnitude regression without tripping on parallel-test load.
+    // Release (the CI configuration) measures ~0.2-0.35 ms, Debug ~1.35 ms; 20 ms catches an
+    // order-of-magnitude regression in either without tripping on parallel-test load.
     private const double MeanStepTripwireMs = 20.0;
 
     [Fact]

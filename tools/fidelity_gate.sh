@@ -7,4 +7,4 @@ cd "$(dirname "$0")/.."
 phase="${1:?usage: tools/fidelity_gate.sh PHASE [analytic|historical]}"
 filter="FidelityGate=${phase}"
 if [[ $# -ge 2 ]]; then filter="${filter}&GateKind=$2"; fi
-dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo --filter "${filter}"
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --nologo --filter "${filter}"

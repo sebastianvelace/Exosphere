@@ -24,5 +24,5 @@ if [[ $# -gt 0 && -n "$1" ]]; then
   filter="${filter:+$filter&}($1)"
 fi
 
-dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo ${filter:+--filter "$filter"}
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj -c Release --nologo ${filter:+--filter "$filter"}
 echo "ci_quick: pass (slow classes in tools/slow_tests.txt were skipped; run tools/ci_check.sh before pushing)"
