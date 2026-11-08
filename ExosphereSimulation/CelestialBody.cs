@@ -123,14 +123,38 @@ public partial class CelestialBody
     /// Returns 0 if the body has no atmosphere.
     /// </summary>
     public double GetAtmosphericDensity(Vector3d worldPos) =>
-        Atmosphere?.GetDensity(GetAltitude(worldPos)) ?? 0.0;
+        Atmosphere == null ? 0.0 : AtmosphericDensityAt(worldPos, GetAltitude(worldPos));
 
     /// <summary>
     /// Atmospheric pressure (Pa) at <paramref name="worldPos"/>.
     /// Returns 0 if the body has no atmosphere.
     /// </summary>
     public double GetAtmosphericPressure(Vector3d worldPos) =>
-        Atmosphere?.GetPressure(GetAltitude(worldPos)) ?? 0.0;
+        Atmosphere == null ? 0.0 : AtmosphericPressureAt(worldPos, GetAltitude(worldPos));
+
+    /// <summary>
+    /// The single atmosphere point (environment plan E4.3): density (kg/m³) at a world position
+    /// whose geodetic <paramref name="altitude"/> the caller already has. Without a dated
+    /// <see cref="AtmosphereField"/> this is exactly <see cref="AtmosphereModel.GetDensity"/>.
+    /// The body must have an <see cref="Atmosphere"/>.
+    /// </summary>
+    public double AtmosphericDensityAt(Vector3d worldPos, double altitude) =>
+        AtmosphereField is { } field ? field.Density(this, worldPos, altitude) : Atmosphere!.GetDensity(altitude);
+
+    /// <summary>Kinetic temperature (K) through the single atmosphere point; see <see cref="AtmosphericDensityAt"/>.</summary>
+    public double AtmosphericTemperatureAt(Vector3d worldPos, double altitude) =>
+        AtmosphereField is { } field ? field.Temperature(this, worldPos, altitude) : Atmosphere!.GetTemperature(altitude);
+
+    /// <summary>Pressure (Pa) through the single atmosphere point; see <see cref="AtmosphericDensityAt"/>.</summary>
+    public double AtmosphericPressureAt(Vector3d worldPos, double altitude) =>
+        AtmosphereField is { } field ? field.Pressure(this, worldPos, altitude) : Atmosphere!.GetPressure(altitude);
+
+    /// <summary>
+    /// A position- and time-dependent atmosphere (environment plan E4.3, e.g. NRLMSIS in the
+    /// thermosphere) that replaces the altitude-only <see cref="Atmosphere"/> profile at the
+    /// single atmosphere point; null by default.
+    /// </summary>
+    public Environment.IAtmosphereField? AtmosphereField { get; set; }
 
     /// <summary>
     /// Gravitational acceleration vector (m/s²) at <paramref name="worldPos"/>.

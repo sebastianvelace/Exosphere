@@ -31,13 +31,13 @@ public static class Flight14AerodynamicAttitude
             || ship.FlightControlInvertsAerodynamics) return feedback;
         var velocity = ship.GetAirRelativeVelocity(body);
         double altitude = ship.GetAltitude(body);
-        double density = body.Atmosphere.GetDensity(altitude);
+        double density = body.AtmosphericDensityAt(ship.Position, altitude);
         double? centerOffset = ship.Parts.AerodynamicCenterOffsetYM;
         var disturbance = ship.Orientation.Inverse().Rotate(
             AerodynamicsModel.ComputeAttitudeAngularAcceleration(density, velocity,
                 ship.Orientation.Rotate(Vector3d.Up), Vector3d.Zero,
                 ship.VehicleLength, ship.MaximumDiameter, ship.Parts.TransverseMomentOfInertia,
-                body.Atmosphere.GetTemperature(altitude), centerOffset));
+                body.AtmosphericTemperatureAt(ship.Position, altitude), centerOffset));
         // Vessel scales flap commands by control health before the finite servo.
         // Include that factor once when converting nominal torque into a request.
         var unitFlap = ship.Orientation.Inverse().Rotate(

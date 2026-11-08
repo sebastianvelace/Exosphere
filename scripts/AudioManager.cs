@@ -285,7 +285,7 @@ public partial class AudioManager : Node
             // Mach needs the local air temperature; a body with no atmosphere model has
             // no speed of sound to speak of, so treat it as vacuum.
             double mach = body.Atmosphere != null
-                ? AerodynamicsModel.ComputeMach(airspeed, body.Atmosphere.GetTemperature(alt),
+                ? AerodynamicsModel.ComputeMach(airspeed, body.AtmosphericTemperatureAt(vessel.Position, alt),
                     body.Atmosphere.SoundSpeedConstant)
                 : 0.0;
 

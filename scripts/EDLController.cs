@@ -317,7 +317,7 @@ public partial class EDLController : Control
         if (updateLoad && _phase != Edl.Inactive)
             _load.Update(simulationDelta, _gForce);
 
-        double density = body.Atmosphere!.GetDensity(_alt);
+        double density = body.AtmosphericDensityAt(vessel.Position, _alt);
         double speed = surfaceVelocity.Magnitude;
         _heat = density * speed * speed * speed;
     }
@@ -329,7 +329,7 @@ public partial class EDLController : Control
         _blackoutSeconds = comms?.PlasmaBlackoutSeconds ?? 0.0;
 
         Vector3d surfaceVelocity = vessel.GetAirRelativeVelocity(body);
-        double density = body.Atmosphere!.GetDensity(_alt);
+        double density = body.AtmosphericDensityAt(vessel.Position, _alt);
         RefreshThermalState(vessel, body, density, surfaceVelocity.Magnitude, surfaceVelocity);
     }
 
@@ -662,10 +662,10 @@ public partial class EDLController : Control
             {
                 Vector3d liftUp = up - velDir * up.Dot(velDir);
                 Vector3d axis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
-                double density = body.Atmosphere!.GetDensity(_alt);
+                double density = body.AtmosphericDensityAt(vessel.Position, _alt);
                 Vector3d drag = AerodynamicsModel.ComputeReentryDrag(density, surfVel,
                     axis, vessel.VehicleLength, vessel.MaximumDiameter,
-                    body.Atmosphere.GetTemperature(_alt), vessel.Parts.AxialDragCoefficient,
+                    body.AtmosphericTemperatureAt(vessel.Position, _alt), vessel.Parts.AxialDragCoefficient,
                     body.Atmosphere.SoundSpeedConstant);
                 Vector3d lift = AerodynamicsModel.ComputeLift(density, surfVel,
                     axis, vessel.VehicleLength, vessel.MaximumDiameter);

@@ -550,7 +550,7 @@ public class Vessel
     public double GetDynamicPressure(CelestialBody body)
     {
         if (body.Atmosphere == null) return 0.0;
-        double density = body.Atmosphere.GetDensity(GetAltitude(body));
+        double density = body.AtmosphericDensityAt(Position, GetAltitude(body));
         if (density <= 0.0) return 0.0;
         double speed = GetAirRelativeVelocity(body).Magnitude;
         return 0.5 * density * speed * speed;
@@ -829,10 +829,10 @@ public class Vessel
             return Vector3d.Zero;
         var com = CenterOfMass;
         double altitude = body.GetAltitude(com);
-        double density = body.Atmosphere.GetDensity(altitude);
+        double density = body.AtmosphericDensityAt(com, altitude);
         if (density <= 0.0) return Vector3d.Zero;
         var air = body.GetAirRelativeVelocity(com, CenterOfMassVelocity);
-        double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
+        double temperature = System.Math.Max(1.0, body.AtmosphericTemperatureAt(com, altitude));
         var torque = Physics.DistributedAerodynamics.Evaluate(
             Parts.GetAeroElements(), Orientation, Vector3d.Zero, CenterOfMassOffsetLocal, air, density,
             temperature, MaximumDiameter, Parts.AxialDragCoefficient, body.Atmosphere.SoundSpeedConstant,
@@ -938,15 +938,15 @@ public class Vessel
     {
         var com = CenterOfMass;
         double altitude = body.GetAltitude(com);
-        double density = body.Atmosphere!.GetDensity(altitude);
+        double density = body.AtmosphericDensityAt(com, altitude);
         if (density <= 0.0) return;
-        double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
+        double temperature = System.Math.Max(1.0, body.AtmosphericTemperatureAt(com, altitude));
         var air = body.GetAirRelativeVelocity(com, CenterOfMassVelocity);
         var comLocal = CenterOfMassOffsetLocal;
 
         for (int i = 0; i < flaps.Count; i++) _bodyFlapProbe[i] = flaps[i].NeutralDeflectionRad;
         Vector3d Torque() => Physics.BodyFlapAerodynamics.Evaluate(flaps, _bodyFlapProbe, Orientation,
-            Vector3d.Zero, comLocal, air, density, temperature, body.Atmosphere.SoundSpeedConstant).TorqueBody;
+            Vector3d.Zero, comLocal, air, density, temperature, body.Atmosphere!.SoundSpeedConstant).TorqueBody;
 
         const double probe = 1.0 * MathUtils.DEG_TO_RAD;
         Span<Vector3d> effectiveness = flaps.Count <= 16 ? stackalloc Vector3d[flaps.Count] : new Vector3d[flaps.Count];
@@ -1044,9 +1044,9 @@ public class Vessel
             return Vector3d.Zero;
         var com = CenterOfMass;
         double altitude = body.GetAltitude(com);
-        double density = body.Atmosphere.GetDensity(altitude);
+        double density = body.AtmosphericDensityAt(com, altitude);
         if (density <= 0.0) return Vector3d.Zero;
-        double temperature = System.Math.Max(1.0, body.Atmosphere.GetTemperature(altitude));
+        double temperature = System.Math.Max(1.0, body.AtmosphericTemperatureAt(com, altitude));
         var air = body.GetAirRelativeVelocity(com, CenterOfMassVelocity);
         if (_flapAuthorityProbe.Length != flaps.Count) _flapAuthorityProbe = new double[flaps.Count];
         var probe = _flapAuthorityProbe;
@@ -1084,7 +1084,7 @@ public class Vessel
     public Vector3d ComputeParachuteDragAt(Vector3d pos, Vector3d vel, CelestialBody body)
     {
         if (body.Atmosphere == null) return Vector3d.Zero;
-        double density = body.Atmosphere.GetDensity(body.GetAltitude(pos));
+        double density = body.AtmosphericDensityAt(pos, body.GetAltitude(pos));
         var surfVel = body.GetAirRelativeVelocity(pos, vel);
         double speed = surfVel.Magnitude;
         double area = GetDeployedParachuteDragArea(body, pos);
@@ -1108,7 +1108,7 @@ public class Vessel
     {
         if (body.Atmosphere == null) return Vector3d.Zero;
         double alt     = body.GetAltitude(pos);
-        double density = body.Atmosphere.GetDensity(alt);
+        double density = body.AtmosphericDensityAt(pos, alt);
         if (density <= 0.0) return Vector3d.Zero;
 
         // Velocidad relativa a la atmósfera en rotación (resta la velocidad de la
@@ -1118,7 +1118,7 @@ public class Vessel
         if (speed < 0.001 || double.IsNaN(speed)) return Vector3d.Zero;
 
         Vector3d axis = orientation.Rotate(Vector3d.Up);   // eje longitudinal en mundo
-        double   temp = System.Math.Max(1.0, body.Atmosphere.GetTemperature(alt));
+        double   temp = System.Math.Max(1.0, body.AtmosphericTemperatureAt(pos, alt));
         double parachuteArea = GetDeployedParachuteDragArea(body, pos);
         var parachuteDrag = parachuteArea > 0.0
             ? -surfVel.Normalized
@@ -1170,7 +1170,7 @@ public class Vessel
     {
         if (body.Atmosphere == null) return 0;
         double altitude = GetAltitude(body);
-        double pressureFraction = body.Atmosphere.GetPressure(altitude) / 101_325.0;
+        double pressureFraction = body.AtmosphericPressureAt(Position, altitude) / 101_325.0;
         int deployed = 0;
         foreach (var part in Parts.Parts.Where(p =>
                      p.Definition.DragChute > 0.0 && !p.IsDeployed))
@@ -1578,7 +1578,7 @@ public class Vessel
     {
         if (_physicalBodyFlapsActive) return ComputeBodyFlapAngularAuthority(body);
         if (body.Atmosphere == null || !HasFunctionalBodyFlaps()) return Vector3d.Zero;
-        double density = body.Atmosphere.GetDensity(GetAltitude(body));
+        double density = body.AtmosphericDensityAt(Position, GetAltitude(body));
         var air = GetAirRelativeVelocity(body);
         var full = AerodynamicsModel.ComputeFlapControlAngularAcceleration(density, air, Quaterniond.Identity,
             new FlapActuatorState(1.0, 1.0, 1.0), VehicleLength, MaximumDiameter, Parts.TransverseMomentOfInertia);
@@ -1872,11 +1872,11 @@ public class Vessel
         if (refBody?.Atmosphere != null)
         {
             double altitude = GetAltitude(refBody);
-            double density = refBody.Atmosphere.GetDensity(altitude);
+            double density = refBody.AtmosphericDensityAt(Position, altitude);
             var surfVel = GetAirRelativeVelocity(refBody);
             if (density > 0.0 && surfVel.Magnitude > 1.0)
             {
-                double temp = System.Math.Max(1.0, refBody.Atmosphere.GetTemperature(altitude));
+                double temp = System.Math.Max(1.0, refBody.AtmosphericTemperatureAt(Position, altitude));
                 double? aerodynamicCenterOffset = Parts.AerodynamicCenterOffsetYM;
                 bool hasBodyFlaps = HasFunctionalBodyFlaps();
 

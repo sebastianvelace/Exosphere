@@ -372,7 +372,7 @@ public partial class MissionManager : Node
                 // Max-Q detection
                 if (!_maxQTriggered && alt is > 8_000 and < 30_000 && refBody.Atmosphere != null)
                 {
-                    double density = refBody.Atmosphere.GetDensity(alt);
+                    double density = refBody.AtmosphericDensityAt(vessel.Position, alt);
                     var    surfVel = vessel.GetAirRelativeVelocity(refBody);
                     double dynQ   = 0.5 * density * surfVel.Magnitude * surfVel.Magnitude;
                     if (dynQ > 30_000)

@@ -129,6 +129,17 @@ public partial class Universe
         earth.Wind = ProfileWind.LoadFromDataDirectory(dataDirectory, productId);
     }
 
+    /// <summary>
+    /// Gives Earth a dated NRLMSIS 2.1 thermosphere above 80 km (envdata product
+    /// <c>atmosphere/&lt;id&gt;.bin</c>, environment plan E4.3); it reads local time from the dated
+    /// IERS longitude. Off by default.
+    /// </summary>
+    public void UseThermosphere(string dataDirectory, string productId)
+    {
+        var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");
+        earth.AtmosphereField = NrlmsisAtmosphereField.LoadFromDataDirectory(dataDirectory, productId);
+    }
+
     public void UseIersEarthOrientation(string dataDirectory)
     {
         var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");

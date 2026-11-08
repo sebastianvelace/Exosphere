@@ -496,7 +496,7 @@ public partial class SystemsController : Node
         Vector3d sunPos = sunBody?.Position ?? Vector3d.Zero;
 
         bool inAtmo    = refBody.Atmosphere != null && alt < refBody.Atmosphere.MaxAltitude;
-        double atmoTemp = inAtmo ? refBody.Atmosphere!.GetTemperature(alt) : 3.0;
+        double atmoTemp = inAtmo ? refBody.AtmosphericTemperatureAt(vessel.Position, alt) : 3.0;
         var surfaceVelocity = vessel.GetAirRelativeVelocity(refBody);
         double airspeed = surfaceVelocity.Magnitude;
         double airDensity = refBody.GetAtmosphericDensity(vessel.Position);

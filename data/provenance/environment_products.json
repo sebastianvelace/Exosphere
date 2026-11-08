@@ -150,6 +150,16 @@
       "variant": "Cape Kennedy rawinsonde 1969-07-16 14Z (28 min after the AS-506 launch), 17 levels, surface to 33.9 km",
       "conditions": "Mandatory and significant levels as archived by IGRA v2; linear in altitude between levels. The FER AS-506 (MPR-SAT-FE-69-9, appendix A) cross-checks the surface (180 deg, 1.0 m/s at the station; 3.3 m/s at the pad lightpole 18.3 m) and reports finer structure (9.6 m/s peak at 11.4 km) that the archived levels do not resolve.",
       "uncertainty": "Rawinsonde wind ~1-2 m/s per level; unresolved fine structure up to ~2.6 m/s near the jet (FER peak vs archived level); 28 min of evolution after launch."
+    },
+    {
+      "dataId": "environment_atmosphere",
+      "field": "as506Thermosphere",
+      "status": "published",
+      "source": "NRLMSIS 2.1 (Emmert et al. 2022, Space Weather 20) through pymsis 0.13.0; GFZ German Research Centre for Geosciences, Potsdam (Matzka et al. 2021), Geomagnetic Kp/ap/Ap indices, sunspot number and F10.7 since 1932 (Kp_ap_Ap_SN_F107_since_1932.txt): https://kp.gfz-potsdam.de/app/files/Kp_ap_Ap_SN_F107_since_1932.txt (rows through 2025 12 31, prefix SHA-256 3cf54c9a27f408f6c877ffc8cf3fbf37c44e73586ed1897a3909b8fa421f2e31). Built by tools/envdata/products/msis.py into data/environment/atmosphere/msis_as506.bin (SHA-256 4248a2652500fba6b66f9c81a431e33512d9d45e919fdf131543ad8df5fcfa6f).",
+      "accessedDate": "2026-11-08",
+      "variant": "NRLMSIS 2.1 on a local-time x latitude x altitude grid at 12 UT for each day 1969-07-16..24",
+      "conditions": "Daily Ap and F10.7 (previous day; 81-day centred mean) from GFZ; local time replaces longitude at fixed UT; log-linear interpolation in the simulation, blended into USSA-76 between 80 and 120 km.",
+      "uncertainty": "NRLMSIS thermospheric density ~15 % (1-sigma) against satellite drag; grid interpolation error reported by the C# suite."
     }
   ]
 }

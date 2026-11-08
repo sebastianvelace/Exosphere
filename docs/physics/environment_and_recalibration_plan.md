@@ -275,6 +275,23 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
 - **E4.2 `Hwm14Wind`** por encima del perfil medido, con mezcla suave.
 - **E4.3 `NrlMsis2`** con F10.7/Ap de CelesTrak `SW-All.txt` por fecha; presión de motores y
   densidad aerodinámica del mismo estado.
+  **E4.3 hecho (2026-11-08).** Primero un único punto atmosférico, como en E0.1:
+  `CelestialBody.AtmosphericDensityAt/TemperatureAt/PressureAt(posición, altitud)`, por los que
+  pasan arrastre, aerodinámica distribuida, flaps, paracaídas, calentamiento, Mach y la capa de
+  juego (EDL, Max-Q, sonido, sistemas); sin `AtmosphereField` son exactamente el perfil por altitud
+  (huella de Flight 14 idéntica). Después `Environment/NrlmsisAtmosphereField`: NRLMSIS 2.1
+  oficial (pymsis) tabulado por envdata para los días en vuelo del Apollo 11 (16, 17 y 24 de julio
+  de 1969) en UT cada 3 h × hora local cada 2 h × latitud cada 15° × altitud (10 km hasta 300 km,
+  50 km hasta 1000), con Ap y F10.7 diarios del GFZ Potsdam (CelesTrak está bloqueado desde aquí).
+  **Tres hallazgos medidos durante la construcción:** (1) NRLMSIS no es función de la hora local
+  sola: con la hora local fija varía hasta 17 % con el UT, así que el UT es un eje; (2) el modelo
+  salta a medianoche con sus índices diarios, así que cada fecha va de 0 a 24 UT con sus propios
+  índices y no se interpola entre fechas; (3) la densidad de masa incluye oxígeno anómalo fuera de
+  equilibrio, así que la presión sale de la densidad numérica térmica (p = nkT). Con cúbicos de
+  Catmull-Rom en tiempo, hora local, latitud y altitud: densidad 2,9 % peor / 0,42 % media,
+  temperatura 0,67 %, presión 1,7 % frente al modelo en 300 puntos libres (incertidumbre propia
+  de NRLMSIS ~15 %). Bajo 80 km responde el perfil USSA-76 bit a bit; 80–120 km mezcla continua.
+  `Universe.UseThermosphere` (apagado por defecto; la hora local sale de la longitud IERS).
 - **E4.4 `DrydenGusts`** (MIL-HDBK-1797) con semilla guardada.
 - *Analíticas:* viento uniforme ⇒ deriva con la constante de tiempo de arrastre; viento cero ⇒
   paridad exacta; NRLMSIS contra sus vectores de prueba; espectro de Dryden.
