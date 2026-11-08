@@ -492,6 +492,25 @@ public partial class CelestialBody
         return inverseSpin.Rotate(inertialDirection);
     }
 
+    /// <summary>
+    /// Body-fixed (rotating) axes at <see cref="StateTime"/> in the simulation frame: the frame a
+    /// tesseral gravity field is defined in. A dated orientation gives its frame of the date; the
+    /// fixed-axis model turns its epoch basis by the spin angle about the pole.
+    /// </summary>
+    public void GetRotatingBasis(out Vector3d xAxis, out Vector3d yAxis, out Vector3d zAxis)
+    {
+        if (Orientation is Environment.IDatedBodyOrientation)
+        {
+            DatedBasisAt(StateTime, out xAxis, out yAxis, out zAxis);
+            return;
+        }
+        GetBodyFixedEquatorialBasis(out var prime, out var east, out zAxis);
+        double angle = Orientation.RotationAngleAt(this, StateTime);
+        double c = System.Math.Cos(angle), s = System.Math.Sin(angle);
+        xAxis = prime * c + east * s;
+        yAxis = east * c - prime * s;
+    }
+
     private double _datedBasisTime = double.NaN;
     private Environment.IDatedBodyOrientation? _datedBasisOwner;
     private Vector3d _datedPrime, _datedEast, _datedNorth;

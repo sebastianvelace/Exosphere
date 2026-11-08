@@ -236,6 +236,21 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   59,3 × 59,9. Compuerta: el modelo nuevo se acerca a lo observado más que R2, con banda fijada
   antes de correr desde la incertidumbre del estado inicial. Apollo 8 como segundo caso.
 - *Histórica terrestre:* evolución de una órbita de estacionamiento publicada (Gemini/Apollo).
+- **E3.1–E3.3 hechos (2026-11-08).** `Environment/SphericalHarmonicGravity` (recursión V/W de
+  Cunningham, Montenbruck & Gill §3.2; sin singularidad polar, sin asignaciones, grado ≤ 120)
+  contra sumas directas de Legendre a 40 dígitos: 3,3e-15 relativo; grado 2 = J2 zonal a 8e-16;
+  precesión nodal integrada a 0,4 % de la fórmula. Productos `gravity/grgm1200a_d120.bin`
+  (GRGM1200A, marco PA de DE430), `gravity/egm2008_d70.bin` (EGM2008 tide-free) y
+  `moon/lunar_pa.bin` (ejes principales de DE440, 3-1-3 en Chebyshev 8 d / 12; 0,63 mm en
+  superficie y ω a 3,7e-9 contra SPICE). `CelestialBody.GetRotatingBasis` da el marco giratorio
+  del instante de estado. Interruptores: `Universe.UseLunarGravityField(data, grado)` y
+  `UseEarthGravityField`. Truncamiento a 100 km frente a grado 120 (anomalía máxima 1,57 mm/s²):
+  grado 50 5,6 % (18 µs), 70 1,0 % (28 µs), 100 0,12 % (49 µs); para la recalibración histórica se
+  usa grado 100. **Marco DE430→DE440:** NAIF no publica las libraciones de DE430, así que la
+  diferencia no se mide; se acota por la diferencia DE421/DE440 que NAIF sí midió (≤ 5,8e-7 rad,
+  1–2 m en superficie), despreciable a 100 km. **Pendiente:** la compuerta histórica de la
+  evolución de la órbita lunar del Apollo 11 necesita un vector de estado inicial publicado (no
+  solo apsides), que hay que localizar en los documentos de trayectoria.
 
 ### E4 — Atmósfera y viento
 

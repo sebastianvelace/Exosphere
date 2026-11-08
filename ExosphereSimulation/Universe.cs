@@ -96,6 +96,29 @@ public partial class Universe
             Environment.Ephemeris.PropagateAll(_bodies, CurrentTime);
     }
 
+    /// <summary>
+    /// Gives the Moon its GRGM1200A gravity field at <paramref name="degree"/> in the dated DE440
+    /// principal-axes frame (environment plan E3). Needs the dated ephemeris time (TDB).
+    /// </summary>
+    public void UseLunarGravityField(string dataDirectory, int degree)
+    {
+        var moon = GetBody("moon") ?? throw new InvalidOperationException("No Moon in this universe.");
+        moon.Orientation = LunarPrincipalAxesOrientation.LoadFromDataDirectory(dataDirectory);
+        moon.Gravity = GravityFieldProduct.Load(
+            Path.Combine(dataDirectory, "environment", "gravity", "grgm1200a_d120.bin"), degree);
+    }
+
+    /// <summary>
+    /// Gives Earth its EGM2008 tide-free field at <paramref name="degree"/> (environment plan E3),
+    /// evaluated in Earth's rotating frame (the dated ITRS when the IERS orientation is on).
+    /// </summary>
+    public void UseEarthGravityField(string dataDirectory, int degree)
+    {
+        var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");
+        earth.Gravity = GravityFieldProduct.Load(
+            Path.Combine(dataDirectory, "environment", "gravity", "egm2008_d70.bin"), degree);
+    }
+
     public void UseIersEarthOrientation(string dataDirectory)
     {
         var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");
