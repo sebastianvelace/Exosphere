@@ -33,6 +33,28 @@
       "sha256": "a26cf3eb29bdcfa6d2f8a31ded0b826cc0eb20ca66805cb93bcf0677710b3bb2",
       "accessed": "2026-11-08",
       "licence": "IERS products, free use with acknowledgement of the IERS"
+    },
+    {
+      "id": "naif_de440s",
+      "title": "JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp",
+      "publisher": "NASA JPL Solar System Dynamics / NAIF",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp",
+      "file": "de440s.bsp",
+      "sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+      "bytes": 32726016,
+      "accessed": "2026-11-08",
+      "licence": "NASA JPL generic kernel, public distribution (Park et al. 2021, AJ 161:105)"
+    },
+    {
+      "id": "naif_gm_de440",
+      "title": "GM values consistent with DE440, gm_de440.tpc",
+      "publisher": "NASA JPL NAIF",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
+      "file": "gm_de440.tpc",
+      "sha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
+      "bytes": 12406,
+      "accessed": "2026-11-08",
+      "licence": "NASA JPL generic kernel, public distribution"
     }
   ],
   "products": [
@@ -90,6 +112,166 @@
       },
       "sha256": "0017fb77787f4cea72418f89b759dcb6955b087d29e2ffa3ddca0e329bdde77b",
       "bytes": 1052464
+    },
+    {
+      "id": "de440_moon",
+      "builder": "de440",
+      "series": "de440_moon",
+      "inputs": [
+        "naif_de440s",
+        "naif_gm_de440"
+      ],
+      "output": "ephemeris/de440_moon.bin",
+      "provenance": {
+        "dataId": "environment_ephemeris",
+        "field": "de440Moon",
+        "status": "published",
+        "variant": "geocentric Moon, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+        "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+        "uncertainty": "Interpolation below 2 mm / 2e-8 m/s of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+      },
+      "sha256": "60a453ca5811685a47dcaf1bd2c8a477f3d15f5d0b392a2962d8a3362a560376",
+      "bytes": 1941256
+    },
+    {
+      "id": "de440_emb",
+      "builder": "de440",
+      "series": "de440_emb",
+      "inputs": [
+        "naif_de440s",
+        "naif_gm_de440"
+      ],
+      "output": "ephemeris/de440_emb.bin",
+      "provenance": {
+        "dataId": "environment_ephemeris",
+        "field": "de440EarthMoonBarycentre",
+        "status": "published",
+        "variant": "Earth-Moon barycentre about the solar-system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+        "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+        "uncertainty": "Interpolation below 2 cm of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+      },
+      "sha256": "5f5aa6f1d22a83d750ea1a874534a0b58a34516afa2634e308a256b73e193088",
+      "bytes": 724552
+    },
+    {
+      "id": "de440_sun",
+      "builder": "de440",
+      "series": "de440_sun",
+      "inputs": [
+        "naif_de440s",
+        "naif_gm_de440"
+      ],
+      "output": "ephemeris/de440_sun.bin",
+      "provenance": {
+        "dataId": "environment_ephemeris",
+        "field": "de440Sun",
+        "status": "published",
+        "variant": "Sun about the solar-system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+        "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+        "uncertainty": "Interpolation below 10 cm of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+      },
+      "sha256": "7370284230908a57fb8c0ee9e21183678089631713c2d2521f87ed00171f2476",
+      "bytes": 363008
+    },
+    {
+      "id": "de440_mercury",
+      "builder": "de440",
+      "series": "de440_mercury",
+      "inputs": [
+        "naif_de440s",
+        "naif_gm_de440"
+      ],
+      "output": "ephemeris/de440_mercury.bin",
+      "provenance": {
+        "dataId": "environment_ephemeris",
+        "field": "de440Mercury",
+        "status": "published",
+        "variant": "Mercury barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+        "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+        "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+      },
+      "sha256": "78f2df742364bf26e5a72f1a00967083ab82fd94ee4278ca4df5b70595dd54a8",
+      "bytes": 1349232
+    },
+    {
+      "id": "de440_venus",
+      "builder": "de440",
+      "series": "de440_venus",
+      "inputs": [
+        "naif_de440s",
+        "naif_gm_de440"
+      ],
+      "output": "ephemeris/de440_venus.bin",
+      "provenance": {
+        "dataId": "environment_ephemeris",
+        "field": "de440Venus",
+        "status": "published",
+        "variant": "Venus barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+        "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+        "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+      },
+      "sha256": "f102018cb33748f113c53f8a894d0d9113664ef5fcafbe22d3c817b9a5227513",
+      "bytes": 675192
+    },
+    {
+      "id": "de440_mars",
+      "builder": "de440",
+      "series": "de440_mars",
+      "inputs": [
+        "naif_de440s",
+        "naif_gm_de440"
+      ],
+      "output": "ephemeris/de440_mars.bin",
+      "provenance": {
+        "dataId": "environment_ephemeris",
+        "field": "de440Mars",
+        "status": "published",
+        "variant": "Mars system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+        "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+        "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+      },
+      "sha256": "72140c8ae202c27f9362ed5d5b89ca59f88f032272e6c804314e2b4f088ebca8",
+      "bytes": 338336
+    },
+    {
+      "id": "de440_jupiter",
+      "builder": "de440",
+      "series": "de440_jupiter",
+      "inputs": [
+        "naif_de440s",
+        "naif_gm_de440"
+      ],
+      "output": "ephemeris/de440_jupiter.bin",
+      "provenance": {
+        "dataId": "environment_ephemeris",
+        "field": "de440Jupiter",
+        "status": "published",
+        "variant": "Jupiter system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+        "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+        "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+      },
+      "sha256": "302b59922adc096292578e16a506037a64feb5df8871872f9544c477e15a6e34",
+      "bytes": 157384
+    },
+    {
+      "id": "de440_saturn",
+      "builder": "de440",
+      "series": "de440_saturn",
+      "inputs": [
+        "naif_de440s",
+        "naif_gm_de440"
+      ],
+      "output": "ephemeris/de440_saturn.bin",
+      "provenance": {
+        "dataId": "environment_ephemeris",
+        "field": "de440Saturn",
+        "status": "published",
+        "variant": "Saturn system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+        "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+        "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+      },
+      "sha256": "3e4b59a4163619461958ce8de8c38a65c4df43007c3cb7ab8cd44e08c4d19d06",
+      "bytes": 157376
     }
   ]
 }

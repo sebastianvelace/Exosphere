@@ -206,6 +206,19 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
 - *Analítica:* contra los vectores de prueba de JPL y contra fixtures de SPICE (< 1 mm Luna);
   continuidad en los bordes de tramo. *Histórica:* geometría de la TLI y hora de LOI de Apollo 11
   (75:49:50,4 GET, SP-238 tabla 7-II) con guiado fechado; mismo caso para Apollo 8.
+  **E2.1/E2.2/E2.4 hechos (2026-11-08); E2.3 cambia de diseño.** Productos
+  `ephemeris/de440_{moon,emb,sun,mercury,venus,mars,jupiter,saturn}.bin` (1960–2051, 5,5 MB): Luna
+  geocéntrica 8 d / 18, BTL 16 d / 13, Sol 32 d / 13, Mercurio 8 d / 12, Venus 16 d / 12, Marte
+  32 d / 12, Júpiter y Saturno 64 d / 11; nodos de Chebyshev–Lobatto (los extremos del tramo se
+  incluyen, así que la posición es continua entre tramos; con nodos de Gauss la Luna saltaba
+  2,6 mm), verificados contra SPICE en la construcción. `Environment/ChebyshevEphemeris`
+  (Clenshaw sin asignaciones, velocidad analítica; Tierra = BTL − Luna·μ_L/(μ_T+μ_L) con los GM de
+  DE440; Kepler fuera del rango para todo el sistema a la vez) y `Universe.UseDatedEphemeris`.
+  Medido en 70 instantes: Luna geocéntrica 0,17 mm, Tierra 3,4 mm, planetas ≤ 6 mm, velocidades
+  ≤ 1,6 µm/s; Luna contra Horizons (DE441) en el lanzamiento del Apollo 11: 5,8 cm.
+  **E2.3:** la simulación no cambia de marco. Su marco inercial ya era la eclíptica J2000, que se
+  define como ICRF girado por ε₀ alrededor de +X; DE440 (ICRF) se gira a él con esa rotación
+  fija. No hay sesgo de marco que documentar ni hay que reescribir `OrbitalElements`.
 
 ### E3 — Gravedad
 

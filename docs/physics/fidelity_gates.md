@@ -25,7 +25,8 @@ with `bash tools/fidelity_gate.sh F1`.
 | F4 | closed | Variable-mass transport (shared mass geometry, settled tank columns, outlets, momentum-conserving flow cuts) on the coupled path; tidal moments; AS-506 S-IC jet-damping historical gate |
 | F5 | closed | Production funded modes, conservative coasts, damping provenance, saves/topology verified; complete CI 1588/1588 and Godot stable-orbit ascent pass |
 | F6 | open | Profile matrix and source audit underway; confirmed MA-6 mass-definition defect and native Atlas reconstruction remain open |
-| E1 | open | Dated time and Earth orientation (environment plan): UTC/TAI/TT/TDB and the IERS 2010 chain in place behind `Universe.UseIersEarthOrientation`; mission epochs (E1.3) remain |
+| E1 | open | Dated time and Earth orientation (environment plan): UTC/TAI/TT/TDB, the IERS 2010 chain behind `Universe.UseIersEarthOrientation` and sourced mission epochs; closes when missions fly dated (E5) |
+| E2 | open | Dated DE440 ephemerides behind `Universe.UseDatedEphemeris`; historical gate (Apollo 11 TLI/LOI with dated guidance) arrives with E5 |
 
 ## Gates
 
@@ -99,6 +100,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F6 | historical | `Apollo11SpsBurnScenarioTests.DockedStackShapesTheFlownNonCircularLunarOrbit` | SP-238 circularization: 53.75 x 65.71 n mi in 16.3 s with 45.4 m/s gained vs flown 53.8 x 65.7 n mi, 16.7 s, 159.3 ft/s |
 | E1 | analytic | `IersEarthOrientationTests.RotationMatchesErfaAndSpiceFrom1962To2026` | GCRS→ITRS within 0.21 mm of ERFA's IAU 2006/2000A + C04 chain at 128 instants 1962–2026; SPICE ITRF93 0.19 m median, within 3σ of each epoch's C04 uncertainty |
 | E1 | historical | `DatedEarthOrientationTests.LaunchPadsSitWhereSpicePutsThemOnTheDate` | LC-39A at the Apollo 11 launch 2.17 m from SPICE (3σ of 1969 C04: 3.36 m), LC-14 at Friendship 7 2.06 m, Starbase at Flight 4 0.13 m; pad velocity within 0.15 mm/s |
+| E2 | analytic | `DatedEphemerisTests.ChebyshevStatesMatchSpiceFrom1960To2050` | Barycentric DE440 states at 70 instants 1960–2050 (span boundaries included): geocentric Moon 0.17 mm, Earth 3.4 mm, planets ≤ 6 mm, velocities ≤ 1.6 µm/s; Moon at the Apollo 11 launch 5.8 cm from Horizons DE441 |
 
 F3 regression coverage also includes `Flight14EntryCheckpointTests` (exact 60-second
 continuation), `AttitudeActuatorBlendingTests` (shutdown trim, coupled bank reversal,

@@ -30,6 +30,86 @@
       "variant": "CIP X, Y and CIO locator s, daily at 0h TT, 1960-01-01 to 2051-12-31",
       "conditions": "Pure IAU model; observed corrections dX, dY come from eop_c04. Interpolated with 8-point Lagrange in the simulation.",
       "uncertainty": "IAU 2006/2000A model accuracy ~0.2 mas against VLBI before dX/dY; interpolation error tested below 1 microarcsec."
+    },
+    {
+      "dataId": "environment_ephemeris",
+      "field": "de440Moon",
+      "status": "published",
+      "source": "NASA JPL Solar System Dynamics / NAIF, JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp (SHA-256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2); NASA JPL NAIF, GM values consistent with DE440, gm_de440.tpc: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (SHA-256 924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140). Built by tools/envdata/products/de440.py into data/environment/ephemeris/de440_moon.bin (SHA-256 60a453ca5811685a47dcaf1bd2c8a477f3d15f5d0b392a2962d8a3362a560376).",
+      "accessedDate": "2026-11-08",
+      "variant": "geocentric Moon, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+      "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+      "uncertainty": "Interpolation below 2 mm / 2e-8 m/s of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+    },
+    {
+      "dataId": "environment_ephemeris",
+      "field": "de440EarthMoonBarycentre",
+      "status": "published",
+      "source": "NASA JPL Solar System Dynamics / NAIF, JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp (SHA-256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2); NASA JPL NAIF, GM values consistent with DE440, gm_de440.tpc: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (SHA-256 924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140). Built by tools/envdata/products/de440.py into data/environment/ephemeris/de440_emb.bin (SHA-256 5f5aa6f1d22a83d750ea1a874534a0b58a34516afa2634e308a256b73e193088).",
+      "accessedDate": "2026-11-08",
+      "variant": "Earth-Moon barycentre about the solar-system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+      "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+      "uncertainty": "Interpolation below 2 cm of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+    },
+    {
+      "dataId": "environment_ephemeris",
+      "field": "de440Sun",
+      "status": "published",
+      "source": "NASA JPL Solar System Dynamics / NAIF, JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp (SHA-256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2); NASA JPL NAIF, GM values consistent with DE440, gm_de440.tpc: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (SHA-256 924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140). Built by tools/envdata/products/de440.py into data/environment/ephemeris/de440_sun.bin (SHA-256 7370284230908a57fb8c0ee9e21183678089631713c2d2521f87ed00171f2476).",
+      "accessedDate": "2026-11-08",
+      "variant": "Sun about the solar-system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+      "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+      "uncertainty": "Interpolation below 10 cm of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+    },
+    {
+      "dataId": "environment_ephemeris",
+      "field": "de440Mercury",
+      "status": "published",
+      "source": "NASA JPL Solar System Dynamics / NAIF, JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp (SHA-256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2); NASA JPL NAIF, GM values consistent with DE440, gm_de440.tpc: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (SHA-256 924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140). Built by tools/envdata/products/de440.py into data/environment/ephemeris/de440_mercury.bin (SHA-256 78f2df742364bf26e5a72f1a00967083ab82fd94ee4278ca4df5b70595dd54a8).",
+      "accessedDate": "2026-11-08",
+      "variant": "Mercury barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+      "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+      "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+    },
+    {
+      "dataId": "environment_ephemeris",
+      "field": "de440Venus",
+      "status": "published",
+      "source": "NASA JPL Solar System Dynamics / NAIF, JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp (SHA-256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2); NASA JPL NAIF, GM values consistent with DE440, gm_de440.tpc: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (SHA-256 924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140). Built by tools/envdata/products/de440.py into data/environment/ephemeris/de440_venus.bin (SHA-256 f102018cb33748f113c53f8a894d0d9113664ef5fcafbe22d3c817b9a5227513).",
+      "accessedDate": "2026-11-08",
+      "variant": "Venus barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+      "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+      "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+    },
+    {
+      "dataId": "environment_ephemeris",
+      "field": "de440Mars",
+      "status": "published",
+      "source": "NASA JPL Solar System Dynamics / NAIF, JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp (SHA-256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2); NASA JPL NAIF, GM values consistent with DE440, gm_de440.tpc: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (SHA-256 924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140). Built by tools/envdata/products/de440.py into data/environment/ephemeris/de440_mars.bin (SHA-256 72140c8ae202c27f9362ed5d5b89ca59f88f032272e6c804314e2b4f088ebca8).",
+      "accessedDate": "2026-11-08",
+      "variant": "Mars system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+      "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+      "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+    },
+    {
+      "dataId": "environment_ephemeris",
+      "field": "de440Jupiter",
+      "status": "published",
+      "source": "NASA JPL Solar System Dynamics / NAIF, JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp (SHA-256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2); NASA JPL NAIF, GM values consistent with DE440, gm_de440.tpc: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (SHA-256 924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140). Built by tools/envdata/products/de440.py into data/environment/ephemeris/de440_jupiter.bin (SHA-256 302b59922adc096292578e16a506037a64feb5df8871872f9544c477e15a6e34).",
+      "accessedDate": "2026-11-08",
+      "variant": "Jupiter system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+      "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+      "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
+    },
+    {
+      "dataId": "environment_ephemeris",
+      "field": "de440Saturn",
+      "status": "published",
+      "source": "NASA JPL Solar System Dynamics / NAIF, JPL planetary and lunar ephemeris DE440 (short span, 1849-2150), SPK de440s.bsp: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp (SHA-256 c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2); NASA JPL NAIF, GM values consistent with DE440, gm_de440.tpc: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc (SHA-256 924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140). Built by tools/envdata/products/de440.py into data/environment/ephemeris/de440_saturn.bin (SHA-256 3e4b59a4163619461958ce8de8c38a65c4df43007c3cb7ab8cd44e08c4d19d06).",
+      "accessedDate": "2026-11-08",
+      "variant": "Saturn system barycentre, ICRF, TDB, 1960-01-01 to 2051-01-01, piecewise Chebyshev",
+      "conditions": "Chebyshev interpolation of DE440 at Gauss nodes per span; analytic velocity; verified against SPICE at 2000 random instants at build time.",
+      "uncertainty": "Interpolation below 1 m of DE440; DE440 itself is accurate to ~1 m (Moon, LLR) and better for the inner planets (Park et al. 2021)."
     }
   ]
 }

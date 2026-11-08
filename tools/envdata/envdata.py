@@ -116,7 +116,8 @@ def build_bytes(manifest: dict, product: dict) -> bytes:
     sources = {name: cached_source(known[name]) for name in product["inputs"]}
     sources["__datasets__"] = known
     builder = importlib.import_module(f"products.{product['builder']}")
-    header, rows = builder.build(sources)
+    header, rows = (builder.build_series(product["series"], sources) if "series" in product
+                    else builder.build(sources))
     header["sources"] = {name: known[name]["sha256"] for name in product["inputs"]}
     return envfile.encode(header, rows)
 

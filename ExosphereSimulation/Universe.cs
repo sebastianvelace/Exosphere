@@ -84,6 +84,18 @@ public partial class Universe
     /// is then read as TDB seconds since J2000. Off by default until the dated environment is
     /// switched on as a whole (E5).
     /// </summary>
+    /// <summary>
+    /// Switches the ephemeris to dated JPL DE440 (environment plan E2): barycentric states from
+    /// 1960 to 2051, Kepler outside. Simulation time is then TDB seconds since J2000. Bodies are
+    /// re-propagated at <see cref="CurrentTime"/> at once.
+    /// </summary>
+    public void UseDatedEphemeris(string dataDirectory)
+    {
+        Environment.Ephemeris = ChebyshevEphemeris.LoadFromDataDirectory(dataDirectory);
+        if (_bodies.Count > 0)
+            Environment.Ephemeris.PropagateAll(_bodies, CurrentTime);
+    }
+
     public void UseIersEarthOrientation(string dataDirectory)
     {
         var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");
