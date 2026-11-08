@@ -160,8 +160,11 @@ sonda, el pico del despegue desaparece (máximo posterior 18 ms, a ~78 s). Coste
 en Godot (build Debug, headless): 531 ms dentro de una carga de 8,7 s
 (`PERF_STARTUP phase=physics_warmup`). Prueba: `PerformanceBudgetTests` exige que el
 calentamiento llegue al camino `active` y que una corrida posterior sea idéntica bit a bit.
-Límites: no cubre caminos específicos de otros vehículos (cápsulas, acople), y el pico de
-~13 ms a ~81 s sigue. Falta la parte 2: ReadyToRun en la exportación, que se valida con la
+Medición en Release tras O1+O9 (Flight 14, 4000 pasos = 80 s de vuelo): media 0,35 ms, p99
+1,5 ms, máximo 5,0 ms, 60 KB/paso y **una sola** recolección gen0. Con eso O1b (modelo
+persistente, ≤ 1 KB/paso) deja de ser urgente: queda como mejora, no como bloqueo.
+El pico de primera ejecución de ~81 s baja a 5,0 ms (dentro de un frame). Límites: no cubre
+caminos específicos de otros vehículos (cápsulas, acople). Falta la parte 2: ReadyToRun en la exportación, que se valida con la
 exportación real en el equipo del usuario.
 
 Hallazgo de proceso: los vehículos y las piezas reciben GUID aleatorios; una huella de
