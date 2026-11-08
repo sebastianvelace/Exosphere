@@ -3,3 +3,4 @@
 spiceypy==8.3.0
 jplephem==2.24
 numpy==2.4.6
+pyerfa==2.0.1.5

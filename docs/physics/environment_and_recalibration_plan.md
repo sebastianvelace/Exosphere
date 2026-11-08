@@ -140,6 +140,15 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   con fracciones de 1961–1971; TDB−TT por la serie de Fairhead–Bretagnon truncada (< 10 µs);
   UT1 desde EOP 20 C04 (desde 1962). *Analítica:* ida y vuelta < 1 µs; contra `spiceypy.unitim`
   y `et2utc` en 100 instantes 1962–2035 (< 10 µs).
+  **Hecho UTC/TAI/TT/TDB (2026-11-08).** `Environment/TimeScales` (segundos desde J2000 en cada
+  escala, ~0,1 µs de resolución) y `Environment/EnvironmentProductFile` (lector del contenedor de
+  `envdata`). **Corrección del plan:** SPICE usa un modelo TDB de un término (~30 µs del modelo
+  completo), así que no sirve de oráculo a 10 µs; el oráculo es ERFA/SOFA (`eraUtctai`,
+  `eraTaitt`, `eraDtdb` completo), con el fixture `ExosphereSimulation.Tests/Fixtures/environment/
+  time_scales.json` de `tools/envdata/fixtures/time_scales.py` (113 instantes 1961–2035: lanzamientos
+  de Freedom 7, Friendship 7, Gemini 8, Apollo 8 y 11, ambos lados de cada salto). Medido: TAI/TT
+  0,24 µs, TDB 6,6 µs (serie truncada de la USNO Circular 179), ida y vuelta exacta, SPICE 30 µs
+  (informativo). Falta UT1 (EOP 20 C04), que llega con E1.2.
 - **E1.2 Orientación terrestre.** Precesión IAU 2006, nutación IAU 2000B, ERA(UT1), movimiento
   del polo (x_p, y_p) y s′; tabla EOP diaria ~0,5 MB. Antes de 1962-01-20 (Freedom 7): modelo
   sin EOP (UT1 ≈ UTC) con la incertidumbre declarada. *Analítica:* contra
