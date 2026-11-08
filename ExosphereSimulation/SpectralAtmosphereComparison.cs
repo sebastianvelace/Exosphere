@@ -97,7 +97,7 @@ public sealed class SpectralComparisonReport
             };
             lines.Add(string.Join(',', values.Select(FormatCsv)));
         }
-        return string.Join(Environment.NewLine, lines);
+        return string.Join(System.Environment.NewLine, lines);
     }
 
     private static string Escape(string value) =>

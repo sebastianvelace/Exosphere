@@ -110,6 +110,12 @@ Important implemented systems:
 - heat-shield flag from part JSON
 - hard impact destruction
 - VAB catalog/assembly/export in `ExosphereSimulation/Construction`
+- environment providers in `ExosphereSimulation/Environment` (`Universe.Environment.Ephemeris`,
+  `CelestialBody.Orientation`/`Gravity`; defaults are the original Kepler/fixed-axis/J2 models) and
+  one air-velocity point (`CelestialBody.GetAirVelocity`, `Vessel.GetAirRelativeVelocity`: aero,
+  heating and air data read the air; contact, landing and navigation read the surface)
+- environment datasets enter through `tools/envdata` and `data/environment/manifest.json`
+  (offline SHA-256 + provenance contract in `contract_checks.sh`)
 - Hohmann planetary transfers, Earth–Moon Lambert/B-plane planning, encounter prediction, and patched-conic SOI transitions in `ExosphereSimulation/Navigation` and `Universe`
 
 ## Game Layer Rules

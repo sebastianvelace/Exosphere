@@ -131,36 +131,14 @@ public partial class CelestialBody
     /// perturbation in the body equatorial frame (+Z = <see cref="RotationAxis"/>).
     /// Returns zero if the position coincides with the body's centre.
     /// </summary>
-    public Vector3d GetGravityAt(Vector3d worldPos)
-    {
-        var    rVec   = worldPos - Position;
-        double distSq = rVec.MagnitudeSquared;
-        if (distSq < 1.0) return Vector3d.Zero;
-
-        if (J2 == 0.0)
-            return rVec.Normalized * (-GM / distSq);
-
-        double r = System.Math.Sqrt(distSq);
-        GetBodyFixedEquatorialBasis(out var eastOfPrime, out var ninetyEast, out var north);
-        double x = rVec.Dot(eastOfPrime);
-        double y = rVec.Dot(ninetyEast);
-        double z = rVec.Dot(north);
-        double muOverR3 = GM / (distSq * r);
-        double reOverR = EquatorialRadius / r;
-        double j2Scale = 1.5 * J2 * reOverR * reOverR;
-        double zr2 = (z / r) * (z / r);
-        double ax = -muOverR3 * x * (1.0 - j2Scale * (5.0 * zr2 - 1.0));
-        double ay = -muOverR3 * y * (1.0 - j2Scale * (5.0 * zr2 - 1.0));
-        double az = -muOverR3 * z * (1.0 - j2Scale * (5.0 * zr2 - 3.0));
-        return eastOfPrime * ax + ninetyEast * ay + north * az;
-    }
+    public Vector3d GetGravityAt(Vector3d worldPos) => Gravity.AccelerationAt(this, worldPos);
 
     /// <summary>
     /// Body-fixed equatorial basis: prime meridian, 90° east, and spin axis (north).
     /// Same construction as <see cref="GetSurfacePosition"/> so gravity latitude and
     /// geodetic latitude cannot drift apart.
     /// </summary>
-    private void GetBodyFixedEquatorialBasis(
+    internal void GetBodyFixedEquatorialBasis(
         out Vector3d primeMeridian, out Vector3d ninetyEast, out Vector3d north)
     {
         north = RotationAxis;
@@ -179,23 +157,22 @@ public partial class CelestialBody
     /// This is the single definition of the body's spin axis — surface velocity, latitude
     /// and the local east direction are all derived from it, so they cannot drift apart.
     /// </summary>
-    public Vector3d RotationAxis
-    {
-        get
-        {
-            double tiltRad = AxialTilt * MathUtils.DEG_TO_RAD;
-            return new Vector3d(
-                0.0,
-                System.Math.Sin(tiltRad),
-                System.Math.Cos(tiltRad)).Normalized;
-        }
-    }
+    public Vector3d RotationAxis => Orientation.SpinAxis(this);
 
     /// <summary>Angular velocity ω (rad/s). Sign preserved: negative ⇒ retrograde.</summary>
-    public double AngularSpeed =>
-        System.Math.Abs(RotationalPeriod) < 1.0
-            ? 0.0
-            : 2.0 * System.Math.PI / RotationalPeriod;
+    public double AngularSpeed => Orientation.AngularSpeed(this);
+
+    /// <summary>
+    /// Provider of the spin axis, rate and rotation angle (environment plan E0.3);
+    /// <see cref="Environment.FixedAxisRotation"/> unless a dated model is assigned.
+    /// </summary>
+    public Environment.IBodyOrientation Orientation { get; set; } = Environment.FixedAxisRotation.Instance;
+
+    /// <summary>
+    /// Provider of the gravitational field (environment plan E0.3);
+    /// <see cref="Environment.ZonalJ2Gravity"/> unless a spherical-harmonic field is assigned.
+    /// </summary>
+    public Environment.IGravityField Gravity { get; set; } = Environment.ZonalJ2Gravity.Instance;
 
     /// <summary>
     /// Surface velocity at <paramref name="worldPos"/> due to the body's rotation (m/s):
@@ -443,7 +420,7 @@ public partial class CelestialBody
     public Vector3d GetSurfacePositionAtTime(
         double latitudeDeg, double longitudeDeg, double simulationTime, double altitudeM = 0.0)
     {
-        double rotationDegrees = AngularSpeed * simulationTime * MathUtils.RAD_TO_DEG;
+        double rotationDegrees = Orientation.RotationAngleAt(this, simulationTime) * MathUtils.RAD_TO_DEG;
         return GetSurfacePosition(latitudeDeg, longitudeDeg + rotationDegrees, altitudeM);
     }
 
@@ -467,7 +444,7 @@ public partial class CelestialBody
     {
         if (AngularSpeed == 0.0) return inertialDirection;
         var inverseSpin = Math.Quaterniond.FromAxisAngle(
-            RotationAxis, -AngularSpeed * simulationTime);
+            RotationAxis, -Orientation.RotationAngleAt(this, simulationTime));
         return inverseSpin.Rotate(inertialDirection);
     }
 
@@ -571,6 +548,7 @@ public partial class CelestialBody
         OrbitalElements = OrbitalElements,
         Position = Position,
         Velocity = Velocity,
+        Orientation = Orientation,
     };
 
     /// <summary>

@@ -125,6 +125,14 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   Horizons/SPICE llegan con su primer consumidor (E1/E2).
 - **E0.3 `EnvironmentContext`** con los proveedores actuales envueltos (Kepler, eje fijo, J2,
   USSA-76, sin viento). *Salida:* paridad bit a bit.
+  **Hecho (2026-11-08).** `ExosphereSimulation/Environment/`: `IEphemerisProvider`
+  (`KeplerEphemeris`, a nivel de `Universe.Environment`), `IBodyOrientation`
+  (`FixedAxisRotation`, en `CelestialBody.Orientation`) e `IGravityField` (`ZonalJ2Gravity`, en
+  `CelestialBody.Gravity`); `EnvironmentContext.Describe` nombra los proveedores para registros
+  y guardados. Todo estado de cuerpo, eje, velocidad y ángulo de giro y toda gravedad pasan por
+  ellos. Huella de Flight 14 idéntica y la misma asignación por paso; `EnvironmentContextTests`
+  fija las fórmulas originales y la coherencia de la cadena Sol–Tierra–Luna. La atmósfera y el
+  viento reciben su contrato en E4, donde se define el argumento de tiempo que necesitan.
 
 ### E1 — Tiempo y orientación terrestre
 

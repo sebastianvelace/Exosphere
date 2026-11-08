@@ -7,6 +7,7 @@ namespace Exosphere.Simulation;
 
 using System.Diagnostics;
 using Exosphere.Simulation.Flight;
+using Exosphere.Simulation.Environment;
 using Exosphere.Simulation.Integrators;
 using Exosphere.Simulation.Math;
 
@@ -71,7 +72,12 @@ public partial class Universe
         DeferredSloshAnchor[]? Slosh = null);
     private readonly Dictionary<string, DeferredRailAnchor> _deferredRailAnchors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _nextDeferredRailDeadline = new(StringComparer.Ordinal);
-    private readonly KeplerPropagator.BodyPropagationWorkspace _bodyPropagationWorkspace = new();
+    /// <summary>
+    /// The environment providers (ephemeris here; orientation and gravity per body). Every
+    /// body-state query goes through it (environment plan E0.3).
+    /// </summary>
+    public EnvironmentContext Environment { get; } = new();
+    private Func<string, CelestialBody?>? _resolveBody;
     private double _pendingSimulationSeconds;
     private IPhysicsStepController? _physicsStepController;
     private double _physicsControlSecondsUntilUpdate;
@@ -106,10 +112,7 @@ public partial class Universe
         _deferredRailAnchors.Clear();
         _nextDeferredRailDeadline.Clear();
         if (_bodies.Count > 0)
-            KeplerPropagator.PropagateAllBodies(
-                _bodies,
-                CurrentTime,
-                _bodyPropagationWorkspace);
+            Environment.Ephemeris.PropagateAll(_bodies, CurrentTime);
     }
 
     /// <summary>
@@ -255,10 +258,7 @@ public partial class Universe
         _deferredRailAnchors.Clear();
         _nextDeferredRailDeadline.Clear();
         if (_bodies.Count > 0)
-            KeplerPropagator.PropagateAllBodies(
-                _bodies,
-                CurrentTime,
-                _bodyPropagationWorkspace);
+            Environment.Ephemeris.PropagateAll(_bodies, CurrentTime);
     }
 
     /// <summary>Maximum physics sub-step (s) used in full-physics mode (50 Hz).</summary>
@@ -888,7 +888,7 @@ public partial class Universe
         double dt = target - start;
         if (dt <= 1e-12 || vessel.IsDestroyed) return;
         if (bodyEpochToRestore.HasValue)
-            KeplerPropagator.PropagateAllBodies(_bodies, target, _bodyPropagationWorkspace);
+            Environment.Ephemeris.PropagateAll(_bodies, target);
         CurrentTime = start;
         try
         {
@@ -904,7 +904,7 @@ public partial class Universe
         {
             CurrentTime = target;
             if (bodyEpochToRestore is { } bodyEpoch)
-                KeplerPropagator.PropagateAllBodies(_bodies, bodyEpoch, _bodyPropagationWorkspace);
+                Environment.Ephemeris.PropagateAll(_bodies, bodyEpoch);
         }
     }
 
@@ -1849,10 +1849,7 @@ public partial class Universe
     private void TickPhysics(double dt)
     {
         // 1. Propagate celestial bodies on Keplerian rails
-        KeplerPropagator.PropagateAllBodies(
-            _bodies,
-            CurrentTime + dt,
-            _bodyPropagationWorkspace);
+        Environment.Ephemeris.PropagateAll(_bodies, CurrentTime + dt);
 
         // 2. Integrate each active vessel with RK4.
         // Snapshot the count: structural breakup may append debris mid-loop. New
@@ -2195,10 +2192,7 @@ public partial class Universe
     private void TickPhysicsMixed(double dt)
     {
         // All celestial bodies on rails
-        KeplerPropagator.PropagateAllBodies(
-            _bodies,
-            CurrentTime + dt,
-            _bodyPropagationWorkspace);
+        Environment.Ephemeris.PropagateAll(_bodies, CurrentTime + dt);
         double targetTime = CurrentTime + dt;
 
         // Structural breakup may append debris; preserve the old snapshot semantics
@@ -3310,10 +3304,7 @@ public partial class Universe
 
     private void TickRails(double dt)
     {
-        KeplerPropagator.PropagateAllBodies(
-            _bodies,
-            CurrentTime + dt,
-            _bodyPropagationWorkspace);
+        Environment.Ephemeris.PropagateAll(_bodies, CurrentTime + dt);
         foreach (var vessel in _vessels)
         {
             if (IsDockedSecondary(vessel))
@@ -3616,27 +3607,16 @@ public partial class Universe
 
     /// <summary>
     /// Inertial state (position, velocity) of a body at an arbitrary simulation time,
-    /// WITHOUT mutating global body state. Mirrors <c>KeplerPropagator.PropagateAllBodies</c>
-    /// by walking the reference chain (Moon → Earth → Sun); a root body with no orbital
-    /// elements is treated as fixed at its current stored position.
+    /// WITHOUT mutating global body state, from the environment's ephemeris
+    /// (<see cref="EnvironmentContext.Ephemeris"/>; the Kepler model walks the reference
+    /// chain Moon → Earth → Sun, a root body with no orbital elements stays fixed).
     ///
     /// Needed because the global bodies are propagated once to the tick's END time, but
     /// an on-rails SOI crossing happens at an intermediate sub-step time — the reference
     /// body's state at THAT instant is what keeps the patched-conic re-frame continuous.
     /// </summary>
-    private (Vector3d pos, Vector3d vel) BodyStateAt(CelestialBody body, double t)
-    {
-        if (body.OrbitalElements is null)
-            return (body.Position, body.Velocity);   // root (e.g. Sun) — fixed at origin
-
-        var refBody = GetBody(body.OrbitalElements.ReferenceBodyId);
-        if (refBody is null)
-            return (body.Position, body.Velocity);
-
-        var (refPos, refVel)  = BodyStateAt(refBody, t);
-        var (relPos, relVel)  = body.OrbitalElements.GetStateAtTime(t, refBody.GM);
-        return (refPos + relPos, refVel + relVel);
-    }
+    private (Vector3d pos, Vector3d vel) BodyStateAt(CelestialBody body, double t) =>
+        Environment.Ephemeris.StateAt(body, t, _resolveBody ??= GetBody);
 
     /// <summary>
     /// Like <see cref="GetDominantBody"/> but evaluates each body's position at time
@@ -3713,17 +3693,16 @@ public partial class Universe
         var bodiesDir = System.IO.Path.Combine(dataDir, "bodies");
         var bodies    = CelestialBody.LoadAllFromDirectory(bodiesDir);
 
-        // Root body sits at the inertial origin. PropagateAllBodies recursively resolves
+        // Root body sits at the inertial origin. The ephemeris recursively resolves
         // parents before children, independent of JSON/filesystem enumeration order.
         if (bodies.TryGetValue("sun", out var sun))
         {
             sun.Position = Vector3d.Zero;
             sun.Velocity = Vector3d.Zero;
         }
-        KeplerPropagator.PropagateAllBodies(bodies.Values, 0.0);
-
         foreach (var body in bodies.Values)
             universe.AddBody(body);
+        universe.Environment.Ephemeris.PropagateAll(universe._bodies, 0.0);
 
         return universe;
     }
