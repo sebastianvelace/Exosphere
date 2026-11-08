@@ -274,3 +274,15 @@ checks. Result `/tmp/exo-f6-as506-interfaces-ci.exit` is 0. The same unfiltered 
 `/tmp/exo-f6-as506-interfaces-ci-profiles/report.json`: 53/53 selected cases over nine
 profiles pass with no missing selectors; `--verify-only` confirms source/data/assembly
 identities. The failed LC-39A generic smoke run above remains separate evidence.
+
+
+## Docked capture and measured SPS inventory follow-up (2026-11-08)
+
+The controlled arrival now has its own CSM-107/LM-5 fixture using the real `TryDock`
+constraint. Before correction, PeriapsisCaptureBurn estimated the ignition window with
+only the primary CSM mass: ignition T+2856.30 s, 384.32 s burn, 55.28 x 311.88 km orbit,
+failing the existing 81 km minimum perilune. Using `TranslationalMassKg` gives ignition
+T+2781.14 s, 380.66 s burn and 101.94 x 312.02 km. The new 180 s ignition-window test
+also fails the original controller directly. Two docked and four existing Apollo 8 cases
+pass 6/6 in the main tree with the original inventory (2 m 35 s). Lunar targets and the
+2580 m/s controlled arrival remain the common Apollo 8 proxy, not an Apollo 11 replay.

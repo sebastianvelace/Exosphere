@@ -162,8 +162,10 @@ public sealed class PeriapsisCaptureBurn
         double targetApoapsis = body.Radius + _targetApoapsisAltitudeM;
         double targetSpeed = System.Math.Sqrt(body.GM * (2.0 / rp - 2.0 / (rp + targetApoapsis)));
         double deltaV = System.Math.Max(0.0, periapsisSpeed - targetSpeed);
+        // The thrust accelerates the whole docked stack. Using only the primary's
+        // mass opens this window late when, for example, the SPS also carries the LM.
         // Constant-mass estimate: slightly long, which centres the burn conservatively.
-        return vessel.TotalMass * deltaV / thrust;
+        return vessel.TranslationalMassKg * deltaV / thrust;
     }
 
     private void Block(Vessel vessel, string reason)

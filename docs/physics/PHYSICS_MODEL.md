@@ -324,6 +324,14 @@ nozzle offsets, the SPS logical 1 m envelope and its point-outlet fallback remai
 unresolved; the gimbal station does not establish the physical bell exit. See
 `as506_spacecraft_reconstruction.md` for source revisions and mass-property limits.
 
+`PeriapsisCaptureBurn` opens its constant-mass half-burn window using
+`TranslationalMassKg`: the primary and its hard-docked secondaries. Using the primary
+alone delayed the controlled CSM-107/LM-5 SPS ignition by about 75 s and left a 55.28 km
+perilune. The corrected controlled-arrival fixture reaches 101.94 x 312.02 km with the
+same orbit bounds; an independent 180 s ignition-window regression catches the error.
+The two docked cases and four existing CSM-103 cases pass. This extends controller
+coverage; Apollo 11's lunar target still uses the declared Apollo 8 proxy.
+
 Apollo 11's transposition, docking and extraction use the same `ProximityApproach` on the SM RCS
 (four quads: 1780 N per axis, Isp 290 s, 610 kg). The CSM leaves the S-IVB/SLA on the
 separation impulse, turns end over end to face Eagle's drogue and closes to a real capture
