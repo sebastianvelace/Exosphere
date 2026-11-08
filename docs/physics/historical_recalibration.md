@@ -152,6 +152,49 @@ rounded published mass ledger above. Its draft status and preliminary landing ti
 remain visible; it must not silently supersede the published results. Both scans are
 image-only: `pdftotext` returning form feeds does not mean their tables are empty.
 
+### Engine identity and phase-integrated flow checks
+
+The same original test-objectives report, section 5.2, printed p. 5-1 (PDF p. 36),
+explicitly describes MA-5 on 109D as a redesignation with no significant hardware
+difference from the earlier MA-2. The original scan was inspected in
+`/tmp/exo-f6-ma6-engine-redesignation.png`. Section 5.2.10.1 identifies booster
+NA 115102, sustainer NA 225102 and vernier chambers. A later Atlas engine rating
+cannot be selected solely because it also bears an MA-5 label.
+
+The Appendix B event masses give independent phase-integrated mass losses. Subtract
+only the separately listed jettison mass within each interval:
+
+| Preflight interval | Non-jettison loss (lb) | Duration (s) | Mean loss (kg/s) |
+| --- | --- | --- | --- |
+| Liftoff to BECO | 195766 | 131.3 | 676.298 |
+| BECO to booster jettison | 732 | 2.8 | 118.582 |
+| Booster to tower jettison | 5306 | 20.0 | 120.338 |
+| Tower jettison to SECO | 39698 | 149.7 | 120.285 |
+
+These are simulation-ledger differences, not measurements of individual engine flows;
+shutdown transients and any non-engine losses remain part of the intervals. Liftoff
+thrust divided by total weight flow gives aggregate Isp 244.604 s. It does not identify
+the booster/sustainer/vernier split. Sea-level and vacuum thrust/Isp pairs should be
+checked together against flow; copying inconsistent ratings can manufacture a pressure-
+dependent consumption change for otherwise fixed-flow hardware.
+
+The available loads total 242216 lb, whereas liftoff-to-SECO mass loss after subtracting
+booster and tower is 241502 lb, leaving 714 lb. Magnifying the original p. B-4 confirms
+that its fuel residual reads **.312 lb**, or 0.141521 kg; the OCR incorrectly emitted
+`-312 lb`. With LOX 712 lb, the reported residual is 712.312 lb. The remaining 1.688 lb
+(0.765664 kg) is compatible with rounding of the integer-pound event masses and loads.
+The earlier alleged 142.428 kg discrepancy was an OCR error, not a physical missing mass.
+The original detail is `/tmp/exo-f6-atlas-residual-detail.png`; do not propagate the OCR
+sign into a new dry allocation. Loading epochs and component flow definitions still need
+explicit treatment before adopting the native reconstruction.
+
+Subsequent isolated comparisons use the original post-BECO turn followed by engineering
+closed-loop insertion, while keeping the approximate engine ratings explicit. Correcting
+only the nominal mixtures from 2.25 to the source values materially improves velocity,
+but the original orbit gate still fails. The source PU system and the contemporary
+Atlas-Centaur nominal envelope are recorded in
+[`atlas_ma6_reconstruction.md`](atlas_ma6_reconstruction.md); no experimental data are adopted.
+
 ## AS-506 remaining mass-property residual
 
 [MPR-SAT-FE-69-9](https://www.ibiblio.org/apollo/Documents/lvfea-AS506-Apollo11.pdf),
@@ -224,3 +267,30 @@ source/current spacecraft mass residuals above and explicitly sets historical ca
 complete to false. The original Mercury snapshot did not log numeric success-state residuals; its
 pass result must not be promoted to a measured residual. Subsequent MR-3 runs now retain
 their numeric observations, as documented above.
+
+## Exterior-envelope and feed-cutoff checkpoint (2026-11-08)
+
+The current correction supports explicit axial overlaps/gaps in vehicle length and counts
+only the exposed coaxial aerodynamic sections. All 12 catalogue variants retain exactly
+the previous ordered aerodynamic-element bits. The AS-506 source-interface candidate
+remains separate from production; see the reconstruction worksheet.
+
+An independent runtime trace exposed an aggregate-residual cutoff trap: SIC fuel and
+header fuel ran out while 32059.2 kg of oxidizer remained above the 31995 kg cutoff.
+The schedule waited for its late clock guard. It now responds to exhausted constituent
+feed, preserving header use, residual, separation delay and clock-only AS-503 behavior.
+No engine rating, load, guidance gain or original acceptance limit changed.
+
+The original AS-506 gate now reports insertion at T+689 s, S-IVB propellant 72.0 t,
+vehicle 131.1 t and 3352 m/s TLI capacity. The precise isolated comparison is T+688.60 s,
+72040.549 kg, 131111.947 kg and 3351.957 m/s. Against FER's about T+709.33 s / 75.7 t /
+135.7 t, residuals are approximately -20.7 s / -3.7 t / -4.6 t. Passing the preserved
+orbit/capacity gates does not close those historical differences or the missing native
+flow/mixture/initial-epoch reconstruction.
+
+Complete CI passed 1607/1607 tests without skips or failures (47 m 50 s), four builds
+with zero warnings/errors, contracts and Godot startup/main/VAB/graphics checks.
+`/tmp/exo-f6-overlap-cutoff-ci.exit` is 0. The same unfiltered full-suite TRX supplies
+the matrix in `/tmp/exo-f6-overlap-cutoff-ci-profiles/report.json`: all 50 selected cases
+over nine profiles pass, no missing selectors, and `--verify-only` confirms current
+source/data/assembly identities. F6 remains open for the reconstructions documented above.

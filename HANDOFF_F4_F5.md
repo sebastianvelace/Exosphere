@@ -1,6 +1,6 @@
 # F5 closure and F6 continuation
 
-Updated 2026-11-07. User scope: complete F5, then F6; commit/push authorized; do not merge
+Updated 2026-11-08. User scope: complete F5, then F6; commit/push authorized; do not merge
 main. F5 is pushed at `ca7949d` on `codex/f5-slosh-production`. Active continuation branch:
 `codex/f6-historical-recalibration`. Author and committer: Sebas
 <sebastianvelace@gmail.com>, conventional commits, no AI attribution.
@@ -187,6 +187,121 @@ silently double-count the separate model ring; map source axes explicitly. These
 constraints make a geometry-based correction possible without shifting every module to fit
 one FER CG. Next physical unit should add independent interface regressions, provenance,
 then validate ascent/TLI/docking/conservation and rendering before adoption.
+
+## Exterior-envelope work unit and held interface candidate
+
+Implementation commits: `7ef197d` (physical exterior envelope) and `f7ce888` (exhausted
+SIC feed cutoff). The unapplied interface candidate and source liquid ledger are committed
+in `cd76fce`. All three belong to `codex/f6-historical-recalibration`; main is untouched.
+
+The source checkpoint above is pushed in `63b4fdd`. A subsequent interface implementation
+passed static checks but failed the unchanged AS-506 TLI capacity gate: 3222.114 m/s
+versus a required capacity greater than 3250 m/s. The matrix was cancelled after that
+confirmed failure; `/tmp/exo-f6-profile-interfaces/console.log` is partial failure evidence,
+not a completed successful matrix. The catalogue edits were removed from production and
+preserved in `docs/physics/candidates/as506_structural_interfaces.patch`. `git apply --check`
+passes. The patch includes provenance, regressions and the renderer/matrix changes.
+
+The candidate exposed independent model defects. `PartGraph.VehicleLength` previously
+summed component lengths even when they overlap. `DistributedAerodynamics` counted
+buried hardware and ordered diameter steps by component centres: an overlapping SPS
+created two boat-tails and a Munk-area sum 65.921452 m2 versus the aft section's
+80.118467 m2. The working model correction uses the physical axial/exposed-section
+envelope, preserving ordinary serial-stack summation and aerodynamic element order.
+It supports cylindrical overlaps with uncovered aggregate ogives; off-axis/overlapped-
+ogive geometry keeps the previous approximation. No data, engine rating, load, controller
+gain or historical/conservation/contact limit changes in this unit.
+
+Independent regressions first failed: folded length 10 m versus 6 m, duplicated planform
+12 m2 versus 8 m2, hidden-engine section/force errors. The corrected targeted run passes
+26/26, no skips: `/tmp/exo-f6-overlap-core-green.log`. A full catalogue compatibility
+check shows all 12 variants retain every aerodynamic
+element component bit for bit against the previous builder, including order
+(`/tmp/exo-f6-catalogue-aero-compat.log`, exit 0). The isolated old-catalogue ascent
+retains exactly T+719.06 s / 69005.111 kg / 3253.890 m/s TLI capacity. With both corrected
+envelope and source interfaces it gives T+721.56 s / 68469.194 kg / 3236.267 m/s: still
+FAIL. Roll damping alone does not recover the gate and was not adopted. Numeric
+comparisons are in `/tmp/exo-f6-as506-diagnostic/*-hull2.log` and `*-roll.log`.
+
+Actual candidate pad views `/tmp/exo-f6-as506-geometry-view-{0,1,2}.png` were captured
+under Xvfb at 1000x900 in `/tmp/exo-f5-godot-validation`; views 0 and 1 were inspected.
+The isolated helper/autoload were removed; the main project never acquired a harness.
+These views establish visible connections only, not ascent/docking acceptance.
+
+The later source trace identified an additional production cutoff trap: all SIC fuel,
+including suction-line headers, is gone by T+164 s, leaving 32059.2 kg of oxidizer above
+the configured 31995 kg cutoff. The residual cannot decrease, so the schedule waits until
+T+176.63 s. The actual trace is `/tmp/exo-f6-as506-diagnostic/baseline-fueltrace.log`.
+The schedule now reacts to either exhausted constituent while retaining header feed,
+the source residual/separation delay, final clock guard and AS-503 clock-only policy.
+Two unit cases first failed. Final targeted tests pass 33/33, no skips, process exit 0:
+`/tmp/exo-f6-overlap-cutoff.log`, TRX `/tmp/exo-f6-overlap-cutoff/overlap-cutoff.trx`.
+The actual ascent regression verifies separation within the source delay plus two physics
+steps of feed exhaustion, instead of waiting for the guard.
+
+The isolated old-catalogue ascent with the cutoff correction gives T+688.60 s / 72040.549 kg
+/ 3351.957 m/s capacity. With source interfaces and exposed-envelope correction it gives
+T+689.52 s / 71843.331 kg / 3345.628 m/s, passing the original capacity gate. This removes
+the original TLI blocker, but the candidate remains held: its other flight segments and
+newly identified local-frame constraints have not been validated together. The source
+mixture/ground-run reconstruction and historical cutoff cause are still open F6 work.
+
+The first envelope-only CI was cancelled to include this confirmed schedule bug; its
+`/tmp/exo-f6-core-ci.exit` is 1 and it is not acceptance evidence. **Final CI passed:**
+`/tmp/exo-f6-overlap-cutoff-ci.log`, final result `/tmp/exo-f6-overlap-cutoff-ci.exit` = 0.
+1607/1607 tests, no skips/failures, 47 m 50 s; all contracts, four zero-warning/error
+builds, Flight 60-frame startup, Godot main/VAB and graphics-1280 checks pass.
+A temporary `/tmp/exo-f6-overlap-cutoff-ci-bin/dotnet` wrapper only added TRX logging to
+the unfiltered full-suite command. The nine-profile matrix was evaluated from that same
+TRX using `--verify-only`: **50/50 PASS**, no missing selectors, matching source/data/test
+assembly identities. Preserved artifacts:
+`/tmp/exo-f6-overlap-cutoff-ci-profiles/{inputs.json,profiles.trx,report.json,test-exit-code.txt}`.
+The main AS-506 test reports T+689 s, 72.0 t S-IVB / 131.1 t vehicle and 3352 m/s capacity.
+No verification process remains active.
+
+Further source checks, documented in the reconstruction worksheet: amended figure 2-3
+(13 April 1971) places the RCS reference at local SM Y=1.01346 m, not the retained 2 m;
+SPS gimbal plane is 0.12192 m aft of the SM interface; tower body is 26 in diameter.
+It differs from figure 2-2's tower span by about 29 mm. Reconcile dates, individual
+nozzle offsets, gimbal/exit geometry and phase mass properties before adopting the patch.
+
+Atlas source section 5.2, printed p. 5-1 (PDF p. 36), explicitly says MA-5 on 109D
+is a redesignation with no significant hardware difference from preceding MA-2. The
+scan `/tmp/exo-f6-ma6-engine-redesignation.png` was inspected. Do not select a later
+MA-5 rating solely by name. A magnified original p. B-4 confirms a fuel residual of
+`.312 lb` (0.141521 kg); OCR had incorrectly emitted `-312 lb`. With the correct decimal,
+the preflight load/event ledger differs by only 1.688 lb (0.765664 kg), compatible with
+integer-pound source rounding. The previously alleged 142.428 kg discrepancy is false.
+Original detail: `/tmp/exo-f6-atlas-residual-detail.png`. Preserve this correction when
+using `/tmp/exo-f6-ma6-atlas-ocr.txt`; its raw OCR text still has the wrong sign.
+
+The native Atlas follow-up is now documented in
+`docs/physics/atlas_ma6_reconstruction.md`. New isolated comparisons use the primary
+preflight timing, distinct cutoff/jettison, original open-loop turn and engineering
+closed-loop insertion. Original approximate ratings with corrected nominal mixtures reach
+161.025 km / 7489 m/s tangential but still fail orbit. The 1961 Atlas-Centaur nominal
+envelope, without verniers, reaches 161.101 km / 7537 m/s. An ideal bounded PU allocation
+reaches 161.081 km / 7774 m/s / 4809 kg, still failing the 140 km periapsis gate (about
+42.9 km). All are explicitly incomplete experiments, not adopted ratings or flight tape.
+The final probe mutates a shared definition only in its isolated single-vessel test; do
+not copy that technique into production. `PartGraph.ConsumePropellantFromPool` uses
+per-instance mass flow but per-part mixture ratio, so a mixed-model cluster alone cannot
+represent different sustainer/vernier mixtures. Source valve/rating conditions and funded
+runtime control/persistence need a coherent physical unit.
+
+Contemporary handbook original: `/tmp/exo-f6-nasa-launch-handbook-1961.pdf`, 8424426 bytes,
+SHA-256 `fd6d790b2c066315f75bc77468f032296715a14193499d3b85388c9e751232d1`,
+inspected printed F-7/PDF p. 63. It is Atlas-Centaur preliminary planning, not 109D flight
+acceptance. Original scan came from Commons after the old NTRS link failed; the worksheet
+records the source URL, numbers, scope, experiment paths and remaining work.
+
+The source SIC event ledger is transcribed in
+`docs/physics/reference/as506_sic_liquid_event_history.csv` from the inspected FER
+table 20-I ACT columns, printed p. 20-3/PDF p. 235. Liquid totals independently reproduce
+table 5-2 reconstructed values. Ground ignition at -6.4 s and holddown-arm release at
++0.3 s differ by 39307 kg of vehicle mass; ullage gas is separate from liquid. This
+reference does not change production loading. The stale F5-open paragraph in
+`PHYSICS_MODEL.md` and remaining-work note in `CLAUDE.md` now reflect verified F5 closure.
 
 ## Workflow
 

@@ -203,8 +203,9 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   that must hold roll pass `rollDampingGain`. Historical gate:
   `SaturnVJetDampingHistoricalTests` (AS-506). Optional immutable receipts
   (`CaptureRcsFunding`, `CapturePropellantFunding`, `CaptureResourceFunding`) remain
-  observational. See `docs/physics/variable_mass_torques.md`. Remaining work (slosh F5,
-  historical recalibration F6) is tracked in `docs/physics/rigid_body_fidelity_plan.md`.
+  observational. See `docs/physics/variable_mass_torques.md`. F5 funded slosh is closed;
+  its production coupling and validity limits are in `docs/physics/propellant_slosh.md`.
+  Remaining historical recalibration F6 is tracked in `docs/physics/rigid_body_fidelity_plan.md`.
   Material aero/contact velocity excludes the moving-centroid `R*cdot` term. Known feed
   stops transfer internal momentum before clearing it; off-axis openings compensate datum
   velocity for the angular reaction. Per-store relative-flow shares retain their angular
