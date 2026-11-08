@@ -498,7 +498,8 @@ tank-and-line load. Remaining F6 work, in order:
    derived from SP-238 table B-I (2026-11-08). Still open: SPS tank/line geometry,
    unexpellable residuals and cryogenic consumption.
 2. The SPS nozzle exit plane (the 1966 source describes another configuration).
-3. Apollo 11's own lunar targets (the LOI selector still uses the Apollo 8 proxy).
+3. ~~Apollo 11's own lunar targets~~ — SP-238 LOI and non-circular circularization targets
+   with `ApsidesTargetBurn` (2026-11-08).
 4. Native Atlas sustainer and propellant-utilization reconstruction for MA-6
    ([atlas_ma6_reconstruction.md](atlas_ma6_reconstruction.md)).
 5. S-IC fins, grid fins and a Newtonian blunt-capsule model.

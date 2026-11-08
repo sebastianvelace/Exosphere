@@ -209,7 +209,8 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   Historical recalibration F6 is open (`docs/physics/historical_recalibration.md`, plan "F6 progress"):
   the SPS capture window uses the docked stack (`TranslationalMassKg`) and the SM carries the
   measured SP-238 SPS load, and CM/SM dry centres and gyrations derive from SP-238 table B-I
-  (`ApolloCsmMassPropertiesHistoricalTests`); SPS tank geometry, cryogenic use, the SPS exit, Apollo 11 lunar targets
+  (`ApolloCsmMassPropertiesHistoricalTests`), and Apollo 11 flies its own SP-238 lunar targets
+  (non-circular circularization via `Flight/ApsidesTargetBurn`); SPS tank geometry, cryogenic use, the SPS exit
   and the Atlas sustainer/PU reconstruction remain.
   Material aero/contact velocity excludes the moving-centroid `R*cdot` term. Known feed
   stops transfer internal momentum before clearing it; off-axis openings compensate datum

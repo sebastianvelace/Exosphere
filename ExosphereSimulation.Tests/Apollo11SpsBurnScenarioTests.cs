@@ -108,8 +108,72 @@ public sealed class Apollo11SpsBurnScenarioTests(ITestOutputHelper output)
         Assert.Single(universe.DockingConnections);
     }
 
+    /// <summary>
+    /// SP-238: circularization two revolutions after LOI took the 60.0 x 169.7 n mi orbit to
+    /// the deliberately non-circular 53.7 x 65.7 n mi target (achieved 53.8 x 65.7) in a
+    /// 16.7 s firing that gained 159.3 ft/s (table 7-II, table 8-V). The docked stack here
+    /// starts on the flown LOI ellipse; the burn reshapes it on finite SPS thrust.
+    /// </summary>
+    [Fact]
+    [Trait("FidelityGate", "F6")]
+    [Trait("GateKind", "historical")]
+    public void DockedStackShapesTheFlownNonCircularLunarOrbit()
+    {
+        const double mile = 1_852.0;
+        double moonRadius = 1_737_400.0, gm = 4.9028e12;
+        double rp = moonRadius + Apollo11FlightProfile.InitialLunarPeriluneAltitudeM;
+        double ra = moonRadius + Apollo11FlightProfile.InitialLunarApoluneAltitudeM;
+        double periluneSpeed = System.Math.Sqrt(gm * (2.0 / rp - 2.0 / (rp + ra)));
+        var (universe, moon, csm, lm) = CreateDockedArrival(1_200.0, periluneSpeed);
+        // Table B-I: the stack weighed 96061.6 lb at LOI ignition and 72037.6 lb at cutoff;
+        // take that SPS load out at the engine's nominal 1.6 mixture ratio.
+        const double pound = 0.45359237, loiPropellantLb = 96_061.6 - 72_037.6;
+        var sm = csm.Parts.Parts.Single(p => p.Definition.HasVehicleRole("service_module"));
+        sm.LiquidFuel -= loiPropellantLb / 2.6 * pound;
+        sm.Oxidizer -= loiPropellantLb * 1.6 / 2.6 * pound;
+        output.WriteLine($"stack {(csm.TotalMass + lm.TotalMass) / pound:F0} lb (table B-I circularization ignition 72019.9 lb)");
+        Assert.Equal(moonRadius, moon.Radius);
+        Assert.Equal(gm, moon.GM);
+        double massBefore = csm.TotalMass + lm.TotalMass;
+        double rcsBefore = sm.Monopropellant;
+        var burn = new ApsidesTargetBurn(Apollo11FlightProfile.LunarOrbitPericynthionAltitudeM,
+            Apollo11FlightProfile.LunarOrbitApocynthionAltitudeM, 120.0);
+        double gained = 0.0;
+        var previous = (PeriapsisCaptureBurnStatus)(-1);
+        while (!burn.IsFinished && universe.CurrentTime < 2_500.0)
+        {
+            burn.Advance(csm, moon, StepSeconds, universe.CurrentTime);
+            if (burn.Status != previous)
+            {
+                previous = burn.Status;
+                output.WriteLine($"t={universe.CurrentTime:F2} state={burn.Status} burn={burn.BurnSeconds:F2} "
+                    + $"pe={burn.PeriapsisAltitudeM / 1000:F2} ap={burn.ApoapsisAltitudeM / 1000:F2} dv={burn.RemainingDeltaVMps:F2}");
+            }
+            double mass = csm.TranslationalMassKg;
+            universe.Tick(StepSeconds);
+            if (burn.Status == PeriapsisCaptureBurnStatus.Burning)
+                gained += csm.GetMaximumThrust(moon) / mass * StepSeconds;
+        }
+        output.WriteLine($"status={burn.Status} reason={burn.BlockReason} burn={burn.BurnSeconds:F2} "
+            + $"propellant={massBefore - csm.TotalMass - lm.TotalMass:F2} gained={gained:F2} "
+            + $"pe={burn.PeriapsisAltitudeM / mile:F2} x ap={burn.ApoapsisAltitudeM / mile:F2} n mi "
+            + $"rcs={rcsBefore - sm.Monopropellant:F2} kg");
+
+        Assert.Single(universe.DockingConnections);
+        Assert.Equal(PeriapsisCaptureBurnStatus.Completed, burn.Status);
+        // Target apsides within 1 n mi: the cutoff resolves one 0.02 s step (~0.04 m/s, ~0.1 km).
+        Assert.InRange(burn.PeriapsisAltitudeM, (53.7 - 1.0) * mile, (53.7 + 1.0) * mile);
+        Assert.InRange(burn.ApoapsisAltitudeM, (65.7 - 1.0) * mile, (65.7 + 1.0) * mile);
+        // Velocity gained near the flown 159.3 ft/s (48.6 m/s): an ideal impulse needs about
+        // 43 m/s; finite-burn and steering losses add the rest. Duration near the flown 16.7 s.
+        Assert.InRange(gained, 40.0, Apollo11FlightProfile.CircularizationDeltaVMps * 1.1);
+        Assert.InRange(burn.BurnSeconds, 12.0, 22.0);
+        // Acquiring the burn attitude on the docked stack is an RCS slew, not a reservoir drain.
+        Assert.InRange(rcsBefore - sm.Monopropellant, 0.0, 50.0);
+    }
+
     private static (Universe Universe, CelestialBody Moon, Vessel Csm, Vessel Lm)
-        CreateDockedArrival(double timeToPeriapsisSeconds)
+        CreateDockedArrival(double timeToPeriapsisSeconds, double? periluneSpeedMps = null)
     {
         string data = SaturnVAscentFlight.DataDirectory();
         var catalog = PartCatalog.LoadFromDirectory(Path.Combine(data, "parts"));
@@ -126,7 +190,7 @@ public sealed class Apollo11SpsBurnScenarioTests(ITestOutputHelper output)
         var moon = universe.GetBody("moon")!;
         double rp = moon.Radius + Apollo11FlightProfile.InitialLunarPeriluneAltitudeM;
         var conic = OrbitalElements.FromStateVector(new Vector3d(rp, 0.0, 0.0),
-            new Vector3d(0.0, ArrivalPeriluneSpeedMps, 0.0), moon.GM, moon.Id, timeToPeriapsisSeconds);
+            new Vector3d(0.0, periluneSpeedMps ?? ArrivalPeriluneSpeedMps, 0.0), moon.GM, moon.Id, timeToPeriapsisSeconds);
         var (position, velocity) = KeplerPropagator.PropagateToTime(conic, 0.0, moon.GM);
         csm.Position = moon.Position + position;
         csm.Velocity = moon.Velocity + velocity;

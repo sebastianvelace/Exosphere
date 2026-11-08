@@ -25,7 +25,9 @@ public sealed class Apollo11PoweredDescentScenarioTests(ITestOutputHelper output
         var eagle = VehicleVariantDefinition.LoadFromJson(Path.Combine(root, "vehicles",
             "apollo11_lm5_eagle_1969.json")).Build(catalog).ToVessel("Eagle", Apollo11FlightProfile.EagleVesselId);
 
-        double radius = moon.Radius + Apollo11FlightProfile.CircularLunarOrbitAltitudeM;
+        // A circular 60 n mi start (the Apollo 8/10 parking orbit) isolates the descent
+        // controller; Apollo 11's own CSM orbit is the non-circular 53.7 x 65.7 n mi target.
+        double radius = moon.Radius + Apollo8FlightProfile.CircularLunarOrbitAltitudeM;
         var tangent = Vector3d.Forward;
         double epoch = universe.CurrentTime;
         eagle.Position = moon.Position + Vector3d.Right * radius;

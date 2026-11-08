@@ -83,6 +83,7 @@ public partial class HistoricalFlightProfileController : Node
     private double _apolloTliStartTime;
     private double _apolloLoiTime;
     private PeriapsisCaptureBurn? _apolloLunarBurn;
+    private ApsidesTargetBurn? _apolloApsidesBurn;
     private double _apolloLunarBurnLastTime = double.NaN;
     private ProgradeEnergyBurn? _apolloTliBurn;
     // Planned at countdown request (before Engage resets the profile) and adopted at liftoff.
@@ -335,6 +336,7 @@ public partial class HistoricalFlightProfileController : Node
         _apolloMidcourseBurn = null;
         _apolloMidcourseComplete = false;
         _apolloLunarBurn = null;
+        _apolloApsidesBurn = null;
         _apolloLaunchWindow = _apolloProfile ? _pendingApolloLaunchWindow : null;
         ResetApolloReturn();
         _pendingApolloLaunchWindow = null;
@@ -478,6 +480,7 @@ public partial class HistoricalFlightProfileController : Node
         _apolloTliBurn = null;
         _apolloMidcourseBurn = null;
         _apolloLunarBurn = null;
+        _apolloApsidesBurn = null;
         _apolloMidcourseComplete = elapsedSeconds >= Apollo8FlightProfile.LoiIgnitionSeconds;
         _apolloCsmSeparated = !vessel.Parts.Parts.Any(part =>
             part.Definition.HasVehicleRole("csm_separation"));
@@ -1443,6 +1446,47 @@ public partial class HistoricalFlightProfileController : Node
     /// and throttle commands only, and whatever orbit the integrated burn produces. Returns
     /// true once the burn has finished (completed or blocked).
     /// </summary>
+    private bool RunApolloApsidesBurn(SimulationBridge bridge, Vessel vessel, CelestialBody moon,
+        double targetPeriapsisAltitudeM, double targetApoapsisAltitudeM, double maximumBurnSeconds)
+    {
+        var universe = bridge.Universe;
+        double timeToPeriapsis = PeriapsisCaptureBurn.TimeToPeriapsis(
+            vessel.Position - moon.Position, vessel.Velocity - moon.Velocity, moon.GM);
+        bool coasting = _apolloApsidesBurn?.Status is null or PeriapsisCaptureBurnStatus.Coasting;
+        int warpIndex = !coasting ? BurnWarpIndex
+            : double.IsNaN(timeToPeriapsis) ? 0
+            : timeToPeriapsis > 1_200.0 ? 6
+            : timeToPeriapsis > 300.0 ? 4
+            : 0;
+        bridge.SetWarpIndex(warpIndex);
+        if (warpIndex <= BurnWarpIndex)
+        {
+            vessel.IsOnRails = false;
+            vessel.OrbitalState = null;
+        }
+        if (_apolloApsidesBurn == null)
+        {
+            _apolloApsidesBurn = new ApsidesTargetBurn(targetPeriapsisAltitudeM, targetApoapsisAltitudeM,
+                maximumBurnSeconds);
+            _apolloLunarBurnLastTime = universe.CurrentTime;
+        }
+        double step = universe.CurrentTime - _apolloLunarBurnLastTime;
+        _apolloLunarBurnLastTime = universe.CurrentTime;
+        _apolloApsidesBurn.Advance(vessel, moon, step > 1e-9 ? step : Universe.DeterministicControlPeriodSeconds,
+            universe.CurrentTime);
+        if (!_apolloApsidesBurn.IsFinished) return false;
+
+        if (_apolloApsidesBurn.Status == PeriapsisCaptureBurnStatus.Blocked)
+            GD.PrintErr($"[HISTORICAL] Lunar orbit shaping burn stopped: {_apolloApsidesBurn.BlockReason}");
+        GD.Print($"[HISTORICAL] Lunar SPS shaping burn {_apolloApsidesBurn.BurnSeconds:F1} s -> "
+            + $"{_apolloApsidesBurn.PeriapsisAltitudeM / 1000.0:F1} x "
+            + $"{_apolloApsidesBurn.ApoapsisAltitudeM / 1000.0:F1} km");
+        vessel.Throttle = 0.0;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        _apolloApsidesBurn = null;
+        return true;
+    }
+
     private bool RunApolloLunarBurn(SimulationBridge bridge, Vessel vessel, CelestialBody moon,
         double targetApoapsisAltitudeM, double maximumBurnSeconds)
     {
@@ -1871,14 +1915,16 @@ public partial class HistoricalFlightProfileController : Node
                 bridge.SetWarpIndex(8);
                 return;
             }
-            if (!RunApolloLunarBurn(bridge, columbia, moon,
-                    Apollo11FlightProfile.CircularLunarOrbitAltitudeM, maximumBurnSeconds: 120.0))
+            // SP-238: a deliberately non-circular 53.7 x 65.7 n mi target, not a circle.
+            if (!RunApolloApsidesBurn(bridge, columbia, moon,
+                    Apollo11FlightProfile.LunarOrbitPericynthionAltitudeM,
+                    Apollo11FlightProfile.LunarOrbitApocynthionAltitudeM, maximumBurnSeconds: 120.0))
                 return;
             _apolloCircularized = true;
             _apollo11CircularizedTime = universe.CurrentTime;
             MissionManager.Instance?.EnterPhase(MissionPhase.LUNAR_ORBIT);
             bridge.SetWarpIndex(8);
-            GD.Print("[HISTORICAL] Apollo 11 circular lunar orbit; Eagle checkout before undocking.");
+            GD.Print("[HISTORICAL] Apollo 11 lunar orbit shaped; Eagle checkout before undocking.");
         }
     }
 

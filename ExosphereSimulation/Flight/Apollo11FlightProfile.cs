@@ -2,8 +2,8 @@ namespace Exosphere.Simulation.Flight;
 
 /// <summary>
 /// Apollo 11 schedule: the AS-506 ascent and TLI event times from the Saturn V flight
-/// evaluation (AS-506) and the Apollo 11 mission report; lunar-orbit numbers still use the
-/// Apollo 8 proxy. After CSM sep the profile extracts LM-5 Eagle, docks it to CSM-107 on
+/// evaluation (AS-506) and the Apollo 11 mission report, including its own lunar orbit
+/// insertion and circularization targets. After CSM sep the profile extracts LM-5 Eagle, docks it to CSM-107 on
 /// RCS, flies the docked stack into lunar orbit and lands Eagle.
 /// </summary>
 public static class Apollo11FlightProfile
@@ -42,20 +42,27 @@ public static class Apollo11FlightProfile
     // historical reference the mission objectives are scored against.
     public const double DockingSeconds = 12_243.1;
 
-    // ── Docked LOI / circularization (Apollo 8 lunar numbers as AS-506 proxy)
-    public const double LoiDeltaVMps = Apollo8FlightProfile.LoiDeltaVMps;
-    public const double CircularizationDeltaVMps =
-        Apollo8FlightProfile.CircularizationDeltaVMps;
-    public const double InitialLunarPeriluneAltitudeM =
-        Apollo8FlightProfile.InitialLunarPeriluneAltitudeM;
-    public const double InitialLunarApoluneAltitudeM =
-        Apollo8FlightProfile.InitialLunarApoluneAltitudeM;
-    public const double CircularLunarOrbitAltitudeM =
-        Apollo8FlightProfile.CircularLunarOrbitAltitudeM;
-    /// <summary>Seconds from LOI ignition to circularization ignition (A8 proxy).</summary>
-    public const double CircularizationDelaySeconds =
-        Apollo8FlightProfile.CircularizationIgnitionSeconds
-        - Apollo8FlightProfile.LoiIgnitionSeconds;
+    // ── Docked LOI / circularization, Apollo 11 as flown ────────────────────
+    // NASA SP-238 (Apollo 11 Mission Report, 1971): table 7-II (event times), table 8-V
+    // (velocity to be gained) and section 7 "Lunar orbit insertion and circularization"
+    // (printed pp. 71-72). The report's "miles" are nautical miles (1852 m); 1 ft = 0.3048 m.
+    private const double NauticalMileM = 1_852.0;
+    private const double FootM = 0.3048;
+    /// <summary>LOI velocity to be gained, 2917.4 ft/s (table 8-V).</summary>
+    public const double LoiDeltaVMps = 2_917.4 * FootM;
+    /// <summary>Circularization velocity to be gained, 159.3 ft/s (table 8-V).</summary>
+    public const double CircularizationDeltaVMps = 159.3 * FootM;
+    /// <summary>LOI orbit achieved: 169.7 by 60.0 n mi.</summary>
+    public const double InitialLunarPeriluneAltitudeM = 60.0 * NauticalMileM;
+    public const double InitialLunarApoluneAltitudeM = 169.7 * NauticalMileM;
+    /// <summary>
+    /// Circularization target: a deliberately non-circular 65.7 by 53.7 n mi orbit (achieved
+    /// 65.7 by 53.8), chosen so lunar gravity would round it out by the rendezvous.
+    /// </summary>
+    public const double LunarOrbitPericynthionAltitudeM = 53.7 * NauticalMileM;
+    public const double LunarOrbitApocynthionAltitudeM = 65.7 * NauticalMileM;
+    /// <summary>LOI ignition 75:49:50.4 to circularization ignition 80:11:36.8 GET.</summary>
+    public const double CircularizationDelaySeconds = (80 * 3600 + 11 * 60 + 36.8) - (75 * 3600 + 49 * 60 + 50.4);
 
     // ── Lunar landing (compressed: undocking follows circularization) ───────
     /// <summary>Eagle checkout in lunar orbit before undocking.</summary>

@@ -370,3 +370,41 @@ Findings and limits:
 - The equivalent SM dry cylinder is 5.39 m long against the 4.11 m module: mass concentrates
   at the aft bulkhead and forward ring. It is an inertia equivalent, not an envelope.
 
+## Apollo 11 lunar orbit targets and docked RCS (2026-11-08)
+
+Apollo 11 no longer borrows Apollo 8's lunar numbers. `Apollo11FlightProfile` takes SP-238's
+own: LOI velocity to be gained 2917.4 ft/s into 60.0 x 169.7 n mi (table 8-V, section 7),
+then circularization 15 706.4 s after LOI ignition (table 7-II) to a deliberately
+non-circular 53.7 x 65.7 n mi target (achieved 53.8 x 65.7) with 159.3 ft/s.
+
+A non-circular target needs both apsides, which `PeriapsisCaptureBurn` (one apsis) cannot
+reach. `Flight/ApsidesTargetBurn` computes, at the vessel's radius, the velocity on the target
+conic (vis-viva speed and angular-momentum horizontal component), holds the impulsive
+difference at periapsis as a fixed inertial attitude acquired before ignition, and cuts off
+when the remaining difference along it is below one step. The radial branch is chosen once
+(the side the vessel approaches periapsis from): at periapsis both branches reach the target
+and letting numerical noise pick it each step swung the attitude by 13 degrees.
+
+Gate `Apollo11SpsBurnScenarioTests.DockedStackShapesTheFlownNonCircularLunarOrbit` starts the
+docked CSM-107/LM-5 on the flown LOI ellipse with the table B-I post-LOI mass (model 72674 lb,
+flown 72019.9 lb):
+
+| | Orbit | Burn | Velocity gained |
+| --- | --- | --- | --- |
+| Model | 53.75 x 65.71 n mi | 16.30 s | 45.4 m/s |
+| Apollo 11 (SP-238) | 53.8 x 65.7 n mi | 16.7 s | 48.6 m/s (159.3 ft/s to be gained) |
+
+The ideal impulse is about 43 m/s; the flown figure includes the guidance's own overheads.
+The attitude acquisition uses 14.5 kg of SM RCS.
+
+This work found a defect in docked attitude control: RCS jets were allocated about the
+primary's own centre of mass while the coupled dynamics turn the stack about the combined
+one. CSM-107's SM quads (X_A 959 in) lie between the CSM centre (934 in) and the CSM+LM
+stack's (1038 in), so docked pitch/yaw commands turned the stack backwards and a large slew
+diverged to 55 deg/s until the RCS was empty. Allocation and authority now use the docked
+stack's centre and inertia (`a0a3713`); a 30-degree docked slew converges in about 70 s on
+12 kg of RCS (`DockedStackTurnsTheWayItsRcsCommandAsks`).
+
+The powered-descent fixture still starts Eagle on a circular 60 n mi orbit to isolate the
+descent controller. Dated lunar ephemerides and the Apollo 11 DOI/undocking geometry remain open.
+

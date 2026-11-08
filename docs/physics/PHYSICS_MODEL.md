@@ -337,7 +337,11 @@ alone delayed the controlled CSM-107/LM-5 SPS ignition by about 75 s and left a 
 perilune. The corrected controlled-arrival fixture reaches 101.94 x 312.02 km with the
 same orbit bounds; an independent 180 s ignition-window regression catches the error.
 The two docked cases and four existing CSM-103 cases pass. This extends controller
-coverage; Apollo 11's lunar target still uses the declared Apollo 8 proxy.
+coverage. Apollo 11's lunar targets are its own (SP-238): LOI to 60.0 x 169.7 n mi, then
+`ApsidesTargetBurn` reshapes the orbit to the non-circular 53.7 x 65.7 n mi target, which the
+docked stack reaches within 0.05 n mi in 16.3 s (flown 16.7 s). The burn computes the target
+conic's velocity at the vessel's radius, holds the impulsive difference at periapsis as a fixed
+inertial attitude, and keeps one radial branch for the whole burn.
 
 Apollo 11's transposition, docking and extraction use the same `ProximityApproach` on the SM RCS
 (four quads: 1780 N per axis, Isp 290 s, 610 kg). The CSM leaves the S-IVB/SLA on the

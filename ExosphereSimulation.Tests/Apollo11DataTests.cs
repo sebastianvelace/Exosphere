@@ -444,7 +444,7 @@ public sealed class Apollo11DataTests
         {
             MissionTimeSeconds = Apollo11FlightProfile.DockingSeconds + 120_000.0,
             Phase = "LUNAR_ORBIT",
-            AltitudeM = Apollo11FlightProfile.CircularLunarOrbitAltitudeM,
+            AltitudeM = Apollo11FlightProfile.LunarOrbitApocynthionAltitudeM,
             DockingAchieved = true,
             CrewAlive = true,
         });
@@ -642,8 +642,8 @@ public sealed class Apollo11DataTests
             * Apollo11FlightProfile.CircularizationDeltaVMps;
         PlaceInLunarOrbitForTest(
             columbia, moon,
-            Apollo11FlightProfile.CircularLunarOrbitAltitudeM,
-            Apollo11FlightProfile.CircularLunarOrbitAltitudeM,
+            Apollo11FlightProfile.LunarOrbitPericynthionAltitudeM,
+            Apollo11FlightProfile.LunarOrbitApocynthionAltitudeM,
             universe.CurrentTime);
 
         Assert.Equal("moon", columbia.ReferenceBodyId);
@@ -651,11 +651,11 @@ public sealed class Apollo11DataTests
         double periAlt = columbia.OrbitalState!.Periapsis - moon.Radius;
         double apoAlt = columbia.OrbitalState.Apoapsis - moon.Radius;
         Assert.InRange(periAlt,
-            Apollo11FlightProfile.CircularLunarOrbitAltitudeM - 500.0,
-            Apollo11FlightProfile.CircularLunarOrbitAltitudeM + 500.0);
+            Apollo11FlightProfile.LunarOrbitPericynthionAltitudeM - 500.0,
+            Apollo11FlightProfile.LunarOrbitPericynthionAltitudeM + 500.0);
         Assert.InRange(apoAlt,
-            Apollo11FlightProfile.CircularLunarOrbitAltitudeM - 500.0,
-            Apollo11FlightProfile.CircularLunarOrbitAltitudeM + 500.0);
+            Apollo11FlightProfile.LunarOrbitApocynthionAltitudeM - 500.0,
+            Apollo11FlightProfile.LunarOrbitApocynthionAltitudeM + 500.0);
         Assert.Contains(
             universe.DockingConnections,
             c => c.Id == Apollo11FlightProfile.DockingConnectionId);

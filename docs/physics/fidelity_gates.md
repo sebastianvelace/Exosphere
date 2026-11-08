@@ -94,6 +94,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F5 | historical | `PropellantSloshTests.As506SicSloshFollowsTheAs501MeasuredFrequencies` | AS-506 cylindrical frequencies vs AS-501 dotted probe curves at 10/60/100/130 s; 10 percent cross-variant comparison band, not amplitude/damping validation |
 | F6 | historical | `ApolloCsmMassPropertiesHistoricalTests.IsolatedModulesCloseTheirDerivationRows` | CM-107/SM-107 dry centres and gyrations derived from SP-238 table B-I entry and SM-separation rows with tables 8-X/8-XI/8-XII residuals |
 | F6 | historical | `ApolloCsmMassPropertiesHistoricalTests.CsmCompositionMatchesTheIndependentTranspositionAndTransearthRows` | CSM at transposition and TEI ignition (not used by the derivation): CG +0.08/+0.15 m, gyration +6.3/+5.1 % and +3.1/+1.5 % |
+| F6 | historical | `Apollo11SpsBurnScenarioTests.DockedStackShapesTheFlownNonCircularLunarOrbit` | SP-238 circularization: 53.75 x 65.71 n mi in 16.3 s with 45.4 m/s gained vs flown 53.8 x 65.7 n mi, 16.7 s, 159.3 ft/s |
 
 F3 regression coverage also includes `Flight14EntryCheckpointTests` (exact 60-second
 continuation), `AttitudeActuatorBlendingTests` (shutdown trim, coupled bank reversal,

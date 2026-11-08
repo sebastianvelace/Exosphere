@@ -475,7 +475,11 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      conservada con un remanente lógico). Centro y giración secos del CM y del SM derivados de
      SP-238 tabla B-I: el CSM en el TD&E pasa de +12,5 in a +3,1 in de error de CG y de +24 % a
      +5 % de giración transversal (compuerta F6 `ApolloCsmMassPropertiesHistoricalTests`).
-     Pendiente: geometría de tanques del SPS y consumo de criogénicos, salida de tobera del SPS, objetivos lunares propios de Apollo 11, sustainer y PU nativos
+     Asignación de RCS respecto al centro del conjunto acoplado (antes el CSM+LM giraba al revés).
+     Objetivos lunares propios de Apollo 11 (SP-238): LOI a 60,0 × 169,7 mi náuticas y
+     circularización no circular a 53,7 × 65,7 con `ApsidesTargetBurn` (modelo 53,75 × 65,71 en
+     16,3 s; volado 53,8 × 65,7 en 16,7 s).
+     Pendiente: geometría de tanques del SPS y consumo de criogénicos, salida de tobera del SPS, efemérides lunares fechadas, sustainer y PU nativos
      del Atlas (MA-6), aletas del S-IC, grid fins y cápsulas romas newtonianas. Detalle en
      `docs/physics/historical_recalibration.md`.
 
