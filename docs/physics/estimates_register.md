@@ -11,7 +11,7 @@ provenance record is upgraded to `published` with a cited source.
 | estimated | 242 |
 | derived | 126 |
 | regulatory_envelope | 5 |
-| published | 119 |
+| published | 121 |
 
 ## calibrated
 

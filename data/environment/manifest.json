@@ -22,6 +22,17 @@
       "bytes": 5257,
       "accessed": "2026-11-08",
       "licence": "NASA JPL NAIF generic kernel, public distribution"
+    },
+    {
+      "id": "iers_eop_c04",
+      "title": "EOP (IERS) 20 C04 daily series 1962-now, consistent with ITRF 2020",
+      "publisher": "IERS Earth Orientation Centre, Paris Observatory",
+      "url": "https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now",
+      "file": "eopc04.1962-now",
+      "prefix_through": "2026   6  30   0",
+      "sha256": "a26cf3eb29bdcfa6d2f8a31ded0b826cc0eb20ca66805cb93bcf0677710b3bb2",
+      "accessed": "2026-11-08",
+      "licence": "IERS products, free use with acknowledgement of the IERS"
     }
   ],
   "products": [
@@ -43,6 +54,42 @@
       },
       "sha256": "6e3a61a1e6b097087dc1669033630364f2ce683114d97a6a84c9f153cfb38146",
       "bytes": 1968
+    },
+    {
+      "id": "eop_c04",
+      "builder": "eop_c04",
+      "inputs": [
+        "iers_eop_c04"
+      ],
+      "output": "earth/eop_c04.bin",
+      "provenance": {
+        "dataId": "environment_earth_orientation",
+        "field": "eopC04",
+        "status": "published",
+        "variant": "IERS EOP 20 C04, daily at 0h UTC, 1962-01-01 to 2026-06-30",
+        "conditions": "Polar motion, UT1-UTC, LOD and celestial pole offsets as observed; after the last row the orientation holds its last values with a growing, declared error.",
+        "uncertainty": "Per-row published 1-sigma: 0.02 arcsec (~0.6 m) and 1.5 ms (~0.7 m at the equator) in 1969; ~50 microarcsec and ~20 microseconds today."
+      },
+      "sha256": "c6121f2fcd1e369d20b2740b13211f890e57d41ce86b31a11dbf83f261940bce",
+      "bytes": 1885248
+    },
+    {
+      "id": "cip_xys",
+      "builder": "cip_xys",
+      "inputs": [],
+      "output": "earth/cip_xys.bin",
+      "accessed": "2026-11-08",
+      "model": "IAU 2006 precession and IAU 2000A nutation (IERS Conventions 2010, chapter 5) evaluated by ERFA eraXys06a (pyerfa 2.0.1.5, from the IAU SOFA library)",
+      "provenance": {
+        "dataId": "environment_earth_orientation",
+        "field": "cipXys",
+        "status": "published",
+        "variant": "CIP X, Y and CIO locator s, daily at 0h TT, 1960-01-01 to 2051-12-31",
+        "conditions": "Pure IAU model; observed corrections dX, dY come from eop_c04. Interpolated with 8-point Lagrange in the simulation.",
+        "uncertainty": "IAU 2006/2000A model accuracy ~0.2 mas against VLBI before dX/dY; interpolation error tested below 1 microarcsec."
+      },
+      "sha256": "0017fb77787f4cea72418f89b759dcb6955b087d29e2ffa3ddca0e329bdde77b",
+      "bytes": 1052464
     }
   ]
 }

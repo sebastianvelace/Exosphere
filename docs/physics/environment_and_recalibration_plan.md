@@ -155,6 +155,19 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   `pxform("ITRF93","J2000")` del kernel `earth_620120_260806.bpc` en 500 instantes: < 0,5 m en
   superficie (IAU 2000B ~1 mas + diferencia ITRF93/ITRF actual). *Histórica:* posición inercial
   de LC-39A en el lanzamiento de Apollo 11 contra Horizons (sitio topocéntrico) < 1 m.
+  **Hecho el modelo (2026-11-08); falta conectarlo a `CelestialBody` (E1.2b).**
+  `Environment/IersEarthOrientation`: cadena CIO de las IERS Conventions 2010 con X, Y, s del
+  IAU 2006/2000A completo tabulados a diario por ERFA (`earth/cip_xys.bin`, 1960–2051, Lagrange
+  de 8 puntos) más dX, dY observados, ERA(UT1), movimiento del polo y s′; EOP 20 C04
+  (`earth/eop_c04.bin`, 1962-01-01 a 2026-06-30, Lagrange de 4 puntos, UT1 como UT1−TAI) con la σ
+  publicada de cada época. El canal admite fuentes vivas fijadas por prefijo (`prefix_through`).
+  Medido en 128 instantes 1962–2026: **0,21 mm** contra ERFA con la misma cadena; contra SPICE
+  `pxform` (`earth_620120_260806.bpc`) mediana 0,19 m, ≤ 0,27 m desde 1990 y 3,16 m en 1962
+  (94 % de 3σ publicado). **Correcciones del plan:** (1) el núcleo de alta precisión de NAIF
+  refiere ITRF93 al ICRF aunque el marco se llame J2000, así que no lleva sesgo de marco
+  (con `eraBp06` la mediana sube a 0,76 m); (2) el UTC de SPICE asume TAI−UTC = 9 s antes de 1972
+  (7 s de error en 1962): para misiones antiguas el tiempo de SPICE se deriva de ERFA; (3) la
+  compuerta de < 0,5 m vale desde 1995; antes, la cota es la σ publicada del C04 (≥ 1,5 m).
 - **E1.3 Época por misión.** `MissionDefinition.LaunchEpochUtc` y conversión única a TDB;
   Apollo 11: 1969-07-16 13:32:00 UTC (SP-238). Sitios en ITRF desde `data/launch_sites` con
   datum declarado. *Salida:* con el interruptor apagado, nada cambia.

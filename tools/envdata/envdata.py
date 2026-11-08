@@ -64,14 +64,35 @@ def products(manifest: dict) -> dict[str, dict]:
     return {p["id"]: p for p in manifest["products"]}
 
 
+def pinned_content(dataset: dict, blob: bytes) -> bytes:
+    """The bytes a product may depend on. A living series (``prefix_through``, e.g. the daily
+    IERS C04 file) is pinned by the prefix ending with the line that starts with that marker,
+    so a newer download with more rows still verifies and rebuilds the same product."""
+    marker = dataset.get("prefix_through")
+    if not marker:
+        return blob
+    lines = blob.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        if line.startswith(marker.encode("ascii")):
+            return b"".join(lines[:i + 1])
+    raise SystemExit(f"envdata: {dataset['id']} has no line starting with {marker!r}")
+
+
+def check_source(dataset: dict, blob: bytes) -> bytes:
+    content = pinned_content(dataset, blob)
+    digest = sha256(content)
+    if digest != dataset["sha256"]:
+        what = "pinned prefix" if dataset.get("prefix_through") else "file"
+        raise SystemExit(f"envdata: {dataset['id']} {what} has SHA-256 {digest}, manifest has "
+                         f"{dataset['sha256']}; the source changed and must be re-reviewed")
+    return content
+
+
 def cached_source(dataset: dict) -> bytes:
     path = cache_dir() / dataset["id"] / dataset["file"]
     if not path.exists():
         raise SystemExit(f"envdata: {dataset['id']} is not cached; run `envdata.py fetch {dataset['id']}`")
-    blob = path.read_bytes()
-    if sha256(blob) != dataset["sha256"]:
-        raise SystemExit(f"envdata: cached {path} does not match the manifest SHA-256")
-    return blob
+    return check_source(dataset, path.read_bytes())
 
 
 def fetch(names: list[str]) -> None:
@@ -85,10 +106,7 @@ def fetch(names: list[str]) -> None:
         request = urllib.request.Request(dataset["url"], headers={"User-Agent": "exosphere-envdata/1"})
         with urllib.request.urlopen(request, context=context, timeout=120) as response:
             blob = response.read()
-        digest = sha256(blob)
-        if digest != dataset["sha256"]:
-            raise SystemExit(f"envdata: {name} downloaded with SHA-256 {digest}, manifest has "
-                             f"{dataset['sha256']}; the source changed and must be re-reviewed")
+        check_source(dataset, blob)
         target.write_bytes(blob)
         print(f"fetched {name}: {len(blob)} bytes, SHA-256 verified")
 
@@ -96,6 +114,7 @@ def fetch(names: list[str]) -> None:
 def build_bytes(manifest: dict, product: dict) -> bytes:
     known = datasets(manifest)
     sources = {name: cached_source(known[name]) for name in product["inputs"]}
+    sources["__datasets__"] = known
     builder = importlib.import_module(f"products.{product['builder']}")
     header, rows = builder.build(sources)
     header["sources"] = {name: known[name]["sha256"] for name in product["inputs"]}
@@ -134,15 +153,19 @@ def provenance_document(manifest: dict) -> dict:
     for product in manifest["products"]:
         p = product["provenance"]
         sources = "; ".join(
-            f"{known[n]['publisher']}, {known[n]['title']}: {known[n]['url']} (SHA-256 {known[n]['sha256']})"
+            f"{known[n]['publisher']}, {known[n]['title']}: {known[n]['url']} "
+            + (f"(rows through {known[n]['prefix_through'].strip()}, prefix SHA-256 {known[n]['sha256']})"
+               if known[n].get("prefix_through") else f"(SHA-256 {known[n]['sha256']})")
             for n in product["inputs"])
         records.append({
             "dataId": p["dataId"],
             "field": p["field"],
             "status": p["status"],
-            "source": f"{sources}. Built by tools/envdata/products/{product['builder']}.py into "
+            "source": ("; ".join(x for x in (product.get("model", ""), sources) if x))
+                      + f". Built by tools/envdata/products/{product['builder']}.py into "
                       f"data/environment/{product['output']} (SHA-256 {product['sha256']}).",
-            "accessedDate": min(known[n]["accessed"] for n in product["inputs"]),
+            "accessedDate": min([known[n]["accessed"] for n in product["inputs"]]
+                                + ([product["accessed"]] if "accessed" in product else [])),
             "variant": p["variant"],
             "conditions": p["conditions"],
             "uncertainty": p["uncertainty"],
@@ -160,7 +183,7 @@ def verify() -> int:
     known = datasets(manifest)
     errors = []
     for dataset in manifest["datasets"]:
-        for key in ("id", "url", "file", "sha256", "bytes", "accessed", "licence", "publisher", "title"):
+        for key in ("id", "url", "file", "sha256", "accessed", "licence", "publisher", "title"):
             if not dataset.get(key):
                 errors.append(f"dataset {dataset.get('id')} lacks {key}")
     for product in manifest["products"]:
