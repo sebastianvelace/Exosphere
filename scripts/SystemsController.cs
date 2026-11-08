@@ -605,7 +605,7 @@ public partial class SystemsController : Node
 
             ManeuverExecutor.Instance?.Abort();
 
-            if (GetTree().Root.FindChild("AutopilotController", true, false) is AutopilotController ap)
+            if (AutopilotController.Instance is { } ap)
                 ap.Disarm();
 
             // Structural dead-stick: cut commanded throttle so a tumbling wreck does not

@@ -15,6 +15,8 @@ public partial class CockpitInstruments : Node
     private const double CockpitRefreshHz = 30.0;
     private const double CockpitRefreshPeriod = 1.0 / CockpitRefreshHz;
     private bool _wired;
+    private const double WireRetryPeriodSeconds = 0.5;
+    private double _wireRetrySeconds;
     private bool _cockpitRenderingActive;
     private double _refreshAccumulator;
 
@@ -70,6 +72,11 @@ public partial class CockpitInstruments : Node
         }
 
         if (_wired) return;
+        // The screens belong to the cockpit mesh, which may not exist (exterior-only craft);
+        // retry the recursive tree search at a slow cadence, not every frame.
+        _wireRetrySeconds -= delta;
+        if (_wireRetrySeconds > 0.0) return;
+        _wireRetrySeconds = WireRetryPeriodSeconds;
 
         bool all = true;
         for (int i = 0; i < 3; i++)

@@ -1939,6 +1939,9 @@ public partial class VesselRenderer : Node3D
         AddChild(_skyFillLight);
     }
 
+    // Cached key light: a recursive tree search per frame is O(scene size).
+    private DirectionalLight3D? _keyLight;
+
     private void UpdateVehicleLighting(float throttle, double altitudeM)
     {
         float t = Mathf.Clamp(throttle, 0f, 1f);
@@ -1947,7 +1950,9 @@ public partial class VesselRenderer : Node3D
         float rim = Mathf.Lerp(0.28f, 0.10f, space);
         float bounce = Mathf.Lerp(0.92f, 0.55f, space);
         Vector3 sunDir = new Vector3(0.35f, 0.78f, 0.25f);
-        var key = GetTree().Root.FindChild("DirectionalLight3D", true, false) as DirectionalLight3D;
+        if (_keyLight == null || !IsInstanceValid(_keyLight))
+            _keyLight = GetTree().Root.FindChild("DirectionalLight3D", true, false) as DirectionalLight3D;
+        var key = _keyLight;
         if (key != null)
             sunDir = -key.GlobalTransform.Basis.Z.Normalized();
         foreach (var mat in _steelMats)

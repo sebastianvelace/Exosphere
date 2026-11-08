@@ -14,6 +14,9 @@ using Exosphere.Simulation.Physics;
 /// </summary>
 public partial class AutopilotController : Node
 {
+    /// <summary>The scene's controller, so per-frame callers skip a tree search.</summary>
+    public static AutopilotController? Instance { get; private set; }
+
     private ManeuverPlanner _planner = null!;
 
     public bool IsArmed  { get; private set; }
@@ -42,6 +45,13 @@ public partial class AutopilotController : Node
     // 0.1 s thrust slice can move periapsis by tens of kilometres, so stop when a forecast of
     // the next bounded slice reaches the requested target instead of waiting for overshoot.
     private const double DeorbitForecastSeconds = 0.1;
+
+    public override void _EnterTree() => Instance = this;
+
+    public override void _ExitTree()
+    {
+        if (ReferenceEquals(Instance, this)) Instance = null;
+    }
 
     public override void _Ready()
     {

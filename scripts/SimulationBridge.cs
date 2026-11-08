@@ -359,8 +359,6 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             light.RotationDegrees = new Godot.Vector3(-45f, -30f, 0f);
     }
 
-    private AutopilotController? _autopilotController;
-
     /// <summary>
     /// True while an onboard autopilot owns the attitude command. An idle pilot stick must
     /// not overwrite it between control epochs; any held attitude key still takes over.
@@ -374,10 +372,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             || HistoricalFlightProfileController.Instance?.IsEngaged == true
             || SasModeController.Instance?.IsHolding == true)
             return true;
-        if (_autopilotController == null || !IsInstanceValid(_autopilotController))
-            _autopilotController = GetTree().Root.FindChild(
-                "AutopilotController", true, false) as AutopilotController;
-        return _autopilotController is { } autopilot
+        return AutopilotController.Instance is { } autopilot
             && (autopilot.IsArmed || autopilot.IsBurning || autopilot.IsPreparingEntryAttitude);
     }
 
@@ -428,8 +423,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             bool atmosphericZone = refB.Atmosphere != null
                 && av.GetAltitude(refB) <= refB.Atmosphere.MaxAltitude * 1.05;
             var missionPhase = MissionManager.Instance?.Phase;
-            bool preparingEntryAttitude = GetTree().Root.FindChild(
-                "AutopilotController", true, false) is AutopilotController autopilot
+            bool preparingEntryAttitude = AutopilotController.Instance is { } autopilot
                 && autopilot.IsPreparingEntryAttitude
                 && av.GetAltitude(refB) <= 300_000.0;
             bool finalEntryApproach = preparingEntryAttitude
@@ -2202,8 +2196,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         // Keep the bridge safe in lightweight/debug scenes that do not instantiate the
         // map panel, while preserving the same fail-closed behavior.
         ManeuverExecutor.Instance?.Abort();
-        if (GetTree().Root.FindChild("AutopilotController", true, false)
-            is AutopilotController autopilot)
+        if (AutopilotController.Instance is { } autopilot)
             autopilot.Disarm();
     }
 }

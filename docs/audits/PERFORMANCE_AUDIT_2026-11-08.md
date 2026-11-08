@@ -139,6 +139,18 @@ Hallazgo: los picos de 64 ms y 13 ms en pasos fijos (despegue y ~81 s) no son de
 sino compilación JIT de primera ejecución (con `TieredCompilation=0` el del despegue sube a
 160 ms). Ver O9.
 
+### O4 — búsquedas de árbol por frame (hecho)
+
+Se quitaron las búsquedas recursivas `FindChild` que corrían cada frame: el puente buscaba
+`AutopilotController` dos veces por frame (una sin caché cuando no había piloto automático);
+ahora es `AutopilotController.Instance` (fijada en `_EnterTree`, borrada en `_ExitTree`), que
+también usan `SystemsController` y el cambio de nave. `VesselRenderer.UpdateVehicleLighting`
+guarda la luz principal; `CockpitInstruments` reintenta enlazar sus pantallas cada 0,5 s y no
+cada frame (una nave sin cabina las buscaba siempre); `CameraController` guarda el
+`FloatingOrigin`. Las demás búsquedas son de carga, de eventos o con caché `??=` de nodos que
+existen. Los 66 usos de LINQ en `scripts/` quedan para cuando una medición en el equipo del
+usuario los señale.
+
 ### O9 — calentamiento en la carga (hecho, parte 1)
 
 `Flight/PhysicsWarmup.Prime` vuela un diagnóstico aislado de Flight 14 durante 200 pasos (hasta

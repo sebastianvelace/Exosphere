@@ -228,6 +228,7 @@ public partial class CameraController : Node3D
     private Vector3d? _externalTargetOffsetMetres;
     private Vessel? _presentationTargetVessel;
     private Node3D? _presentationTargetNode;
+    private FloatingOrigin? _floatingOrigin;
     private bool _allowCloseExternalFrame;
     private Vector3 _flight14PayloadFocusOffset;
     private int _flight14PayloadYawReleaseCount;
@@ -400,9 +401,10 @@ public partial class CameraController : Node3D
             && (_presentationTargetNode == null
                 || !GodotObject.IsInstanceValid(_presentationTargetNode)))
         {
-            var floatingOrigin = GetTree().Root.FindChild(
-                "FloatingOrigin", true, false) as FloatingOrigin;
-            _presentationTargetNode = floatingOrigin?.GetVesselNode(
+            if (_floatingOrigin == null || !GodotObject.IsInstanceValid(_floatingOrigin))
+                _floatingOrigin = GetTree().Root.FindChild(
+                    "FloatingOrigin", true, false) as FloatingOrigin;
+            _presentationTargetNode = _floatingOrigin?.GetVesselNode(
                 _presentationTargetVessel.Id);
         }
         if (bridge?.ActiveVessel != null)
