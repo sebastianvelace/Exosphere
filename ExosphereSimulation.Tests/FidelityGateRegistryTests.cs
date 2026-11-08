@@ -96,10 +96,10 @@ public sealed partial class FidelityGateRegistryTests
         return (phases, gates);
     }
 
-    [GeneratedRegex(@"^\| (F\d) \| (closed|open|planned) \|")]
+    [GeneratedRegex(@"^\| ([FE]\d) \| (closed|open|planned) \|")]
     private static partial Regex PhaseRow();
 
-    [GeneratedRegex(@"^\| (F\d) \| (analytic|historical) \| `([A-Za-z0-9_]+\.[A-Za-z0-9_]+)` \|")]
+    [GeneratedRegex(@"^\| ([FE]\d) \| (analytic|historical) \| `([A-Za-z0-9_]+\.[A-Za-z0-9_]+)` \|")]
     private static partial Regex GateRowPattern();
 
     private static DirectoryInfo FindRepoRoot()

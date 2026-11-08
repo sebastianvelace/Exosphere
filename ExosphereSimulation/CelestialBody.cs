@@ -74,6 +74,13 @@ public partial class CelestialBody
     /// <summary>Velocity in the inertial simulation frame (m/s).</summary>
     public Vector3d Velocity { get; set; }
 
+    /// <summary>
+    /// Simulation time (s since J2000) of <see cref="Position"/>/<see cref="Velocity"/>, written
+    /// by the ephemeris. A dated <see cref="Orientation"/> evaluates the body frame at this
+    /// instant for the time-free surface queries.
+    /// </summary>
+    public double StateTime { get; set; }
+
     // ── Computed helpers ──────────────────────────────────────────────────
 
     /// <summary>
@@ -141,6 +148,11 @@ public partial class CelestialBody
     internal void GetBodyFixedEquatorialBasis(
         out Vector3d primeMeridian, out Vector3d ninetyEast, out Vector3d north)
     {
+        if (Orientation is Environment.IDatedBodyOrientation)
+        {
+            DatedBasisAt(StateTime, out primeMeridian, out ninetyEast, out north);
+            return;
+        }
         north = RotationAxis;
         var seed = System.Math.Abs(north.Z) < 0.9 ? new Vector3d(0, 0, 1) : new Vector3d(1, 0, 0);
         primeMeridian = seed.Cross(north).Normalized;
@@ -258,7 +270,13 @@ public partial class CelestialBody
         Vector3d worldPos, out double latitudeDeg, out double longitudeDeg, out double heightM)
     {
         GetBodyFixedEquatorialBasis(out var primeMeridian, out var ninetyEast, out var north);
-        var rel = worldPos - Position;
+        GeodeticInBasis(worldPos - Position, primeMeridian, ninetyEast, north,
+            out latitudeDeg, out longitudeDeg, out heightM);
+    }
+
+    private void GeodeticInBasis(Vector3d rel, Vector3d primeMeridian, Vector3d ninetyEast, Vector3d north,
+        out double latitudeDeg, out double longitudeDeg, out double heightM)
+    {
         double x = rel.Dot(primeMeridian);
         double y = rel.Dot(ninetyEast);
         double z = rel.Dot(north);
@@ -322,9 +340,15 @@ public partial class CelestialBody
     /// <param name="altitudeM">Height above the reference ellipsoid or mean sphere (m).</param>
     public Vector3d GetSurfacePosition(double latitudeDeg, double longitudeDeg, double altitudeM = 0.0)
     {
+        GetBodyFixedEquatorialBasis(out var primeMeridian, out var ninetyEast, out var north);
+        return SurfacePositionInBasis(latitudeDeg, longitudeDeg, altitudeM, primeMeridian, ninetyEast, north);
+    }
+
+    private Vector3d SurfacePositionInBasis(double latitudeDeg, double longitudeDeg, double altitudeM,
+        Vector3d primeMeridian, Vector3d ninetyEast, Vector3d north)
+    {
         double lat = latitudeDeg  * MathUtils.DEG_TO_RAD;
         double lon = longitudeDeg * MathUtils.DEG_TO_RAD;
-        GetBodyFixedEquatorialBasis(out var primeMeridian, out var ninetyEast, out var north);
         var equatorial = primeMeridian * System.Math.Cos(lon) + ninetyEast * System.Math.Sin(lon);
 
         if (!IsOblate)
@@ -420,6 +444,11 @@ public partial class CelestialBody
     public Vector3d GetSurfacePositionAtTime(
         double latitudeDeg, double longitudeDeg, double simulationTime, double altitudeM = 0.0)
     {
+        if (Orientation is Environment.IDatedBodyOrientation)
+        {
+            DatedBasisAt(simulationTime, out var prime, out var east, out var up);
+            return SurfacePositionInBasis(latitudeDeg, longitudeDeg, altitudeM, prime, east, up);
+        }
         double rotationDegrees = Orientation.RotationAngleAt(this, simulationTime) * MathUtils.RAD_TO_DEG;
         return GetSurfacePosition(latitudeDeg, longitudeDeg + rotationDegrees, altitudeM);
     }
@@ -435,6 +464,12 @@ public partial class CelestialBody
     {
         if (!double.IsFinite(simulationTime))
             throw new ArgumentOutOfRangeException(nameof(simulationTime));
+        if (Orientation is Environment.IDatedBodyOrientation)
+        {
+            DatedBasisAt(simulationTime, out var prime, out var east, out var up);
+            GeodeticInBasis(worldPos - Position, prime, east, up, out latitudeDeg, out longitudeDeg, out heightM);
+            return;
+        }
         var relative = ToBodyFixedDirection(worldPos - Position, simulationTime);
         GetGeodeticCoordinates(Position + relative, out latitudeDeg, out longitudeDeg, out heightM);
     }
@@ -442,10 +477,41 @@ public partial class CelestialBody
     /// <summary>Transforms an inertial direction into the body's rotating frame.</summary>
     public Vector3d ToBodyFixedDirection(Vector3d inertialDirection, double simulationTime)
     {
+        if (Orientation is Environment.IDatedBodyOrientation)
+        {
+            // Body-fixed components at the requested time, laid on the basis the time-free
+            // geodetic queries use (the frame at StateTime).
+            DatedBasisAt(simulationTime, out var prime, out var east, out var up);
+            double bx = inertialDirection.Dot(prime), by = inertialDirection.Dot(east), bz = inertialDirection.Dot(up);
+            DatedBasisAt(StateTime, out var prime0, out var east0, out var up0);
+            return prime0 * bx + east0 * by + up0 * bz;
+        }
         if (AngularSpeed == 0.0) return inertialDirection;
         var inverseSpin = Math.Quaterniond.FromAxisAngle(
             RotationAxis, -Orientation.RotationAngleAt(this, simulationTime));
         return inverseSpin.Rotate(inertialDirection);
+    }
+
+    private double _datedBasisTime = double.NaN;
+    private Environment.IDatedBodyOrientation? _datedBasisOwner;
+    private Vector3d _datedPrime, _datedEast, _datedNorth;
+
+    /// <summary>Body-fixed axes in the simulation frame from a dated orientation, cached by instant.</summary>
+    private void DatedBasisAt(double time, out Vector3d prime, out Vector3d east, out Vector3d north)
+    {
+        var dated = (Environment.IDatedBodyOrientation)Orientation;
+        if (time != _datedBasisTime || !ReferenceEquals(dated, _datedBasisOwner))
+        {
+            var m = dated.BodyFixedToInertial(this, time);
+            _datedPrime = new Vector3d(m.M11, m.M21, m.M31);
+            _datedEast = new Vector3d(m.M12, m.M22, m.M32);
+            _datedNorth = new Vector3d(m.M13, m.M23, m.M33);
+            _datedBasisTime = time;
+            _datedBasisOwner = dated;
+        }
+        prime = _datedPrime;
+        east = _datedEast;
+        north = _datedNorth;
     }
 
     // ── JSON loading ───────────────────────────────────────────────────────
@@ -548,6 +614,7 @@ public partial class CelestialBody
         OrbitalElements = OrbitalElements,
         Position = Position,
         Velocity = Velocity,
+        StateTime = StateTime,
         Orientation = Orientation,
     };
 

@@ -27,6 +27,8 @@ public sealed class IersEarthOrientationTests(ITestOutputHelper output)
     private const double SpiceFloorEarlyM = 1.5;
 
     [Fact]
+    [Trait("FidelityGate", "E1")]
+    [Trait("GateKind", "analytic")]
     public void RotationMatchesErfaAndSpiceFrom1962To2026()
     {
         var data = Path.Combine(Root(), "data");

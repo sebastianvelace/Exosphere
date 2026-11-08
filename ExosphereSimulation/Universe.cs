@@ -77,6 +77,18 @@ public partial class Universe
     /// body-state query goes through it (environment plan E0.3).
     /// </summary>
     public EnvironmentContext Environment { get; } = new();
+
+    /// <summary>
+    /// Gives Earth its dated IERS orientation (environment plan E1.2b): ITRS body frame,
+    /// Greenwich longitude, UT1 rotation, precession-nutation and polar motion. Simulation time
+    /// is then read as TDB seconds since J2000. Off by default until the dated environment is
+    /// switched on as a whole (E5).
+    /// </summary>
+    public void UseIersEarthOrientation(string dataDirectory)
+    {
+        var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");
+        earth.Orientation = new IersOrientationProvider(IersEarthOrientation.LoadFromDataDirectory(dataDirectory));
+    }
     private Func<string, CelestialBody?>? _resolveBody;
     private double _pendingSimulationSeconds;
     private IPhysicsStepController? _physicsStepController;

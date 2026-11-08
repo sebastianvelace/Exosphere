@@ -27,7 +27,7 @@ public sealed class IersEarthOrientation
 
     private readonly TimeScales _scales;
     private readonly double _eopFirstMjd;
-    private readonly double[] _xp, _yp, _ut1MinusTai, _dx, _dy, _xpSigma, _ypSigma, _ut1Sigma;
+    private readonly double[] _xp, _yp, _ut1MinusTai, _dx, _dy, _lod, _xpSigma, _ypSigma, _ut1Sigma;
     private readonly double _xysFirstMjd;
     private readonly double[] _x, _y, _s;
 
@@ -45,6 +45,7 @@ public sealed class IersEarthOrientation
         _yp = Column(eop, "yp_arcsec");
         _dx = Column(eop, "dx_arcsec");
         _dy = Column(eop, "dy_arcsec");
+        _lod = Column(eop, "lod_s");
         _xpSigma = Column(eop, "xp_sigma_arcsec");
         _ypSigma = Column(eop, "yp_sigma_arcsec");
         _ut1Sigma = Column(eop, "ut1_sigma_s");
@@ -79,7 +80,8 @@ public sealed class IersEarthOrientation
     public readonly record struct EarthOrientationSample(
         double XpRad, double YpRad, double Ut1MinusTaiSeconds, double DxRad, double DyRad,
         double XRad, double YRad, double SRad, double SPrimeRad, double EarthRotationAngleRad,
-        double PoleSigmaRad, double Ut1SigmaSeconds, bool WithinObservations);
+        double PoleSigmaRad, double Ut1SigmaSeconds, bool WithinObservations,
+        double LengthOfDayExcessSeconds = 0.0);
 
     /// <summary>The orientation chain at <paramref name="ttSeconds"/> (TT seconds since J2000).</summary>
     public EarthOrientationSample Sample(double ttSeconds)
@@ -89,11 +91,12 @@ public sealed class IersEarthOrientation
         double mjdUtc = MjdOfJ2000 + utc / TimeScales.SecondsPerDay;
         double position = mjdUtc - _eopFirstMjd;
         bool within = position >= 0.0 && position <= _xp.Length - 1;
-        double xp, yp, ut1MinusTai, dx, dy, poleSigma, ut1Sigma;
+        double xp, yp, ut1MinusTai, dx, dy, poleSigma, ut1Sigma, lod;
         if (position < 0.0)
         {
             // Before C04 (1962-01-01): UT1 = UTC, pole at the origin, uncertainty of the first row.
             xp = yp = dx = dy = 0.0;
+            lod = _lod[0];
             ut1MinusTai = -_scales.TaiMinusUtc(utc);
             poleSigma = System.Math.Abs(_xp[0]) + System.Math.Abs(_yp[0]) + _xpSigma[0];
             ut1Sigma = 1.0;
@@ -106,6 +109,7 @@ public sealed class IersEarthOrientation
             ut1MinusTai = Lagrange(_ut1MinusTai, p, 4);
             dx = Lagrange(_dx, p, 4);
             dy = Lagrange(_dy, p, 4);
+            lod = Lagrange(_lod, p, 4);
             int nearest = (int)System.Math.Round(p);
             poleSigma = System.Math.Sqrt(_xpSigma[nearest] * _xpSigma[nearest] + _ypSigma[nearest] * _ypSigma[nearest]);
             ut1Sigma = _ut1Sigma[nearest];
@@ -122,7 +126,7 @@ public sealed class IersEarthOrientation
         double ut1Days = (tai + ut1MinusTai) / TimeScales.SecondsPerDay;
         return new EarthOrientationSample(xp * ArcsecondToRadian, yp * ArcsecondToRadian, ut1MinusTai,
             dx * ArcsecondToRadian, dy * ArcsecondToRadian, x, y, s, sPrime, EarthRotationAngle(ut1Days),
-            poleSigma * ArcsecondToRadian, ut1Sigma, within);
+            poleSigma * ArcsecondToRadian, ut1Sigma, within, lod);
     }
 
     /// <summary>

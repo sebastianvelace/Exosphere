@@ -53,3 +53,16 @@ public sealed class FixedAxisRotation : IBodyOrientation
 
     public double RotationAngleAt(CelestialBody body, double time) => AngularSpeed(body) * time;
 }
+
+/// <summary>
+/// A dated orientation (environment plan E1.2b): the full rotation of the body-fixed frame at
+/// a simulation time, not only a spin about a fixed axis. <see cref="CelestialBody"/> builds its
+/// geodetic basis from it at the body's <see cref="CelestialBody.StateTime"/> and uses the
+/// rotation at the requested instant for the dated surface queries; the spin axis and rate
+/// reported through <see cref="IBodyOrientation"/> are those at <see cref="CelestialBody.StateTime"/>.
+/// </summary>
+public interface IDatedBodyOrientation : IBodyOrientation
+{
+    /// <summary>Columns: the body-fixed x (prime meridian), y (90° E) and z (north) axes in the simulation frame.</summary>
+    Matrix3x3d BodyFixedToInertial(CelestialBody body, double time);
+}

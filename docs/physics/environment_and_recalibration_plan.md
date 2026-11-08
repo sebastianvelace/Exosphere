@@ -168,6 +168,16 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   (con `eraBp06` la mediana sube a 0,76 m); (2) el UTC de SPICE asume TAI−UTC = 9 s antes de 1972
   (7 s de error en 1962): para misiones antiguas el tiempo de SPICE se deriva de ERFA; (3) la
   compuerta de < 0,5 m vale desde 1995; antes, la cota es la σ publicada del C04 (≥ 1,5 m).
+  **E1.2b hecho (2026-11-08).** `IDatedBodyOrientation` + `IersOrientationProvider`
+  (`Universe.UseIersEarthOrientation`, apagado por defecto hasta E5): el marco fijo de la Tierra es
+  el ITRS de la fecha, la longitud es la de Greenwich y el tiempo de la simulación se lee como TDB.
+  `CelestialBody.StateTime` (lo escribe la efeméride) fija el instante de las consultas sin tiempo;
+  las consultas `*AtTime` usan la rotación de su propio instante (en caché por instante). El eje de
+  giro es el CIP y la velocidad angular la del ERA corregida por LOD. Compuerta histórica E1
+  (`DatedEarthOrientationTests`): LC-39A en el lanzamiento del Apollo 11 a 2,17 m de SPICE (3σ de
+  1969: 3,36 m), LC-14 en Friendship 7 a 2,06 m, Starbase en Flight 4 a 0,13 m, velocidad del pad a
+  0,15 mm/s. El eje fijo queda bit a bit (huella de Flight 14 idéntica). **Pendiente para E5:** el
+  render de la Tierra (`FloatingOrigin` usa ω·t sobre el eje fijo) debe leer la rotación fechada.
 - **E1.3 Época por misión.** `MissionDefinition.LaunchEpochUtc` y conversión única a TDB;
   Apollo 11: 1969-07-16 13:32:00 UTC (SP-238). Sitios en ITRF desde `data/launch_sites` con
   datum declarado. *Salida:* con el interruptor apagado, nada cambia.

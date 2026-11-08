@@ -15,8 +15,11 @@ public sealed class KeplerEphemeris : IEphemerisProvider
 
     public string Id => "kepler";
 
-    public void PropagateAll(IReadOnlyList<CelestialBody> bodies, double time) =>
+    public void PropagateAll(IReadOnlyList<CelestialBody> bodies, double time)
+    {
         KeplerPropagator.PropagateAllBodies(bodies, time, _workspace);
+        for (int i = 0; i < bodies.Count; i++) bodies[i].StateTime = time;
+    }
 
     public (Vector3d Position, Vector3d Velocity) StateAt(
         CelestialBody body, double time, Func<string, CelestialBody?> resolve)
