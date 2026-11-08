@@ -1,0 +1,15 @@
+{
+  "manifestId": "environment-products",
+  "records": [
+    {
+      "dataId": "environment_time",
+      "field": "taiMinusUtc",
+      "status": "published",
+      "source": "U.S. Naval Observatory, Earth Orientation Department, TAI-UTC table (tai-utc.dat), 1961 to the latest leap second: https://maia.usno.navy.mil/ser7/tai-utc.dat (SHA-256 3524e1ae34d67e858873a89e59983bbc5bd100221da898e796c1b36036a310c3); NASA JPL Navigation and Ancillary Information Facility, NAIF generic leap-second kernel naif0012.tls: https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls (SHA-256 678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b). Built by tools/envdata/products/tai_utc.py into data/environment/time/tai_utc.bin (SHA-256 6e3a61a1e6b097087dc1669033630364f2ce683114d97a6a84c9f153cfb38146).",
+      "accessedDate": "2026-11-08",
+      "variant": "UTC as defined since 1961-01-01: 1961-1971 offsets with rate terms, integer leap seconds from 1972",
+      "conditions": "TAI - UTC = offset_s + (MJD_UTC - mjd_reference) * rate_s_per_day from jd_utc_start; the 1972+ steps are cross-checked against NAIF DELTET/DELTA_AT at build time.",
+      "uncertainty": "Exact by definition (IERS Bulletin C / BIH); valid until the next announced leap second."
+    }
+  ]
+}

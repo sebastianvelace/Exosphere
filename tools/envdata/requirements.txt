@@ -1,0 +1,5 @@
+# Pinned versions for products that need them (ephemerides, orientation; plan E1-E2).
+# The time products and the offline verify contract use only the Python standard library.
+spiceypy==8.3.0
+jplephem==2.24
+numpy==2.4.6

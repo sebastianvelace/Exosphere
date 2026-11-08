@@ -67,5 +67,6 @@ bash tools/tests/launch_effects_performance_contract_test.sh
 bash tools/tests/visual_exposure_performance_contract_test.sh
 bash tools/tests/optimization_phase23_contract_test.sh
 python3 tools/tests/physics_profile_audit_test.py
+python3 tools/tests/envdata_test.py
 
 echo "contract_checks: all contracts passed"

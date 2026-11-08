@@ -115,6 +115,14 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   dirección del flujo y para la tasa vertical; con viento hay que separarlas.
 - **E0.2 Canal `envdata`** con manifiesto, fetch, build determinista, provenance, fixtures y el
   contrato de CI sin red. *Salida:* reconstrucción reproduce el SHA-256; contrato verde.
+  **Hecho (2026-11-08).** `tools/envdata/` (`envdata.py fetch|build|verify|provenance`, formato
+  `envfile.py`, guía en `tools/envdata/README.md`), `data/environment/manifest.json` y la
+  procedencia generada `data/provenance/environment_products.json`. Primer producto:
+  `time/tai_utc.bin` desde USNO `tai-utc.dat` (incluye los términos de ritmo 1961–1971 que el
+  núcleo NAIF no trae), cruzado en la construcción con NAIF `naif0012.tls`; TAI−UTC = 7,5635 s
+  en el lanzamiento del Apollo 11. `tools/tests/envdata_test.py` corre en `contract_checks.sh`
+  (verificación sin red, detección de producto alterado o no declarado). Los *fixtures* de
+  Horizons/SPICE llegan con su primer consumidor (E1/E2).
 - **E0.3 `EnvironmentContext`** con los proveedores actuales envueltos (Kepler, eje fijo, J2,
   USSA-76, sin viento). *Salida:* paridad bit a bit.
 
