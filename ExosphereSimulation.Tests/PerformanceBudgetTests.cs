@@ -38,6 +38,32 @@ public sealed class PerformanceBudgetTests(ITestOutputHelper output)
         Assert.InRange(meanMs, 0.0, MeanStepTripwireMs);
     }
 
+    [Fact]
+    public void WarmupReachesTheVariableMassAscentAndLeavesLaterRunsUnchanged()
+    {
+        const int steps = 400;
+        string data = DataDirectory();
+        var before = Flight14LaunchDiagnostic.Create(data);
+        for (int i = 0; i < steps; i++) before.AdvanceFrame(0.02);
+
+        PhysicsWarmup.Prime(data);
+        var result = PhysicsWarmup.LastResult!;
+        output.WriteLine($"Warm-up: {result.Steps} steps, {result.ElapsedMs:F0} ms, status {result.VariableMassStatus}");
+        Assert.Null(result.Failure);
+        Assert.Equal(PhysicsWarmup.DefaultSteps, result.Steps);
+        // The warm-up must exercise the path that compiles at liftoff.
+        Assert.Equal("active", result.VariableMassStatus);
+        Assert.False(PhysicsWarmup.Prime(data).Ran); // once per process
+
+        var after = Flight14LaunchDiagnostic.Create(data);
+        for (int i = 0; i < steps; i++) after.AdvanceFrame(0.02);
+        Assert.Equal(before.Ship.CenterOfMass, after.Ship.CenterOfMass);
+        Assert.Equal(before.Ship.CenterOfMassVelocity, after.Ship.CenterOfMassVelocity);
+        Assert.Equal(before.Ship.Orientation, after.Ship.Orientation);
+        Assert.Equal(before.Ship.AngularVelocity, after.Ship.AngularVelocity);
+        Assert.Equal(before.Ship.TotalMass, after.Ship.TotalMass);
+    }
+
     private static string DataDirectory()
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());

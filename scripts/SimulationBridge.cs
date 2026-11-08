@@ -192,6 +192,16 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         _running = true;
         GD.Print($"PERF_STARTUP phase=universe_loaded ms={startup.Elapsed.TotalMilliseconds:F1} bodies={Universe.Bodies.Count}");
 
+        // O9: compile the powered-ascent physics path now, in an isolated throwaway flight,
+        // instead of as a ~60 ms hitch at liftoff. Once per process; never touches Universe.
+        var warmup = Exosphere.Simulation.Flight.PhysicsWarmup.Prime(dataPath);
+        if (warmup.Ran)
+        {
+            GD.Print($"PERF_STARTUP phase=physics_warmup ms={warmup.ElapsedMs:F1} steps={warmup.Steps} status={warmup.VariableMassStatus}");
+            if (warmup.Failure != null)
+                GD.PushWarning($"[Sim] Physics warm-up skipped: {warmup.Failure}");
+        }
+
         var pendingIntent = CraftLaunchRequest.Pop();
         if (pendingIntent != null)
         {

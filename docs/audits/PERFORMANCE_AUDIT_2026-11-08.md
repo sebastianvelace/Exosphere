@@ -139,6 +139,19 @@ Hallazgo: los picos de 64 ms y 13 ms en pasos fijos (despegue y ~81 s) no son de
 sino compilación JIT de primera ejecución (con `TieredCompilation=0` el del despegue sube a
 160 ms). Ver O9.
 
+### O9 — calentamiento en la carga (hecho, parte 1)
+
+`Flight/PhysicsWarmup.Prime` vuela un diagnóstico aislado de Flight 14 durante 200 pasos (hasta
+el ascenso con masa variable activa) mientras carga la escena; tiene su propio `Universe` y no
+toca el estado de juego, y corre una vez por proceso (el código compilado es global). En la
+sonda, el pico del despegue desaparece (máximo posterior 18 ms, a ~78 s). Coste de carga medido
+en Godot (build Debug, headless): 531 ms dentro de una carga de 8,7 s
+(`PERF_STARTUP phase=physics_warmup`). Prueba: `PerformanceBudgetTests` exige que el
+calentamiento llegue al camino `active` y que una corrida posterior sea idéntica bit a bit.
+Límites: no cubre caminos específicos de otros vehículos (cápsulas, acople), y el pico de
+~13 ms a ~81 s sigue. Falta la parte 2: ReadyToRun en la exportación, que se valida con la
+exportación real en el equipo del usuario.
+
 Hallazgo de proceso: los vehículos y las piezas reciben GUID aleatorios; una huella de
 determinismo no debe incluir identificadores. La física es determinista entre procesos.
 
