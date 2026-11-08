@@ -8,6 +8,9 @@ obj/
 *.user
 .vs/
 
+# Test results (per-test durations from tools/ci_check.sh)
+.ci_results/
+
 # Python tooling caches
 __pycache__/
 *.pyc

@@ -31,7 +31,8 @@ The update script only runs `dotnet restore`; the SDK/Godot/Xvfb are pre-install
 
 Standard commands are in `README.md` and `CLAUDE.md` (build both csproj, run xUnit, or
 `bash tools/ci_check.sh`). The full suite (1600+ xUnit tests, including the 6-DoF parity and
-fidelity gates) takes 35–50 minutes; the latest verified count is recorded in
+fidelity gates) takes 30–50 minutes; `bash tools/ci_quick.sh` skips the multi-minute classes
+listed in `tools/slow_tests.txt` for the inner loop (run the full check before pushing); the latest verified count is recorded in
 `docs/physics/historical_recalibration.md`. Expected standard: 0 warnings, 0 errors.
 
 - Headless smoke (boot a scene + quit): see `README.md` "Godot smoke test". Use

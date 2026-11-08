@@ -24,7 +24,10 @@ dotnet build ExosphereSimulation/ExosphereSimulation.csproj --nologo -v quiet
 dotnet build Exosphere.csproj --nologo -v quiet
 dotnet build tools/Flight14TrajectoryProbe/Flight14TrajectoryProbe.csproj --nologo -v quiet
 dotnet build tools/PhysicsProfileProbe/PhysicsProfileProbe.csproj --nologo -v quiet
-dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo
+# The .trx keeps per-test durations: python3 tools/test_durations.py .ci_results/ci.trx
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --nologo \
+  --logger "trx;LogFileName=ci.trx" --results-directory .ci_results
+python3 tools/test_durations.py .ci_results/ci.trx --top 10 || true
 bash tools/flight_startup_quick_check.sh
 
 DEFAULT_GODOT="/home/sebasvelace/Downloads/Godot_v4.6.3-stable_mono_linux_x86_64/Godot_v4.6.3-stable_mono_linux.x86_64"

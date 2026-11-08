@@ -18,6 +18,20 @@ Or run the local aggregate:
 bash tools/ci_check.sh
 ```
 
+Inner loop (a few minutes): contracts, builds and every test except the multi-minute
+classes in `tools/slow_tests.txt` (full Flight 14 pad-to-entry chains), optionally narrowed:
+
+```bash
+bash tools/ci_quick.sh
+bash tools/ci_quick.sh "FullyQualifiedName~Apollo11"
+```
+
+Use `ci_quick.sh` while iterating and for each local commit; run the full `ci_check.sh`
+once before pushing a batch of commits (GitHub Actions also runs the full suite). The full
+check writes `.ci_results/ci.trx`; `python3 tools/test_durations.py .ci_results/ci.trx
+--update-slow-list 60` lists the slowest tests and refreshes the slow list. Flight 14
+segment work has its own cached runner, `bash tools/flight14_segments.sh`.
+
 Run Godot smoke checks when scene/game-layer behavior changes:
 
 ```bash
@@ -31,7 +45,7 @@ For fast VAB iteration (cached builds + construction tests + VAB scene smoke):
 bash tools/vab_quick_check.sh
 ```
 
-Use the full `tools/ci_check.sh` once before committing instead of after every UI edit.
+Use `tools/ci_quick.sh` after edits and the full `tools/ci_check.sh` once before pushing.
 
 For atmosphere work (optical/physical tests + flight-scene shader smoke):
 
