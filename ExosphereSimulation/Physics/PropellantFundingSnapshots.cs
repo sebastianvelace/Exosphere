@@ -131,6 +131,15 @@ internal sealed class LiquidFundingCapture
     internal List<FundedLiquidEngine> Engines { get; } = new();
     private int _nextPool;
 
+    /// <summary>Clears every field so one instance can serve each step without allocating.</summary>
+    internal LiquidFundingCapture Reset()
+    {
+        _stores.Clear(); _withdrawals.Clear(); _depletions.Clear(); Engines.Clear();
+        _duration = _fuelMainEnd = _oxidizerMainEnd = 0;
+        _nextPool = 0;
+        return this;
+    }
+
     internal int BeginPool(IReadOnlyList<Part> parts, bool includeHeaders)
     {
         _stores.Clear();

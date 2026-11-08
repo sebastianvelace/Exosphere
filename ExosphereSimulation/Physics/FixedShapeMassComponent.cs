@@ -27,6 +27,8 @@ public sealed class FixedShapeMassComponent
     public double ColumnRadiusM { get; }
     public bool IsColumn => ColumnLinearDensityKgPerM > 0;
     private readonly MassKnot[] _knots;
+    /// <summary>The knots as an array, for loops that must not allocate an enumerator.</summary>
+    internal MassKnot[] KnotArray => _knots;
     private readonly double[] _rates;
 
     public FixedShapeMassComponent(string id, Vector3d positionBodyM,

@@ -74,10 +74,10 @@ public partial class Universe
         {
             var distribution = funded.Distribution; var transport = funded.Transport;
             var boundaries = new List<double>(distribution.BoundariesSeconds);
-            foreach (var group in transport.Groups)
+            foreach (var group in transport.GroupArray)
             {
-                foreach (var debit in group.Debits) { boundaries.Add(debit.StartSeconds); boundaries.Add(debit.EndSeconds); }
-                foreach (var exit in group.Outlets) { boundaries.Add(exit.StartSeconds); boundaries.Add(exit.EndSeconds); }
+                foreach (var debit in group._debits) { boundaries.Add(debit.StartSeconds); boundaries.Add(debit.EndSeconds); }
+                foreach (var exit in group._outlets) { boundaries.Add(exit.StartSeconds); boundaries.Add(exit.EndSeconds); }
             }
             var initial = new Slosh6DofState(new(vessel.Position - referenceStartPosition,
                 vessel.Velocity - referenceStartVelocity, vessel.Orientation,

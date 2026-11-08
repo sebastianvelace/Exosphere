@@ -110,7 +110,8 @@ internal sealed class ResourceFundingCapture
     internal MainPropellantVentSnapshot? Vent { get; private set; }
     internal RcsPropellantFundingSnapshot? ReactionControl { get; set; }
     internal List<FundedSingleResourceEngine> OtherEngines { get; } = new();
-    private readonly Dictionary<ResourceStoreId, double> _loads = new();
+    private readonly Dictionary<ResourceStoreId, double> _loads;
+    private ResourceStoreLoad[] _scratch = [];
 
     internal ResourceFundingCapture(IReadOnlyList<Part> parts, double duration, bool assist, int topologyVersion)
     {
@@ -118,6 +119,7 @@ internal sealed class ResourceFundingCapture
         TopologyVersion = topologyVersion;
         Assist = assist;
         InitialStores = ReadStores(parts);
+        _loads = new Dictionary<ResourceStoreId, double>(InitialStores.Length);
         foreach (var load in InitialStores)
         {
             if (!_loads.TryAdd(load.Store, load.MassKg)) CoverageError = "Duplicate resource store identity.";
@@ -151,14 +153,20 @@ internal sealed class ResourceFundingCapture
     }
 
     internal void RecordCurrentStores(IReadOnlyList<Part> parts, ResourceWithdrawalSource source,
-        params PropellantResourceKind[] allowedResources)
+        PropellantResourceKind? allowedResource = null)
     {
-        foreach (var load in ReadStores(parts))
+        // Same stores, same order as ReadStores, written into a reused buffer: this runs
+        // several times per physics step and must not allocate.
+        int count = CountStores(parts);
+        if (_scratch.Length < count) _scratch = new ResourceStoreLoad[count];
+        FillStores(parts, _scratch);
+        for (int i = 0; i < count; i++)
         {
+            var load = _scratch[i];
             if (!_loads.TryGetValue(load.Store, out double before))
             { CoverageError = "Resource topology changed during preparation."; continue; }
             if (before == load.MassKg) continue;
-            if (!allowedResources.Contains(load.Store.Resource))
+            if (load.Store.Resource != allowedResource)
             { CoverageError = "An unattributed resource mutation occurred during preparation."; continue; }
             Record(load.Store, source, before, load.MassKg, 0, DurationSeconds);
         }
@@ -185,29 +193,45 @@ internal sealed class ResourceFundingCapture
     {
         var final = ReadStores(parts);
         if (topologyVersion != TopologyVersion) CoverageError = "Part topology changed during preparation.";
-        if (final.Length != InitialStores.Length || final.Any(load => !_loads.TryGetValue(load.Store,
-            out double tracked) || tracked != load.MassKg))
-            CoverageError = "The final resource inventory contains unrecorded changes.";
+        bool unrecorded = final.Length != InitialStores.Length;
+        for (int i = 0; !unrecorded && i < final.Length; i++)
+            unrecorded = !_loads.TryGetValue(final[i].Store, out double tracked) || tracked != final[i].MassKg;
+        if (unrecorded) CoverageError = "The final resource inventory contains unrecorded changes.";
         return new(this, final);
     }
 
     private static ResourceStoreLoad[] ReadStores(IReadOnlyList<Part> parts)
     {
-        var stores = new List<ResourceStoreLoad>(parts.Count * 4);
-        foreach (var part in parts)
+        var stores = new ResourceStoreLoad[CountStores(parts)];
+        FillStores(parts, stores);
+        return stores;
+    }
+
+    private static int CountStores(IReadOnlyList<Part> parts)
+    {
+        int count = 0;
+        for (int p = 0; p < parts.Count; p++) count += 4 + parts[p].HeaderPropellantKg.Length;
+        return count;
+    }
+
+    /// <summary>Every store of every part, in part order: the four main resources, then headers.</summary>
+    private static void FillStores(IReadOnlyList<Part> parts, ResourceStoreLoad[] into)
+    {
+        int n = 0;
+        for (int p = 0; p < parts.Count; p++)
         {
-            stores.Add(new(new(part.InstanceId, PropellantResourceKind.LiquidFuel), null, part.LiquidFuel));
-            stores.Add(new(new(part.InstanceId, PropellantResourceKind.Oxidizer), null, part.Oxidizer));
-            stores.Add(new(new(part.InstanceId, PropellantResourceKind.SolidFuel), null, part.SolidFuel));
-            stores.Add(new(new(part.InstanceId, PropellantResourceKind.Monopropellant), null, part.Monopropellant));
+            var part = parts[p];
+            into[n++] = new(new(part.InstanceId, PropellantResourceKind.LiquidFuel), null, part.LiquidFuel);
+            into[n++] = new(new(part.InstanceId, PropellantResourceKind.Oxidizer), null, part.Oxidizer);
+            into[n++] = new(new(part.InstanceId, PropellantResourceKind.SolidFuel), null, part.SolidFuel);
+            into[n++] = new(new(part.InstanceId, PropellantResourceKind.Monopropellant), null, part.Monopropellant);
             for (int i = 0; i < part.HeaderPropellantKg.Length; i++)
             {
                 var header = i < part.Definition.HeaderTanks.Count ? part.Definition.HeaderTanks[i] : null;
                 var kind = header?.IsLiquidFuel == true ? PropellantResourceKind.LiquidFuel
                     : header?.IsOxidizer == true ? PropellantResourceKind.Oxidizer : PropellantResourceKind.OtherHeader;
-                stores.Add(new(new(part.InstanceId, kind, i), header?.Id, part.HeaderPropellantKg[i]));
+                into[n++] = new(new(part.InstanceId, kind, i), header?.Id, part.HeaderPropellantKg[i]);
             }
         }
-        return stores.ToArray();
     }
 }

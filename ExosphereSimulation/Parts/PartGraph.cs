@@ -395,10 +395,36 @@ public partial class PartGraph
         InvalidateTopologyCaches();
     }
 
-    public IEnumerable<Part>  GetChildren(Part parent) =>
-        _joints.Where(j => j.Parent == parent).Select(j => j.Child);
-    public Joint? GetJoint(Part parent, Part child) =>
-        _joints.FirstOrDefault(j => j.Parent == parent && j.Child == child);
+    public IEnumerable<Part>  GetChildren(Part parent) => GetChildList(parent);
+    public Joint? GetJoint(Part parent, Part child)
+    {
+        foreach (var joint in _joints)
+            if (joint.Parent == parent && joint.Child == child) return joint;
+        return null;
+    }
+
+    /// <summary>
+    /// Children of <paramref name="parent"/> in joint order, cached until the topology
+    /// changes. Per-step solvers iterate it without allocating.
+    /// </summary>
+    internal List<Part> GetChildList(Part parent)
+    {
+        if (_childrenCacheVersion != TopologyVersion)
+        {
+            foreach (var list in _childrenCache.Values) list.Clear();
+            foreach (var joint in _joints)
+            {
+                if (!_childrenCache.TryGetValue(joint.Parent, out var children))
+                    _childrenCache[joint.Parent] = children = new List<Part>();
+                children.Add(joint.Child);
+            }
+            _childrenCacheVersion = TopologyVersion;
+        }
+        return _childrenCache.TryGetValue(parent, out var cached) ? cached : EmptyChildren;
+    }
+    private readonly Dictionary<Part, List<Part>> _childrenCache = new();
+    private int _childrenCacheVersion = -1;
+    private static readonly List<Part> EmptyChildren = new();
 
     // ── Propiedades calculadas ────────────────────────────────────────────
     public double TotalMass
@@ -1701,7 +1727,8 @@ public partial class PartGraph
         double available = 0.0;
         foreach (var part in _parts) available += part.AvailableLiquidFuel + part.AvailableOxidizer;
         if (available <= 0.0) return 0.0;
-        var capture = CapturePropellantFunding || ResourceFundingCapture != null ? new LiquidFundingCapture() : null;
+        var capture = CapturePropellantFunding || ResourceFundingCapture != null
+            ? (_ventFundingScratch ??= new LiquidFundingCapture()).Reset() : null;
         capture?.BeginPool(_parts, includeHeaders: false);
         double vented = System.Math.Min(kg, available);
         double fraction = vented / available;
@@ -1725,8 +1752,9 @@ public partial class PartGraph
     internal void ConsumePropellant(double dt, double ambientPressure, bool assist)
     {
         LastLiquidEngineFunding = null;
+        // One reusable capture per graph: published snapshots copy its contents.
         _liquidFundingCapture = (CapturePropellantFunding || ResourceFundingCapture != null) && dt > 0
-            ? new LiquidFundingCapture() : null;
+            ? (_engineFundingScratch ??= new LiquidFundingCapture()).Reset() : null;
         try
         {
             ConsumePropellantCore(dt, ambientPressure);

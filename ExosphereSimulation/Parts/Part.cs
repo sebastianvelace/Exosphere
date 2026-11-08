@@ -6,6 +6,23 @@ using Exosphere.Simulation.Propulsion;
 public class Part
 {
     public string InstanceId { get; }
+
+    // Mass-component identities ("<id>:dry", "<id>:<resource>", "<id>:header:<i>"), built once:
+    // the per-step mass model would otherwise format them on every physics step.
+    private string[]? _massComponentIds;
+    internal string MassComponentId(int slot)
+    {
+        var ids = _massComponentIds;
+        if (ids == null || ids.Length < 5 + HeaderPropellantKg.Length)
+        {
+            ids = new string[5 + HeaderPropellantKg.Length];
+            ids[0] = $"{InstanceId}:dry";
+            for (int r = 0; r < 4; r++) ids[1 + r] = $"{InstanceId}:{(Physics.PropellantResourceKind)r}";
+            for (int i = 0; i < HeaderPropellantKg.Length; i++) ids[5 + i] = $"{InstanceId}:header:{i}";
+            _massComponentIds = ids;
+        }
+        return ids[slot];
+    }
     public PartDefinition Definition { get; }
 
     public Part(PartDefinition def, string? instanceId = null)

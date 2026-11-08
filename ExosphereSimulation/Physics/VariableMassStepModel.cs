@@ -66,8 +66,12 @@ public sealed class VariableMassStepModel
 
         var components = new List<FixedShapeMassComponent>();
         var storeIndex = new Dictionary<ResourceStoreId, int>();
-        var initial = window.InitialStores.ToDictionary(load => load.Store, load => load.MassKg);
-        var partsById = new Dictionary<string, Part>(StringComparer.Ordinal);
+        // Per-thread scratch (tests integrate in parallel): lookups only, so their contents
+        // never change the order of any arithmetic.
+        var scratch = _scratch ??= new BuildScratch();
+        scratch.Reset(window);
+        var initial = scratch.Initial;
+        var partsById = scratch.PartsById;
         foreach (var part in parts.PartList)
         {
             partsById[part.InstanceId] = part;
@@ -76,7 +80,7 @@ public sealed class VariableMassStepModel
             if (part.EffectiveMassDry > 0)
             {
                 var shape = PartMassGeometry.DryShape(definition, fallbackLength, fallbackDiameter);
-                components.Add(new($"{part.InstanceId}:dry", position + Vector3d.Up * shape.CenterYM(0),
+                components.Add(new(part.MassComponentId(0), position + Vector3d.Up * shape.CenterYM(0),
                     Tensor(shape, part.EffectiveMassDry), [new MassKnot(0, part.EffectiveMassDry)]));
             }
             AddMain(part, position, PartMassComponentKind.LiquidFuel, PropellantResourceKind.LiquidFuel);
@@ -91,7 +95,7 @@ public sealed class VariableMassStepModel
                     : header?.IsOxidizer == true ? PropellantResourceKind.Oxidizer : PropellantResourceKind.OtherHeader;
                 var store = new ResourceStoreId(part.InstanceId, kind, i);
                 double station = header?.CenterYM ?? 0.0;
-                AddStore(store, $"{part.InstanceId}:header:{i}", position + Vector3d.Up * station,
+                AddStore(store, part.MassComponentId(5 + i), position + Vector3d.Up * station,
                     Matrix3x3d.Diagonal(0, 0, 0), null);
             }
         }
@@ -110,21 +114,27 @@ public sealed class VariableMassStepModel
         // Flow groups.
         var groups = new List<TransportFlowGroup>();
         var liquid = window.LiquidEngines;
-        var liquidDebits = window.Debits.Where(debit => debit.Source == ResourceWithdrawalSource.LiquidEngine).ToArray();
-        if (liquid != null && liquidDebits.Length > 0)
+        var liquidDebits = scratch.Select(window, ResourceWithdrawalSource.LiquidEngine);
+        if (liquid != null && liquidDebits.Count > 0)
         {
-            if (liquidDebits.Length != liquid.StoreDepletions.Count) { reason = "liquid-receipt-mismatch"; return false; }
-            var pools = liquid.Engines.Select(engine => engine.FeedPoolIndex)
-                .Concat(liquid.StoreDepletions.Select(depletion => depletion.Withdrawal.FeedPoolIndex ?? -1)).Distinct();
+            if (liquidDebits.Count != liquid.StoreDepletions.Count) { reason = "liquid-receipt-mismatch"; return false; }
+            // Distinct pools in first-occurrence order: engines first, then depletions.
+            var pools = scratch.Pools;
+            pools.Clear();
+            foreach (var engine in liquid.Engines)
+                if (!pools.Contains(engine.FeedPoolIndex)) pools.Add(engine.FeedPoolIndex);
+            foreach (var depletion in liquid.StoreDepletions)
+                if (!pools.Contains(depletion.Withdrawal.FeedPoolIndex ?? -1)) pools.Add(depletion.Withdrawal.FeedPoolIndex ?? -1);
             foreach (int pool in pools)
             {
-                var debits = new List<TransportStoreDebit>();
-                for (int i = 0; i < liquidDebits.Length; i++)
+                var debits = new List<TransportStoreDebit>(liquidDebits.Count);
+                for (int i = 0; i < liquidDebits.Count; i++)
                     if ((liquid.StoreDepletions[i].Withdrawal.FeedPoolIndex ?? -1) == pool && !TryDebit(liquidDebits[i], debits))
                     { reason = "liquid-store-not-positioned"; return false; }
-                var outlets = new List<TransportOutlet>();
-                foreach (var engine in liquid.Engines.Where(engine => engine.FeedPoolIndex == pool))
+                var outlets = new List<TransportOutlet>(liquid.Engines.Count);
+                foreach (var engine in liquid.Engines)
                 {
+                    if (engine.FeedPoolIndex != pool) continue;
                     if (engine.DurationSeconds <= 0) continue;
                     if (!TryEngineOutlet(engine.PartInstanceId, engine.EngineInstanceId,
                         engine.LiquidFuelFlowKgPerS + engine.OxidizerFlowKgPerS, engine.DurationSeconds, outlets))
@@ -133,24 +143,24 @@ public sealed class VariableMassStepModel
                 if (debits.Count > 0) groups.Add(new($"liquid-pool:{pool}", debits, outlets));
             }
         }
-        var otherDebits = window.Debits.Where(debit => debit.Source == ResourceWithdrawalSource.OtherEngine).ToList();
+        var otherDebits = scratch.Select(window, ResourceWithdrawalSource.OtherEngine);
         if (otherDebits.Count > 0)
         {
-            var debits = new List<TransportStoreDebit>();
+            var debits = new List<TransportStoreDebit>(otherDebits.Count);
             foreach (var debit in otherDebits)
                 if (!TryDebit(debit, debits)) { reason = "engine-store-not-positioned"; return false; }
-            var outlets = new List<TransportOutlet>();
+            var outlets = new List<TransportOutlet>(window.OtherEngines.Count);
             foreach (var engine in window.OtherEngines)
                 if (engine.DurationSeconds > 0 && !TryEngineOutlet(engine.PartInstanceId, engine.EngineInstanceId,
                         engine.MassFlowKgPerS, engine.DurationSeconds, outlets))
                 { reason = "engine-outlet-undeclared"; return false; }
             groups.Add(new("other-engines", debits, outlets));
         }
-        var ventDebits = window.Debits.Where(debit => debit.Source == ResourceWithdrawalSource.MainVent).ToList();
+        var ventDebits = scratch.Select(window, ResourceWithdrawalSource.MainVent);
         if (ventDebits.Count > 0)
         {
-            var debits = new List<TransportStoreDebit>();
-            var outlets = new List<TransportOutlet>();
+            var debits = new List<TransportStoreDebit>(ventDebits.Count);
+            var outlets = new List<TransportOutlet>(ventDebits.Count);
             foreach (var debit in ventDebits)
             {
                 if (!TryDebit(debit, debits)) { reason = "vent-store-not-positioned"; return false; }
@@ -163,23 +173,25 @@ public sealed class VariableMassStepModel
             }
             groups.Add(new("main-vent", debits, outlets));
         }
-        var rcsDebits = window.Debits.Where(debit => debit.Source == ResourceWithdrawalSource.ReactionControl).ToList();
+        var rcsDebits = scratch.Select(window, ResourceWithdrawalSource.ReactionControl);
         if (rcsDebits.Count > 0 && window.ReactionControl is { } rcs)
         {
-            var debits = new List<TransportStoreDebit>();
+            var debits = new List<TransportStoreDebit>(rcsDebits.Count);
             foreach (var debit in rcsDebits)
                 if (!TryDebit(debit, debits)) { reason = "rcs-store-not-positioned"; return false; }
-            var outlets = rcs.Thrusters.Where(thruster => thruster.MassFlowKgPerS > 0)
-                .Select(thruster => new TransportOutlet(thruster.NozzlePositionBodyM, -thruster.ForceDirectionBody, 0.0,
-                    thruster.MassFlowKgPerS, 0.0, thruster.DurationSeconds)).ToList();
+            var outlets = new List<TransportOutlet>(rcs.Thrusters.Count);
+            foreach (var thruster in rcs.Thrusters)
+                if (thruster.MassFlowKgPerS > 0)
+                    outlets.Add(new TransportOutlet(thruster.NozzlePositionBodyM, -thruster.ForceDirectionBody, 0.0,
+                        thruster.MassFlowKgPerS, 0.0, thruster.DurationSeconds));
             groups.Add(new("rcs", debits, outlets));
         }
-        var disturbance = window.Debits.Where(debit => debit.Source == ResourceWithdrawalSource.Disturbance).ToList();
+        var disturbance = scratch.Select(window, ResourceWithdrawalSource.Disturbance);
         if (disturbance.Count > 0)
         {
             if (vessel.DisturbanceOutletBodyM is not { } outletPosition || vessel.DisturbanceExhaustDirectionBody is not { } exhaust)
             { reason = "disturbance-outlet-undeclared"; return false; }
-            var debits = new List<TransportStoreDebit>();
+            var debits = new List<TransportStoreDebit>(disturbance.Count);
             foreach (var debit in disturbance)
                 if (!TryDebit(debit, debits)) { reason = "disturbance-store-not-positioned"; return false; }
             groups.Add(new("disturbance", debits, [new TransportOutlet(outletPosition, exhaust, 0.0, 1.0, 0.0, dt)]));
@@ -202,19 +214,19 @@ public sealed class VariableMassStepModel
             var store = new ResourceStoreId(part.InstanceId, resource);
             var shape = PartMassGeometry.MainStoreShape(part.Definition, kind, fallbackLength, fallbackDiameter);
             if (shape.IsColumn)
-                AddStore(store, $"{part.InstanceId}:{resource}", position + Vector3d.Up * shape.ColumnBottomYM,
+                AddStore(store, part.MassComponentId(1 + (int)resource), position + Vector3d.Up * shape.ColumnBottomYM,
                     default, shape);
             else
-                AddStore(store, $"{part.InstanceId}:{resource}", position + Vector3d.Up * shape.FixedCenterYM,
+                AddStore(store, part.MassComponentId(1 + (int)resource), position + Vector3d.Up * shape.FixedCenterYM,
                     Tensor(shape, 0.0), null);
         }
 
         void AddStore(ResourceStoreId store, string id, Vector3d station, Matrix3x3d specific, StoreShape? column)
         {
             double before = initial.GetValueOrDefault(store);
-            bool debited = window.Debits.Any(debit => debit.Store == store);
+            bool debited = scratch.Debited.Contains(store);
             if (before <= 0 && !debited) return;
-            var knots = StoreKnots(window, store, before);
+            var knots = StoreKnots(window, store, before, scratch);
             storeIndex[store] = components.Count;
             components.Add(column is { } shape
                 ? FixedShapeMassComponent.SettledColumn(id, station, Vector3d.Up, shape.LinearDensityKgPerM, shape.RadiusM, knots)
@@ -240,13 +252,23 @@ public sealed class VariableMassStepModel
     }
 
     /// <summary>Store mass knots: constant outside its debits, affine within each.</summary>
-    private static IEnumerable<MassKnot> StoreKnots(ResourceFundingWindow window, ResourceStoreId store, double initialKg)
+    private static IEnumerable<MassKnot> StoreKnots(ResourceFundingWindow window, ResourceStoreId store, double initialKg,
+        BuildScratch scratch)
     {
-        var debits = window.Debits.Where(debit => debit.Store == store).ToArray();
-        if (debits.Length == 0) return [new MassKnot(0, initialKg)];
-        var final = window.FinalStores.Single(load => load.Store == store).MassKg;
-        var boundaries = new SortedSet<double> { 0, window.DurationSeconds };
-        foreach (var debit in debits) { boundaries.Add(debit.StartTimeSeconds); boundaries.Add(debit.EndTimeSeconds); }
+        var debits = scratch.StoreDebits;
+        debits.Clear();
+        foreach (var debit in window.Debits)
+            if (debit.Store == store) debits.Add(debit);
+        if (debits.Count == 0) return [new MassKnot(0, initialKg)];
+        // Exactly one final load, as FinalStores.Single required.
+        if (!scratch.Final.TryGetValue(store, out double final) || scratch.DuplicateFinal.Contains(store))
+            throw new InvalidOperationException("The window has no unique final load for a debited store.");
+        // Ascending distinct boundary times (what the former SortedSet enumerated).
+        var boundaries = scratch.Boundaries;
+        boundaries.Clear();
+        AddBoundary(boundaries, 0);
+        AddBoundary(boundaries, window.DurationSeconds);
+        foreach (var debit in debits) { AddBoundary(boundaries, debit.StartTimeSeconds); AddBoundary(boundaries, debit.EndTimeSeconds); }
         var knots = new List<MassKnot>(boundaries.Count);
         foreach (double time in boundaries)
         {
@@ -262,6 +284,48 @@ public sealed class VariableMassStepModel
             knots.Add(new(time, mass));
         }
         return knots;
+    }
+
+    private static void AddBoundary(List<double> sorted, double time)
+    {
+        int index = sorted.BinarySearch(time);
+        if (index < 0) sorted.Insert(~index, time);
+    }
+
+    [ThreadStatic] private static BuildScratch? _scratch;
+
+    /// <summary>Reused lookup tables and lists for one build; never retained by a model.</summary>
+    private sealed class BuildScratch
+    {
+        public readonly Dictionary<ResourceStoreId, double> Initial = new();
+        public readonly Dictionary<ResourceStoreId, double> Final = new();
+        public readonly HashSet<ResourceStoreId> Debited = new();
+        public readonly HashSet<ResourceStoreId> DuplicateFinal = new();
+        public readonly Dictionary<string, Part> PartsById = new(StringComparer.Ordinal);
+        public readonly List<int> Pools = new();
+        public readonly List<FundedStoreDebit> StoreDebits = new();
+        public readonly List<double> Boundaries = new();
+        private readonly Dictionary<ResourceWithdrawalSource, List<FundedStoreDebit>> _bySource = new();
+
+        public void Reset(ResourceFundingWindow window)
+        {
+            Initial.Clear(); Final.Clear(); Debited.Clear(); DuplicateFinal.Clear(); PartsById.Clear();
+            foreach (var load in window.InitialStores) Initial.Add(load.Store, load.MassKg);
+            foreach (var load in window.FinalStores)
+                if (!Final.TryAdd(load.Store, load.MassKg)) DuplicateFinal.Add(load.Store);
+            foreach (var debit in window.Debits) Debited.Add(debit.Store);
+            foreach (var list in _bySource.Values) list.Clear();
+        }
+
+        /// <summary>The window's debits from one source, in window order.</summary>
+        public List<FundedStoreDebit> Select(ResourceFundingWindow window, ResourceWithdrawalSource source)
+        {
+            if (!_bySource.TryGetValue(source, out var list)) _bySource[source] = list = new();
+            list.Clear();
+            foreach (var debit in window.Debits)
+                if (debit.Source == source) list.Add(debit);
+            return list;
+        }
     }
 
     private static Matrix3x3d Tensor(StoreShape shape, double mass)

@@ -59,7 +59,7 @@ public sealed class BodyMassDistribution
         {
             if (component == null || !identities.Add(component.Id))
                 throw new ArgumentException("Component identities must be present and unique.", nameof(components));
-            foreach (var knot in component.Knots)
+            foreach (var knot in component.KnotArray)
             {
                 if (knot.TimeSeconds > durationSeconds)
                     throw new ArgumentException("A mass knot lies outside the declared window.", nameof(components));

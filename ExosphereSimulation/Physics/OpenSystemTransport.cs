@@ -21,18 +21,21 @@ public readonly record struct TransportStoreDebit(int ComponentIndex, double Rat
 public sealed class TransportFlowGroup
 {
     public string Id { get; }
-    public IReadOnlyList<TransportStoreDebit> Debits { get; }
-    public IReadOnlyList<TransportOutlet> Outlets { get; }
+    public IReadOnlyList<TransportStoreDebit> Debits => _debits;
+    public IReadOnlyList<TransportOutlet> Outlets => _outlets;
+    // Hot loops iterate these arrays directly: enumerating the interface allocates.
+    internal readonly TransportStoreDebit[] _debits;
+    internal readonly TransportOutlet[] _outlets;
 
     public TransportFlowGroup(string id, IEnumerable<TransportStoreDebit> debits, IEnumerable<TransportOutlet> outlets)
     {
         Id = id;
-        Debits = debits.ToArray();
-        Outlets = outlets.ToArray();
-        foreach (var debit in Debits)
+        _debits = debits as TransportStoreDebit[] ?? debits.ToArray();
+        _outlets = outlets as TransportOutlet[] ?? outlets.ToArray();
+        foreach (var debit in _debits)
             if (!double.IsFinite(debit.RateKgPerS) || debit.RateKgPerS < 0 || !(debit.EndSeconds > debit.StartSeconds))
                 throw new ArgumentException($"Flow group '{id}' has an invalid store debit.", nameof(debits));
-        foreach (var outlet in Outlets)
+        foreach (var outlet in _outlets)
         {
             if (!double.IsFinite(outlet.WeightKgPerS) || outlet.WeightKgPerS < 0 || !(outlet.EndSeconds > outlet.StartSeconds)
                 || !double.IsFinite(outlet.ExitRadiusM) || outlet.ExitRadiusM < 0)
@@ -71,16 +74,20 @@ public readonly record struct OpenSystemTransportSample(
 public sealed class OpenSystemTransport
 {
     public BodyMassDistribution Distribution { get; }
-    public IReadOnlyList<TransportFlowGroup> Groups { get; }
-    private readonly List<MassOutflow> _outflowScratch = new();
+    public IReadOnlyList<TransportFlowGroup> Groups => _groups;
+    private readonly TransportFlowGroup[] _groups;
+    internal TransportFlowGroup[] GroupArray => _groups;
+    // Per-thread scratch: filled and consumed within one Sample call (never nested).
+    [ThreadStatic] private static List<MassOutflow>? _outflowScratchShared;
+    private static List<MassOutflow> _outflowScratch => _outflowScratchShared ??= new();
     private readonly double[] _storeRateScratch;
 
     public OpenSystemTransport(BodyMassDistribution distribution, IEnumerable<TransportFlowGroup> groups)
     {
         Distribution = distribution ?? throw new ArgumentNullException(nameof(distribution));
-        Groups = groups.ToArray();
-        foreach (var group in Groups)
-            foreach (var debit in group.Debits)
+        _groups = groups as TransportFlowGroup[] ?? groups.ToArray();
+        foreach (var group in _groups)
+            foreach (var debit in group._debits)
                 if (debit.ComponentIndex < 0 || debit.ComponentIndex >= distribution.Components.Count)
                     throw new ArgumentException($"Flow group '{group.Id}' names an unknown store.", nameof(groups));
         _storeRateScratch = new double[distribution.Components.Count];
@@ -106,16 +113,16 @@ public sealed class OpenSystemTransport
             throw new ArgumentException("Momentum buffers do not cover the mass components.");
         linearBody.Clear();
         angularAboutDatumBody.Clear();
-        foreach (var group in Groups)
+        foreach (var group in _groups)
         {
             double rate = 0;
-            foreach (var debit in group.Debits)
+            foreach (var debit in group._debits)
                 if (TransportFlowGroup.Active(debit.StartSeconds, debit.EndSeconds, time, side))
                     rate += debit.RateKgPerS;
             if (rate == 0) continue;
             double weights = 0;
             var exit = Vector3d.Zero;
-            foreach (var outlet in group.Outlets)
+            foreach (var outlet in group._outlets)
                 if (TransportFlowGroup.Active(outlet.StartSeconds, outlet.EndSeconds, time, side))
                 {
                     weights += outlet.WeightKgPerS;
@@ -124,7 +131,7 @@ public sealed class OpenSystemTransport
             if (!(weights > 0))
                 throw new InvalidOperationException($"Flow group '{group.Id}' loses mass with no open outlet.");
             exit /= weights;
-            foreach (var debit in group.Debits)
+            foreach (var debit in group._debits)
             {
                 if (!TransportFlowGroup.Active(debit.StartSeconds, debit.EndSeconds, time, side)) continue;
                 var component = Distribution.Components[debit.ComponentIndex];
@@ -147,11 +154,11 @@ public sealed class OpenSystemTransport
         double outflow = 0;
         _outflowScratch.Clear();
         double jxx = 0, jyy = 0, jzz = 0, jxy = 0, jxz = 0, jyz = 0;
-        foreach (var group in Groups)
+        foreach (var group in _groups)
         {
             double groupRate = 0;
             var weightedOutlet = Vector3d.Zero;
-            foreach (var debit in group.Debits)
+            foreach (var debit in group._debits)
             {
                 if (!TransportFlowGroup.Active(debit.StartSeconds, debit.EndSeconds, time, side)) continue;
                 groupRate += debit.RateKgPerS;
@@ -162,13 +169,13 @@ public sealed class OpenSystemTransport
             }
             if (groupRate == 0) continue;
             double weights = 0;
-            foreach (var outlet in group.Outlets)
+            foreach (var outlet in group._outlets)
                 if (TransportFlowGroup.Active(outlet.StartSeconds, outlet.EndSeconds, time, side))
                     weights += outlet.WeightKgPerS;
             if (!(weights > 0))
                 throw new InvalidOperationException($"Flow group '{group.Id}' loses mass with no open outlet.");
             var outletMean = weightedOutlet / groupRate;
-            foreach (var outlet in group.Outlets)
+            foreach (var outlet in group._outlets)
             {
                 if (!TransportFlowGroup.Active(outlet.StartSeconds, outlet.EndSeconds, time, side)) continue;
                 double q = groupRate * outlet.WeightKgPerS / weights;

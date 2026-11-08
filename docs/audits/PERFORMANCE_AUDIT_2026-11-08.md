@@ -99,6 +99,7 @@ de mapas de motor (`EnginePerformanceEvaluator.InterpolatePressure` / `Interpola
 | **O5** | Prueba de presupuesto en `ci_quick`: asignación por paso y tiempo p99 en los dos escenarios de referencia, con margen para el ruido del CI | Bajo | Regresiones de rendimiento detectadas en minutos |
 | **O6** | Gráficos para iGPU: perfil "Bajo"; resolución dinámica por tiempo de GPU (`Viewport.GetMeasuredRenderTimeGpu`); FSR 2.2 en Forward+; sombras, volumétricos, nubes y reflejos por perfil; límite de FPS y vsync configurable | Medio (visual) | Mediciones con `tools/perf/flight_baseline.sh` en el equipo del usuario, antes y después |
 | **O7** | Diseño de E1–E4 con presupuesto: estado de cuerpos en caché por instante del paso, orientación terrestre una vez por paso, grado de gravedad por altitud, viento por tabla, NRLMSIS solo sobre 80 km y en caché | — | Se aplica al implementar E1–E4 |
+| **O9** | Picos de primera ejecución: el despegue compila ~1078 métodos (~100 ms de JIT) al activarse por primera vez el camino de masa variable; precompilar `ExosphereSimulation` con ReadyToRun en la exportación (medido: 64 → 27 ms en la sonda) y calentar ese camino en la pantalla de carga | Bajo | Validar con la exportación real en el equipo del usuario |
 | **O8** (diferido) | Simulación en hilo de trabajo con instantánea doble para la presentación | Alto (determinismo) | Solo si los presupuestos de la sección 4 no se cumplen; hoy la simulación usa 1–2 % del frame |
 
 Orden: O1 → O2 → O5 → O4 → O3 → O6, y luego E0 del plan de entorno. O1 es el que más impacto
@@ -113,3 +114,31 @@ tiene en la fluidez (elimina la causa de los tirones) y no cambia ningún result
   agregación de `GCAllocationTick` por tipo con TraceEvent.
 - CPU: `dotnet-trace collect --providers "Microsoft-DotNETCore-SampleProfiler,..."` y
   `dotnet-trace report <traza> topN`.
+
+## 7. Resultados
+
+### O1, primera parte (2026-11-08)
+
+Sin cambiar ningún resultado: huellas SHA-256 de los bits de estado idénticas antes y después
+(Flight 14, 12 000 pasos con hot staging, `B8C2AC1A…DABD2`; Saturn V AS-506, 20 000 pasos con
+staging, `7C35A95E…B3F2`).
+
+| Cambio | Asignado por paso (Flight 14) |
+| --- | --- |
+| Línea base | 212 KB |
+| Arreglos internos en vez de enumeradores de interfaz; captura de almacenes sin arreglos intermedios | 147 KB |
+| `TryBuild` sin LINQ, tablas de búsqueda reutilizadas por hilo | 118 KB |
+| Hijos de la topología en caché (`StressSolver`), IDs de componente por pieza, buffer de flujos compartido, diccionario con capacidad exacta | 74 KB |
+| Capturas de fondos de motores y venteo reutilizadas; listas con capacidad exacta | **60 KB (−72 %)** |
+
+Lo que queda son los datos propios del modelo de cada paso (arreglos inicial/final de la
+ventana, componentes y nudos). Llegar a ≤ 1 KB exige un modelo persistente entre pasos que se
+actualice en sitio (O1b).
+
+Hallazgo: los picos de 64 ms y 13 ms en pasos fijos (despegue y ~81 s) no son del recolector
+sino compilación JIT de primera ejecución (con `TieredCompilation=0` el del despegue sube a
+160 ms). Ver O9.
+
+Hallazgo de proceso: los vehículos y las piezas reciben GUID aleatorios; una huella de
+determinismo no debe incluir identificadores. La física es determinista entre procesos.
+

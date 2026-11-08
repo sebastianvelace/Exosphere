@@ -65,7 +65,7 @@ public static class StressSolver
         var external = distributedForce * share
             + (thrust.TryGetValue(part, out var partThrust) ? partThrust : Vector3d.Zero);
 
-        foreach (var child in graph.GetChildren(part))
+        foreach (var child in graph.GetChildList(part))
         {
             var (childMass, childExternal) = ComputeJointLoads(graph, child, localAccel,
                 thrust, distributedForce, totalLength, partCount, positions);

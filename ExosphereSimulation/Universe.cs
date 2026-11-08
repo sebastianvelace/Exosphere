@@ -2880,10 +2880,10 @@ public partial class Universe
                     - sample.CenterOfMassBodyM;
 
             var boundaries = new List<double>(distribution.BoundariesSeconds);
-            foreach (var group in transport.Groups)
+            foreach (var group in transport.GroupArray)
             {
-                foreach (var debit in group.Debits) { boundaries.Add(debit.StartSeconds); boundaries.Add(debit.EndSeconds); }
-                foreach (var outlet in group.Outlets) { boundaries.Add(outlet.StartSeconds); boundaries.Add(outlet.EndSeconds); }
+                foreach (var debit in group._debits) { boundaries.Add(debit.StartSeconds); boundaries.Add(debit.EndSeconds); }
+                foreach (var outlet in group._outlets) { boundaries.Add(outlet.StartSeconds); boundaries.Add(outlet.EndSeconds); }
             }
 
             var start = distribution.Sample(0.0, Physics.MassBoundarySide.Right);
