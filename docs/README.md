@@ -20,6 +20,7 @@ as provenance, but they are not the current product plan.
 | Values that are not published data (generated) | [`physics/estimates_register.md`](physics/estimates_register.md) |
 | Realism status and what is missing, by priority (2026-11-08) | [`audits/REALISM_STATUS_2026-11-08.md`](audits/REALISM_STATUS_2026-11-08.md) |
 | Plan: dated time/ephemerides, gravity, wind and the F6 close-out | [`physics/environment_and_recalibration_plan.md`](physics/environment_and_recalibration_plan.md) |
+| Performance audit, budgets and optimization units O1–O8 (2026-11-08) | [`audits/PERFORMANCE_AUDIT_2026-11-08.md`](audits/PERFORMANCE_AUDIT_2026-11-08.md) |
 | Starship/Super Heavy data baseline | [`starship_physics_baseline.md`](starship_physics_baseline.md) |
 | Visual and gameplay capture workflow | [`../PLAN_PLAYTEST.md`](../PLAN_PLAYTEST.md), [`../PLAN_VISUAL_REALISM.md`](../PLAN_VISUAL_REALISM.md) |
 | Flight 14 visual references and reconstruction limits | [`research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md`](research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md) |

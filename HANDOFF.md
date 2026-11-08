@@ -36,6 +36,10 @@ aerodinámico exterior con solapes e identidad del alcohol del Redstone.
 
 ## Plan maestro
 
+Antes de E0: optimización O1–O6 de `docs/audits/PERFORMANCE_AUDIT_2026-11-08.md` (O1 primero:
+cero asignaciones por paso en el camino de masa variable, causa de los tirones de GC).
+
+
 `docs/physics/environment_and_recalibration_plan.md`: entorno fechado (E1 tiempo, E2
 efemérides DE440, E3 gravedad, E4 viento/atmósfera), cierre de F6 y fases siguientes. Primer
 paso: refactor del aire relativo a un único punto, sin cambio de comportamiento.
