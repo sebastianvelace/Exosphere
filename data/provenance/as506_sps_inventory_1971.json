@@ -1,0 +1,38 @@
+{
+  "manifestId": "as506-sps-inventory-1971",
+  "records": [
+    {
+      "dataId": "apollo11_service_module_csm107",
+      "status": "derived",
+      "source": "NASA SP-238, Apollo 11 Mission Report (1971), table 8-X, printed p. 99 (PDF p. 111): https://ntrs.nasa.gov/api/citations/19710015566/downloads/19710015566.pdf",
+      "accessedDate": "2026-11-08",
+      "variant": "CSM-107 SPS / Apollo 11",
+      "field": "spsFuelLoadedKg",
+      "conditions": "Measured preliftoff gaging/density-derived fuel load: 15633 lb in tanks plus 79 lb in lines; converted using 0.45359237 kg/lb.",
+      "uncertainty": "Source quantities rounded to integer pounds. The catalogue groups tanks and lines in one loaded store per constituent; separate line geometry, unexpellable residuals, native tank stations and pressure response remain unresolved. This is loaded mass, not a published usable-propellant limit. Fixed nominal engine mixture 1.6 is retained.",
+      "value": 7126.84331744
+    },
+    {
+      "dataId": "apollo11_service_module_csm107",
+      "status": "derived",
+      "source": "NASA SP-238, Apollo 11 Mission Report (1971), table 8-X, printed p. 99 (PDF p. 111): https://ntrs.nasa.gov/api/citations/19710015566/downloads/19710015566.pdf",
+      "accessedDate": "2026-11-08",
+      "variant": "CSM-107 SPS / Apollo 11",
+      "field": "spsOxidizerLoadedKg",
+      "conditions": "Measured preliftoff gaging/density-derived oxidizer load: 24967 lb in tanks plus 124 lb in lines; converted using 0.45359237 kg/lb.",
+      "uncertainty": "Source quantities rounded to integer pounds. The catalogue groups tanks and lines in one loaded store per constituent; separate line geometry, unexpellable residuals, native tank stations and pressure response remain unresolved. This is loaded mass, not a published usable-propellant limit. Fixed nominal engine mixture 1.6 is retained.",
+      "value": 11381.08615567
+    },
+    {
+      "dataId": "apollo11_service_module_csm107",
+      "status": "derived",
+      "source": "NASA SP-238, Apollo 11 Mission Report (1971), table 8-X, printed p. 99 (PDF p. 111): https://ntrs.nasa.gov/api/citations/19710015566/downloads/19710015566.pdf; Apollo 11 Press Kit, printed p. 88: https://science.nasa.gov/wp-content/uploads/2023/09/Apollo_11.pdf",
+      "accessedDate": "2026-11-08",
+      "variant": "CSM-107 SPS / Apollo 11",
+      "field": "nonSpsMassAllocation",
+      "conditions": "Preserve the existing 51243 lb preflight SM wet aggregate, including the separately allocated 300 kg SPS engine and 610 kg RCS load. Reallocate the 4103.65017139 kg newly identified SPS inventory from the old logical dry bucket: 7929.15451419 - 4103.65017139 = 3825.5043428 kg.",
+      "uncertainty": "Derived logical remainder includes structure, non-SPS systems and other consumables; it is not a measured empty structural mass. Wet mass retains the preflight basis, rather than substituting the later TD&E phase weight. Native dry CG/inertia and non-SPS consumable histories remain open.",
+      "value": 3825.5043428
+    }
+  ]
+}

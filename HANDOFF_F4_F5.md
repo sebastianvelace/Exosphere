@@ -356,3 +356,37 @@ Readable next-unit test: `/tmp/exo-f6-docked-loi-production.cs.txt`; not applied
 The SPS inventory candidate is separate: table 8-X gives 18507.92947311 kg loaded versus
 14404.27930172 kg current. Preserve original wet mass as a logical allocation and validate
 native tank/line ownership and phase budgets before adoption; do not mix it into the fix.
+
+
+## Docked capture / SPS inventory work after 6f37e55 (in progress)
+
+`6f37e55` is pushed on the F6 branch with 1609/1609 CI and 53/53 matrix acceptance.
+The isolated docked-LOI mass correction is now applied to main sources, with its two
+new tests. Six controller cases pass in the main tree on the old inventory (2 m 35 s),
+including CSM-107/LM-5 capture at 101.94 x 312.02 km instead of the old 55.28 km perilune.
+
+A separate inventory unit adds SP-238 table 8-X tank-plus-line loads, converted to
+7126.84331744 kg fuel / 11381.08615567 kg oxidizer. SM logical dry remainder becomes
+3825.5043428 kg, preserving prior preflight wet mass. Native empty-structure properties,
+line geometry and usable residuals remain unresolved. Its source regression first fails
+old fuel mass; combined targeted checks pass **22/22** in 2 m 32 s:
+`/tmp/exo-f6-sps-inventory-green/sps-inventory-green.trx`.
+Source transcription: `docs/physics/reference/as506_sps_postflight_inventory.csv`.
+
+Keep controller and inventory as separate reviewable commits. The controller-only audit
+hunk is preserved in `/tmp/exo-f6-docked-capture-audit.patch` for staged separation;
+its standalone old-inventory 6/6 result is `/tmp/exo-f6-docked-capture-targeted/`.
+Run one complete CI on the stable combined result before committing, then audit the same
+unfiltered TRX (expected 56 cases). Do not reuse the old 53-case report for new inputs.
+Keep `.atl` changes untouched and preserve Sebas author/committer; no main merge.
+
+
+Full combined CI is now running under `/tmp/exo-f6-docked-sps-ci-runner.py`; PID file
+`/tmp/exo-f6-docked-sps-ci.pid`, log `/tmp/exo-f6-docked-sps-ci.log`, final result
+`/tmp/exo-f6-docked-sps-ci.exit`, unfiltered TRX and source/data/test-assembly identities
+in `/tmp/exo-f6-docked-sps-ci-profiles/`. Do not edit sim/test/data inputs while it runs.
+On success re-evaluate that TRX with the profile audit `--verify-only` (expected 56 cases),
+then commit/push controller and inventory units separately. Do not stop at a pending CI.
+Additional Atlas PU primary-source notes are staged only as text in
+`/tmp/exo-f6-atlas-pu-source-followup.md`; no Atlas production change is authorized by
+those incomplete probes or implied by their orbit failures. F6 remains open.

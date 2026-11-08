@@ -85,6 +85,25 @@ public sealed class Apollo11DataTests
     }
 
     [Fact]
+    public void ServicePropulsionInventoryMatchesPostflightTankAndLineLoads()
+    {
+        // SP-238, table 8-X: preliftoff gaging/density-derived tank and line loads (lb).
+        const double pound = 0.45359237;
+        var catalog = LoadParts();
+        var sm = catalog["apollo11_service_module_csm107"];
+        var sps = catalog["apollo11_sps_engine_csm107"];
+        Assert.Equal((15_633.0 + 79.0) * pound, sm.FuelCapacityLF, 8);
+        Assert.Equal((24_967.0 + 124.0) * pound, sm.FuelCapacityOx, 8);
+        Assert.Equal(40_803.0 * pound, sm.FuelCapacityLF + sm.FuelCapacityOx, 8);
+        // Keep the prior press-kit wet aggregate. This remainder includes other
+        // consumables and hardware; it is not a measurement of empty SM structure.
+        Assert.Equal(51_243.0 * pound,
+            sm.MassDry + sm.FuelCapacityLF + sm.FuelCapacityOx + sm.FuelCapacityMono + sps.MassDry, 7);
+        var provenance = DataProvenanceRegistry.LoadFromDirectory(Path.Combine(Root.FullName, "data", "provenance"));
+        provenance.RequireFields(sm.Id, "spsFuelLoadedKg", "spsOxidizerLoadedKg", "nonSpsMassAllocation");
+    }
+
+    [Fact]
     public void As506StackClosesPublishedIgnitionMassDimensionsAndThrust()
     {
         PartCatalog parts = LoadParts();

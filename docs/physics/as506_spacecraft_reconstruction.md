@@ -286,3 +286,48 @@ T+2781.14 s, 380.66 s burn and 101.94 x 312.02 km. The new 180 s ignition-window
 also fails the original controller directly. Two docked and four existing Apollo 8 cases
 pass 6/6 in the main tree with the original inventory (2 m 35 s). Lunar targets and the
 2580 m/s controlled arrival remain the common Apollo 8 proxy, not an Apollo 11 replay.
+
+SP-238 table 8-X, printed p. 99 / PDF p. 111, supplies measured preliftoff SPS loads from
+gaging and density, independently of the press-kit's aggregate spacecraft mass:
+
+| Constituent | In tanks (lb) | In lines (lb) | Loaded total (kg) |
+| --- | ---: | ---: | ---: |
+| Aerozine 50 | 15633 | 79 | 7126.84331744 |
+| N2O4 | 24967 | 124 | 11381.08615567 |
+
+Original inspected scan: `/tmp/exo-f6-as506-sps-load-ledger.png`. The transcription in
+[`reference/as506_sps_postflight_inventory.csv`](reference/as506_sps_postflight_inventory.csv)
+retains tank/line and mission-consumed/remaining distinctions. Total loaded is
+18507.92947311 kg, 4103.65017139 kg above the prior catalogue's 14404.27930172 kg.
+The source consumed/remaining values are 16210.93771143 / 2296.99176168 kg.
+
+The catalogue now represents those tank-plus-line loads as one aggregate store per
+constituent. Its logical non-SPS allocation falls from 7929.15451419 to 3825.5043428 kg,
+preserving the existing 51243 lb preflight SM wet aggregate, including separate SPS
+engine and RCS allocations. This is a derived remainder containing hardware and other
+consumables, not measured empty structure. The preflight aggregate must not be silently
+replaced by the later TD&E phase weight. Native dry CG/inertia, tank/line geometry,
+unexpellable residuals, pressure response and other consumable histories remain open;
+loaded mass does not establish a usable-propellant limit. Engine mixture and ratings
+are unchanged. The new inventory regression first fails old fuel mass, 5540.107423738 kg
+instead of the published tank-plus-line 7126.84331744 kg.
+
+A production-DLL probe (`/tmp/exo-f6-csm-cg-actuator-lever.log`) gives initial CSM
+X_A=946.45729 in, quad reference 958.9 in and axial lever 0.31604 m. The published TD&E
+CSM CG 934 in implies 0.63246 m; initial loaded and TD&E consumed states are not identical.
+This supports further mass-property reconstruction, not a claim that lever alone explains
+the RCS consumption change.
+
+For nozzle follow-up, [NASA TM X-65048 / Apollo Working Paper 1195](https://ntrs.nasa.gov/api/citations/19700026405/downloads/19700026405.pdf),
+dated 7 February 1966, figure 6, printed p. 15 / PDF p. 20, gives 111.82 in gimbal-to-exit,
+152.82 in overall and 98.48 in exit diameter. Its table I specifies 21500 lbf and mixture
+2.0, unlike CSM-107. It is not a 1970/as-flown source despite its NTRS identifier. The
+scan `/tmp/exo-f6-sps-1966-gimbal-dimensions.png` was inspected; no exit offset is adopted
+without resolving that configuration difference against the 1969 handbook.
+
+Combined targeted checks pass 22/22 (2 m 32 s) in
+`/tmp/exo-f6-sps-inventory-green/sps-inventory-green.trx`, covering the source inventory,
+wet/staging mass closure, docking/data contracts, docked SPS capture and Apollo 8 LOI
+controllers. Full acceptance is pending in `/tmp/exo-f6-docked-sps-ci.log`; the 1609/53-case
+checkpoint above remains valid only for the previous interface inputs. Preserve the new
+full-suite identities and TRX before committing these separate controller/inventory units.

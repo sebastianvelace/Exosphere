@@ -24,6 +24,7 @@ MATRIX = [
     ("Apollo 11", "apollo11_saturn5_as506_1969", ["Apollo11DataTests.SpacecraftInterfacesPreserveThePublishedStructuralSpansAndOverlaps",
         "Apollo11DataTests.SpacecraftActuatorsUseThePublishedModuleReferencePlanes",
         "Apollo11DataTests.As506StackClosesPublishedIgnitionMassDimensionsAndThrust",
+        "Apollo11DataTests.ServicePropulsionInventoryMatchesPostflightTankAndLineLoads",
         "SaturnVAscentScenarioTests.As506ReachesParkingOrbitWithTheTranslunarPropellant",
         "SaturnVJetDampingHistoricalTests", "PropellantSloshTests.As506SicSloshFollowsTheAs501MeasuredFrequencies",
         "Apollo11TranspositionDockingScenarioTests", "Apollo11PoweredDescentScenarioTests",

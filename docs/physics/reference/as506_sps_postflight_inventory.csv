@@ -1,0 +1,6 @@
+condition,fuel_lb,oxidizer_lb,total_lb
+loaded_in_tanks,15633,24967,40600
+loaded_in_lines,79,124,203
+loaded_total,15712,25091,40803
+consumed_mission,13754,21985,35739
+remaining_at_cm_sm_separation,1958,3106,5064
