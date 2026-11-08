@@ -34,6 +34,12 @@ conjunto acoplado) y `637e6d5` (carga SPS medida, SP-238 tabla 8-X). Antes: inte
 del spacecraft AS-506, corte del S-IC por agotamiento de un constituyente, contorno
 aerodinámico exterior con solapes e identidad del alcohol del Redstone.
 
+## Plan maestro
+
+`docs/physics/environment_and_recalibration_plan.md`: entorno fechado (E1 tiempo, E2
+efemérides DE440, E3 gravedad, E4 viento/atmósfera), cierre de F6 y fases siguientes. Primer
+paso: refactor del aire relativo a un único punto, sin cambio de comportamiento.
+
 ## Siguiente trabajo de F6, en orden
 
 1. Hecho: centro y giración secos del CM y del SM derivados de SP-238 tabla B-I

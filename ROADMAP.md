@@ -482,6 +482,9 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      Pendiente: geometría de tanques del SPS y consumo de criogénicos, salida de tobera del SPS, efemérides lunares fechadas, sustainer y PU nativos
      del Atlas (MA-6), aletas del S-IC, grid fins y cápsulas romas newtonianas. Detalle en
      `docs/physics/historical_recalibration.md`.
+   - Plan siguiente (2026-11-08): entorno fechado E1–E4 (tiempo y orientación terrestre,
+     efemérides DE440, gravedad con armónicos y mascons, viento y atmósfera variable) junto al
+     cierre de F6; ver `docs/physics/environment_and_recalibration_plan.md`.
 
 2. **Controles aún no equivalentes en el camino acoplado**
    - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el
