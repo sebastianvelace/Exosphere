@@ -23,13 +23,22 @@ public sealed record SaturnVAscentSchedule(
     /// <summary>
     /// S-IC outboard cutoff. With a flown residual (AS-506: LOX-depletion cutoff at 32.0 t
     /// in the tanks) the F-1s burn down to it; otherwise they stop on the clock. A residual
-    /// cutoff is bounded 15 s past the scheduled time in case the residual is never reached.
+    /// cutoff also reacts to exhausted feed: leftover oxidizer cannot keep a fuel-starved
+    /// stage burning. A final guard remains 15 s past the scheduled time.
     /// </summary>
     public bool IsSicCutoff(Vessel vessel, double elapsedSeconds)
     {
         ArgumentNullException.ThrowIfNull(vessel);
         if (SicCutoffResidualKg <= 0.0) return elapsedSeconds >= SicOutboardCutoffSeconds;
-        return SicPropellantKg(vessel) <= SicCutoffResidualKg
+        double fuel = 0.0, oxidizer = 0.0;
+        foreach (var part in vessel.Parts.Parts)
+            if (part.Definition.HasVehicleRole("sic_tank"))
+            {
+                fuel += part.LiquidFuel + part.HeaderLiquidFuel;
+                oxidizer += part.Oxidizer + part.HeaderOxidizer;
+            }
+        return fuel <= 0.0 || oxidizer <= 0.0
+            || SicPropellantKg(vessel) <= SicCutoffResidualKg
             || elapsedSeconds >= SicOutboardCutoffSeconds + 15.0;
     }
 

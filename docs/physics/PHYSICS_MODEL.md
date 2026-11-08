@@ -220,8 +220,8 @@ circularization; `TranslunarInjectionScenarioTests` flies parking orbit to lunar
 state assignment. Historical launches release their hold-downs under the shared
 `HoldDownReleasePolicy`. The Saturn V S-IC flies a pitch-over and then a zero-angle-of-attack
 gravity turn (`GravityTurnGuidance`); the S-II/S-IVB fly time-to-go `ClosedLoopInsertionGuidance`
-and cut off on the flown periapsis (`SaturnVAscentScenarioTests`: 181 x 195 km at T+714 s with
-~67 t left for TLI). The open-loop S-IC elevation program it replaced paid ~660 m/s of steering
+and cut off on the flown periapsis (`SaturnVAscentScenarioTests`: 181 x 195 km at T+700 s with
+~67.8 t left for TLI). The open-loop S-IC elevation program it replaced paid ~660 m/s of steering
 loss; transonic drag costs only ~35 m/s.
 
 Each Saturn V flies its own ascent schedule (`SaturnVAscentSchedule`). Apollo 11 was flown on
@@ -231,8 +231,14 @@ reached TLI with 30 t instead of ~72 t, ran dry halfway through the injection, a
 `ProgradeEnergyBurn` kept the throttle up on an empty stage. The fixes:
 
 - AS-506 uses the flown event times.
+- A residual-based S-IC cutoff also responds when either main/header feed constituent
+  is exhausted. Otherwise unusable oxidizer just above the aggregate residual could trap
+  the schedule until its clock guard, leaving about 13 s without first-stage thrust.
+  `SaturnVAscentScheduleTests` covers the inventory cases and the actual staged ascent;
+  it preserves the residual, source separation delay and clock-only AS-503 schedule.
 - Its S-IC burns down to its flown 32.0 t cutoff residual, since OECO was LOX depletion.
-- Its pitch-over reaches 80°, which gives the flown 67 km / 2.8 km/s at S-IC cutoff.
+- Its pitch-over retains the existing 80-degree calibration. Native cutoff trajectory,
+  flight mixture variation and ground-start inventory remain F6 reconstruction work.
 - The S-II centre engine cuts at T+460.6 s, and the S-II separates as soon as it burns out
   instead of coasting to the clock.
 - Its J-2s use the flight reconstruction (S-IVB 4204 N·s/kg and 901 kN; S-II 4150 N·s/kg and
@@ -598,7 +604,7 @@ The VAB still represents a stage as an engine part while the simulation expands 
 engine count into physical instances. This is a deliberate data/UI boundary, not a claim that
 all motors are one physical point.
 
-## Propellant slosh foundation (F5, open)
+## Propellant slosh (F5, production)
 
 `Physics/PropellantSlosh` implements the first lateral cylindrical-tank mode from NASA
 SP-8009/SP-106. Its isolated planar carrier coupling conserves lateral momentum; optional
@@ -606,10 +612,14 @@ internal viscous damping removes energy without an external reaction. The modal 
 withdrawn from the same liquid inventory rather than added to vehicle mass. Registered
 analytic limits and an AS-501 probe-frequency comparison cover this foundation.
 
-This kernel has no production modal state, 6-DoF coupling or persistence yet. The design
-in `propellant_slosh.md` specifies locked-inertia preservation, one mass for both lateral
-coordinates, variable-fill momentum balance and source-backed per-tank damping before
-activation. Flight trajectories continue to use F4 settled columns.
+F5 closed on 2026-11-07. `Universe.PropellantSloshEnabled` defaults on; declared liquid
+tanks participate in the funded coupled rigid/modal solve, with source-owned state through
+separation, docking and Save V2 persistence. One F4 funding window supplies the coupled
+body/modal step without a duplicate resource debit. Undeclared stores keep the settled
+or fallback shape. Zero-g and rapid-drain continuations preserve the mechanical state but
+do not extend the validated small-amplitude settled-fluid domain. Current implementation,
+conservation evidence and those limits are detailed in
+[`propellant_slosh.md`](propellant_slosh.md#active-production-integration).
 
 ## Thermal, structural and contact physics
 
