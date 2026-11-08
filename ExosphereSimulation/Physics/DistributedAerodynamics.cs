@@ -29,7 +29,7 @@ public readonly record struct AeroWrench(Vector3d ForceWorld, Vector3d TorqueBod
 /// NASA TR R-474); C_A (declared per vehicle, 0.6 default) carries the aggregate model's
 /// transonic Mach rise.
 /// </summary>
-public static class DistributedAerodynamics
+public static partial class DistributedAerodynamics
 {
     /// <summary>Planform fraction of a tangent ogive (≈ 2/3 of its D·L rectangle).</summary>
     public const double OgivePlanformFraction = 2.0 / 3.0;
@@ -43,6 +43,7 @@ public static class DistributedAerodynamics
     public static void BuildElements(PartGraph graph, IReadOnlyDictionary<Part, Vector3d> positions,
         List<AeroElement> elements)
     {
+        if (TryBuildOverlappingCoaxialEnvelope(graph, positions, elements)) return;
         double lead = double.NegativeInfinity;
         Part? leadPart = null;
         foreach (var part in graph.Parts)

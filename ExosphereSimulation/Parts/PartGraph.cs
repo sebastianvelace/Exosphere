@@ -70,6 +70,7 @@ public partial class PartGraph
     // survives across ticks and is rebuilt only by InvalidateTopologyCaches.
     private readonly Dictionary<Part, Vector3d> _topologyPartLocalPositions = new();
     private bool _topologyPartLocalPositionsValid;
+    private double? _topologyVehicleLength;
     private bool _physicsTickActive;
     private bool _tickStageCacheValid;
     private bool _tickActiveEngineCacheValid;
@@ -344,6 +345,7 @@ public partial class PartGraph
         _bodyFlapsValid = false;
         _rcsThrustersValid = false;
         _topologyPartLocalPositionsValid = false;
+        _topologyVehicleLength = null;
         _tickStageCacheValid = false;
         _tickActiveEngineCacheValid = false;
         _tickMassPropertiesValid = false;
@@ -421,13 +423,64 @@ public partial class PartGraph
     {
         get
         {
-            double specified = 0.0;
-            foreach (var part in _parts)
-                if (!IsEnclosedPayload(part)) specified += System.Math.Max(0.0, part.Definition.LengthM);
-            return specified > 0.0
-                ? specified
-                : System.Math.Max(1.0, _parts.Count * 12.0);
+            if (_topologyVehicleLength is { } cached) return cached;
+            return (_topologyVehicleLength = ComputeVehicleLength()).Value;
         }
+    }
+
+    private double ComputeVehicleLength()
+    {
+        double specified = 0.0;
+        foreach (var part in _parts)
+            if (!IsEnclosedPayload(part)) specified += System.Math.Max(0.0, part.Definition.LengthM);
+        double estimate = specified > 0.0
+            ? specified
+            : System.Math.Max(1.0, _parts.Count * 12.0);
+        if (!(specified > 0.0) || _root == null || _joints.Count != _parts.Count - 1)
+            return estimate;
+
+        bool endToEndChain = true;
+        int direction = 0;
+        for (int i = 0; i < _joints.Count; i++)
+        {
+            var joint = _joints[i];
+            var parent = FindAttachmentNode(joint.Parent, joint.ParentNodeId);
+            var child = FindAttachmentNode(joint.Child, joint.ChildNodeId);
+            // Unknown connections do not establish a physical overlap or gap.
+            if (parent?.Position is not { Length: >= 3 } p
+                || child?.Position is not { Length: >= 3 } c
+                || !double.IsFinite(p[0]) || !double.IsFinite(p[1]) || !double.IsFinite(p[2])
+                || !double.IsFinite(c[0]) || !double.IsFinite(c[1]) || !double.IsFinite(c[2]))
+                return estimate;
+            bool oppositeEnds = p[0] == 0.0 && p[2] == 0.0 && c[0] == 0.0 && c[2] == 0.0
+                && System.Math.Abs(p[1]) == joint.Parent.Definition.LengthM * 0.5
+                && System.Math.Abs(c[1]) == joint.Child.Definition.LengthM * 0.5
+                && p[1] * c[1] <= 0.0;
+            if (!oppositeEnds) endToEndChain = false;
+            int jointDirection = System.Math.Sign(p[1]);
+            if (direction != 0 && jointDirection != 0 && jointDirection != direction)
+                endToEndChain = false;
+            if (jointDirection != 0) direction = jointDirection;
+            for (int j = 0; j < i; j++)
+                if (ReferenceEquals(_joints[j].Parent, joint.Parent)) endToEndChain = false;
+        }
+        // Preserve the original summation (including its last bits) for ordinary
+        // serial stacks. Only explicit nonstandard connections need an envelope.
+        if (endToEndChain) return estimate;
+
+        var positions = GetTopologyPartLocalPositions();
+        if (positions.Count != _parts.Count) return estimate;
+        double lower = double.PositiveInfinity, upper = double.NegativeInfinity;
+        foreach (var part in _parts)
+        {
+            if (IsEnclosedPayload(part)) continue;
+            double center = positions[part].Y;
+            double halfLength = part.Definition.LengthM * 0.5;
+            lower = System.Math.Min(lower, center - halfLength);
+            upper = System.Math.Max(upper, center + halfLength);
+        }
+        double span = upper - lower;
+        return double.IsFinite(span) && span > 0.0 ? span : estimate;
     }
     public double MaximumDiameter
     {

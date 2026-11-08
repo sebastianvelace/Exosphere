@@ -431,6 +431,26 @@ This is an optical material approximation, not a measured Starship BRDF. Heat-sh
 remain dielectric and high-roughness; their emissive floor is only a bounded readability
 fallback for the compatibility renderer.
 
+### Overlapping axial assemblies
+
+`PartGraph.VehicleLength` uses the exterior axial bounds when declared connections overlap,
+leave a gap or branch; enclosed payloads do not extend those bounds. Ordinary serial stacks
+retain the original length summation, including its floating-point order. Unknown connection
+geometry retains the legacy estimate. The result is cached until topology changes.
+
+For overlapping coaxial cylinders, `DistributedAerodynamics` loads the union of exposed
+sections. Hidden hardware adds neither planform area nor spurious diameter steps. Munk
+area changes follow that exterior section rather than the ordering of component centroids;
+their sum equals the aft section area. The existing ogive approximation is retained only
+when its nose region is not overlapped. Off-axis assemblies and overlaps in an unresolved
+ogive region retain the previous approximation. Station comparisons absorb eight floating-point
+steps to avoid treating roundoff at an ordinary joint as an overlap; no flight gate changes.
+
+`PartGraphEnvelopeTests` covers overlaps, gaps, folded chains, branches, enclosed payloads
+and topology invalidation. `OverlappingAerodynamicsTests` checks exposed area, the section
+balance, force/moment invariance with hidden hardware, and exact ordinary-joint compatibility.
+This model support does not adopt the pending AS-506 catalogue reconstruction.
+
 ### Evidence basis and deliberate boundaries
 
 The implementation is constrained by the following primary references:
