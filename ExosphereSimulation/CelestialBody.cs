@@ -203,11 +203,15 @@ public partial class CelestialBody
     /// Velocity of the atmosphere at <paramref name="worldPos"/> relative to the body centre,
     /// in inertial axes. The single point every aerodynamic, heating and air-data consumer
     /// reads (environment plan E0.1): today the air co-rotates rigidly with the body
-    /// (ω×r, identical to <see cref="GetSurfaceVelocity(Vector3d)"/>); wind enters here (E4).
+    /// (ω×r, identical to <see cref="GetSurfaceVelocity(Vector3d)"/>) plus <see cref="Wind"/> when set.
     /// Ground contact, landing, navigation over the surface and water keep
     /// <see cref="GetSurfaceVelocity(Vector3d)"/>, because wind does not move the ground.
     /// </summary>
-    public Vector3d GetAirVelocity(Vector3d worldPos) => GetSurfaceVelocity(worldPos);
+    public Vector3d GetAirVelocity(Vector3d worldPos) =>
+        Wind is { } wind ? GetSurfaceVelocity(worldPos) + wind.WindAt(this, worldPos) : GetSurfaceVelocity(worldPos);
+
+    /// <summary>Wind relative to the rotating surface (environment plan E4); none by default.</summary>
+    public Environment.IWindField? Wind { get; set; }
 
     /// <summary>
     /// Velocity relative to the local air of a point at <paramref name="worldPos"/> moving at

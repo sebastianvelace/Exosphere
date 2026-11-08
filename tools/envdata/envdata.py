@@ -104,8 +104,14 @@ def fetch(names: list[str]) -> None:
         target = cache_dir() / dataset["id"] / dataset["file"]
         target.parent.mkdir(parents=True, exist_ok=True)
         request = urllib.request.Request(dataset["url"], headers={"User-Agent": "exosphere-envdata/1"})
-        with urllib.request.urlopen(request, context=context, timeout=120) as response:
+        with urllib.request.urlopen(request, context=context, timeout=600) as response:
             blob = response.read()
+        if dataset.get("zip_member"):
+            # Archives are unpacked to the declared member; the pin covers the member's bytes.
+            import io
+            import zipfile
+            with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+                blob = archive.read(dataset["zip_member"])
         check_source(dataset, blob)
         target.write_bytes(blob)
         print(f"fetched {name}: {len(blob)} bytes, SHA-256 verified")

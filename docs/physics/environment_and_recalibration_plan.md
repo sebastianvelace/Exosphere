@@ -258,6 +258,20 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   dirección, con fuente por tramo. AS-506: estructura fina digitalizada del FER (figuras A-1 a
   A-4, pico 9,6 m/s a 11,40 km; superficie 3,3 m/s del sur a 18,3 m) y control cruzado con IGRA
   14Z (17 niveles). Herramienta de digitalización con la incertidumbre de lectura registrada.
+  **E4.1 hecho (2026-11-08) con fuente distinta a la prevista.** En lugar de digitalizar las
+  figuras A-1…A-4 del FER, el perfil es el sondeo medido IGRA v2 de Cape Kennedy (USM00074794)
+  del 1969-07-16 14Z, 28 min después del lanzamiento (17 niveles, superficie 180°/1,0 m/s, ~7 m/s
+  del ONO a 11–12 km, vientos del este de 8–32 m/s sobre 16 km), producto `winds/wind_as506.bin`.
+  El FER es el control cruzado: superficie del pad 3,3 m/s a 18,3 m; cola máxima 7,6 m/s a
+  11,18 km; viento de cara sobre 15 km; su pico fino de 9,6 m/s a 11,4 km cae entre niveles
+  archivados (7,0 m/s), declarado en la incertidumbre. `Environment/IWindField` + `ProfileWind`
+  (componentes E/N lineales en altitud, desvanecimiento horizontal 300→600 km y vertical 5 km),
+  `CelestialBody.Wind` entra por `GetAirVelocity` (nulo por defecto: sin cambio) y
+  `Universe.UseWindProfile`. Compuerta analítica E4: invariancia galileana exacta del arrastre.
+  **Hallazgo para la compuerta histórica:** el S-IC de la simulación vuela un giro gravitatorio
+  de α cero que apunta al aire relativo, así que con viento α vuelve a ~0; el AS-506 voló un
+  programa de inclinación en lazo abierto. La compuerta α/Qα de la tabla 11-2 necesita ese
+  programa histórico (trabajo de F6) antes de poder correr.
 - **E4.2 `Hwm14Wind`** por encima del perfil medido, con mezcla suave.
 - **E4.3 `NrlMsis2`** con F10.7/Ap de CelesTrak `SW-All.txt` por fecha; presión de motores y
   densidad aerodinámica del mismo estado.

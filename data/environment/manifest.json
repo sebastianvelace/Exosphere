@@ -99,6 +99,18 @@
       "accessed": "2026-11-08",
       "licence": "NASA JPL generic kernel, public distribution",
       "sha256": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768"
+    },
+    {
+      "id": "noaa_igra_usm00074794",
+      "title": "IGRA v2 radiosonde soundings, station USM00074794 Cape Kennedy/Canaveral, period of record",
+      "publisher": "NOAA National Centers for Environmental Information (Durre et al., IGRA v2)",
+      "url": "https://www.ncei.noaa.gov/data/integrated-global-radiosonde-archive/access/data-por/USM00074794-data.txt.zip",
+      "file": "USM00074794-data.txt",
+      "zip_member": "USM00074794-data.txt",
+      "prefix_through": "#USM00074794 1969 07 16 20",
+      "accessed": "2026-11-08",
+      "licence": "NOAA NCEI public data",
+      "sha256": "9c2d8a9d8c6aa2bbe9e04494a91c016aa105212a18e0508ad8025c56c3f26913"
     }
   ],
   "products": [
@@ -373,6 +385,25 @@
       },
       "sha256": "ebc8d5ddb6c517036a4588b7e91afea6696e57e9034b824b2833bb1890d13d7e",
       "bytes": 1349240
+    },
+    {
+      "id": "wind_as506",
+      "builder": "wind_profile",
+      "series": "wind_as506",
+      "inputs": [
+        "noaa_igra_usm00074794"
+      ],
+      "output": "winds/wind_as506.bin",
+      "provenance": {
+        "dataId": "environment_wind",
+        "field": "as506LaunchWind",
+        "status": "published",
+        "variant": "Cape Kennedy rawinsonde 1969-07-16 14Z (28 min after the AS-506 launch), 17 levels, surface to 33.9 km",
+        "conditions": "Mandatory and significant levels as archived by IGRA v2; linear in altitude between levels. The FER AS-506 (MPR-SAT-FE-69-9, appendix A) cross-checks the surface (180 deg, 1.0 m/s at the station; 3.3 m/s at the pad lightpole 18.3 m) and reports finer structure (9.6 m/s peak at 11.4 km) that the archived levels do not resolve.",
+        "uncertainty": "Rawinsonde wind ~1-2 m/s per level; unresolved fine structure up to ~2.6 m/s near the jet (FER peak vs archived level); 28 min of evolution after launch."
+      },
+      "sha256": "03bf57d09996029a700c76a4b8d9407263d829747db6035d24e25aab8a8312c6",
+      "bytes": 1416
     }
   ]
 }

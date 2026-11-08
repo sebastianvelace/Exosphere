@@ -119,6 +119,16 @@ public partial class Universe
             Path.Combine(dataDirectory, "environment", "gravity", "egm2008_d70.bin"), degree);
     }
 
+    /// <summary>
+    /// Blows a measured wind profile (envdata product <c>winds/&lt;id&gt;.bin</c>) around its
+    /// station on Earth (environment plan E4.1). Off by default.
+    /// </summary>
+    public void UseWindProfile(string dataDirectory, string productId)
+    {
+        var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");
+        earth.Wind = ProfileWind.LoadFromDataDirectory(dataDirectory, productId);
+    }
+
     public void UseIersEarthOrientation(string dataDirectory)
     {
         var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");

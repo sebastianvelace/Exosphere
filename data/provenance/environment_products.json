@@ -140,6 +140,16 @@
       "variant": "DE440 lunar principal axes (MOON_PA_DE440), 3-1-3 Euler angles, Chebyshev 8 d / 12, 1960-2051",
       "conditions": "Fit of the NAIF binary PCK; verified against SPICE pxform at 2000 random instants at build time.",
       "uncertainty": "Interpolation below 1 mm on the lunar surface; DE440 librations from lunar laser ranging."
+    },
+    {
+      "dataId": "environment_wind",
+      "field": "as506LaunchWind",
+      "status": "published",
+      "source": "NOAA National Centers for Environmental Information (Durre et al., IGRA v2), IGRA v2 radiosonde soundings, station USM00074794 Cape Kennedy/Canaveral, period of record: https://www.ncei.noaa.gov/data/integrated-global-radiosonde-archive/access/data-por/USM00074794-data.txt.zip (rows through #USM00074794 1969 07 16 20, prefix SHA-256 9c2d8a9d8c6aa2bbe9e04494a91c016aa105212a18e0508ad8025c56c3f26913). Built by tools/envdata/products/wind_profile.py into data/environment/winds/wind_as506.bin (SHA-256 03bf57d09996029a700c76a4b8d9407263d829747db6035d24e25aab8a8312c6).",
+      "accessedDate": "2026-11-08",
+      "variant": "Cape Kennedy rawinsonde 1969-07-16 14Z (28 min after the AS-506 launch), 17 levels, surface to 33.9 km",
+      "conditions": "Mandatory and significant levels as archived by IGRA v2; linear in altitude between levels. The FER AS-506 (MPR-SAT-FE-69-9, appendix A) cross-checks the surface (180 deg, 1.0 m/s at the station; 3.3 m/s at the pad lightpole 18.3 m) and reports finer structure (9.6 m/s peak at 11.4 km) that the archived levels do not resolve.",
+      "uncertainty": "Rawinsonde wind ~1-2 m/s per level; unresolved fine structure up to ~2.6 m/s near the jet (FER peak vs archived level); 28 min of evolution after launch."
     }
   ]
 }
