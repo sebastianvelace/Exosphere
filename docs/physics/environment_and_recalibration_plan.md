@@ -181,6 +181,15 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
 - **E1.3 Época por misión.** `MissionDefinition.LaunchEpochUtc` y conversión única a TDB;
   Apollo 11: 1969-07-16 13:32:00 UTC (SP-238). Sitios en ITRF desde `data/launch_sites` con
   datum declarado. *Salida:* con el interruptor apagado, nada cambia.
+  **Hecho (2026-11-08).** `MissionDefinition.LaunchEpochUtc` + `LaunchEpochSourceId` +
+  `LaunchEpochEvidence` (validados: ISO-8601 en UTC, en la fecha histórica, citando una fuente de
+  la propia misión) y `LaunchEpochTdbSeconds(TimeScales)`. Épocas verificadas en documentos:
+  Freedom 7 14:34:13 (SP-4012 v. II), Friendship 7 14:47:39 (informe MA-6), Gemini 8 16:41:02
+  (página NASA con UT explícita y cadena de eventos de SP-4012; el informe MSC-G-R-66-4 y la
+  cronología SP-4002 imprimen una hora antes con «e.s.t.», contradicho por ambas y documentado),
+  Apollo 8 12:51:00 (FER AS-503, range zero) y Apollo 11 13:32:00 (SP-238, range zero). Los
+  sitios ya están en coordenadas geodésicas WGS84 sobre el ITRS de la fecha cuando la orientación
+  IERS está activa. Nada cambia con el entorno fechado apagado.
 
 ### E2 — Efemérides fechadas
 

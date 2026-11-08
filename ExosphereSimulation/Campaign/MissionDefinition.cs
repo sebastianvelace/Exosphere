@@ -96,6 +96,16 @@ public sealed class MissionDefinition
     public string SummaryEn { get; set; } = "";
     public string SummaryEs { get; set; } = "";
     public DateOnly HistoricalDate { get; set; }
+
+    /// <summary>
+    /// Launch epoch (range zero for Apollo) as an ISO-8601 UTC instant, e.g.
+    /// "1969-07-16T13:32:00Z" (environment plan E1.3). It must fall on
+    /// <see cref="HistoricalDate"/> and cite <see cref="LaunchEpochSourceId"/>, one of
+    /// <see cref="Sources"/>, with the quoted text in <see cref="LaunchEpochEvidence"/>.
+    /// </summary>
+    public string LaunchEpochUtc { get; set; } = "";
+    public string LaunchEpochSourceId { get; set; } = "";
+    public string LaunchEpochEvidence { get; set; } = "";
     public string VehicleVariantId { get; set; } = "";
     public string LaunchSiteId { get; set; } = "";
     public string FlightProfileId { get; set; } = "";
@@ -130,6 +140,11 @@ public sealed class MissionDefinition
         RequireUnique(Anomalies.Select(item => item.Id), "anomaly");
         RequireUnique(Rewards.Select(item => item.Id), "reward");
         RequireUnique(Sources.Select(item => item.Id), "source");
+        ParseLaunchEpoch();
+        RequireText(LaunchEpochEvidence, nameof(LaunchEpochEvidence));
+        if (Sources.All(source => source.Id != LaunchEpochSourceId))
+            throw new InvalidDataException(
+                $"Mission '{Id}' launch epoch cites unknown source '{LaunchEpochSourceId}'.");
         RequireUnique(Procedure.Select(item => item.Id), "procedure step");
         foreach (var step in Procedure)
         {
@@ -165,6 +180,33 @@ public sealed class MissionDefinition
                 throw new InvalidDataException(
                     $"Mission '{Id}' source '{source.Id}' is invalid.");
         }
+    }
+
+    /// <summary>The launch epoch as UTC seconds since J2000 (<see cref="Environment.TimeScales"/> count).</summary>
+    public double LaunchEpochUtcSeconds()
+    {
+        var (year, month, day, hour, minute, second) = ParseLaunchEpoch();
+        return Environment.TimeScales.UtcSecondsFromCalendar(year, month, day, hour, minute, second);
+    }
+
+    /// <summary>The launch epoch as TDB seconds since J2000: the dated simulation time at launch.</summary>
+    public double LaunchEpochTdbSeconds(Environment.TimeScales scales) =>
+        scales.UtcToTdb(LaunchEpochUtcSeconds());
+
+    private (int, int, int, int, int, double) ParseLaunchEpoch()
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(LaunchEpochUtc,
+            @"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)Z$");
+        if (!match.Success)
+            throw new InvalidDataException(
+                $"Mission '{Id}' launch epoch '{LaunchEpochUtc}' is not an ISO-8601 UTC instant ending in Z.");
+        int year = int.Parse(match.Groups[1].Value), month = int.Parse(match.Groups[2].Value),
+            day = int.Parse(match.Groups[3].Value);
+        if (new DateOnly(year, month, day) != HistoricalDate)
+            throw new InvalidDataException(
+                $"Mission '{Id}' launch epoch {LaunchEpochUtc} is not on its historical date {HistoricalDate}.");
+        return (year, month, day, int.Parse(match.Groups[4].Value), int.Parse(match.Groups[5].Value),
+            double.Parse(match.Groups[6].Value, System.Globalization.CultureInfo.InvariantCulture));
     }
 
     public static MissionDefinition LoadFromJson(string path)
