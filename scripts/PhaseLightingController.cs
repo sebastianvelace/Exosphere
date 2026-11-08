@@ -192,7 +192,7 @@ public partial class PhaseLightingController : Node
                 _sampledOptics.MieDensity(_sampledAltitude));
 
         double density = _sampledBody.GetAtmosphericDensity(av.Position);
-        Vector3d surfVel = av.GetSurfaceVelocity(_sampledBody);
+        Vector3d surfVel = av.GetAirRelativeVelocity(_sampledBody);
         _sampledReentry = ComputeReentryFactor(
             av, _sampledBody, _sampledAltitude, density, surfVel);
 

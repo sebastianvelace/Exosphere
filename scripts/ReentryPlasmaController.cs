@@ -168,7 +168,7 @@ public partial class ReentryPlasmaController : Node3D
         var body = bridge.Universe.GetDominantBody(vessel.Position);
 
         double density  = body.GetAtmosphericDensity(vessel.Position);
-        var    surfVel  = vessel.GetSurfaceVelocity(body);
+        var    surfVel  = vessel.GetAirRelativeVelocity(body);
         double flux     = vessel.ComputeStagnationHeatFlux(density, surfVel);
 
         double fluxIntensity = System.Math.Clamp(

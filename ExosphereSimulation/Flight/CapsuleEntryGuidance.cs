@@ -24,7 +24,7 @@ public static class CapsuleEntryGuidance
     {
         ArgumentNullException.ThrowIfNull(capsule);
         ArgumentNullException.ThrowIfNull(body);
-        var air = capsule.GetSurfaceVelocity(body);
+        var air = capsule.GetAirRelativeVelocity(body);
         if (air.MagnitudeSquared < 1.0) return Vector3d.Zero;
         var flow = air.Normalized;
         double authority = capsule.GetPitchYawAngularAuthority(body);

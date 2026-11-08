@@ -211,6 +211,23 @@ public partial class CelestialBody
     }
 
     /// <summary>
+    /// Velocity of the atmosphere at <paramref name="worldPos"/> relative to the body centre,
+    /// in inertial axes. The single point every aerodynamic, heating and air-data consumer
+    /// reads (environment plan E0.1): today the air co-rotates rigidly with the body
+    /// (ω×r, identical to <see cref="GetSurfaceVelocity(Vector3d)"/>); wind enters here (E4).
+    /// Ground contact, landing, navigation over the surface and water keep
+    /// <see cref="GetSurfaceVelocity(Vector3d)"/>, because wind does not move the ground.
+    /// </summary>
+    public Vector3d GetAirVelocity(Vector3d worldPos) => GetSurfaceVelocity(worldPos);
+
+    /// <summary>
+    /// Velocity relative to the local air of a point at <paramref name="worldPos"/> moving at
+    /// inertial <paramref name="inertialVelocity"/>: the airspeed vector aerodynamics sees.
+    /// </summary>
+    public Vector3d GetAirRelativeVelocity(Vector3d worldPos, Vector3d inertialVelocity) =>
+        inertialVelocity - Velocity - GetAirVelocity(worldPos);
+
+    /// <summary>
     /// Local east (the direction the surface is carried by rotation) at
     /// <paramref name="worldPos"/>: east = ω̂ × r̂. Degenerate at the poles, where the
     /// radial and the spin axis are parallel; returns zero there.

@@ -879,7 +879,7 @@ public partial class Universe
         return vessel.GetAltitude(body) > (body.Atmosphere?.MaxAltitude * 1.05 ?? 1000) + clearance
             && vessel.GetDynamicPressure(body) < 0.5
             && vessel.ComputeStagnationHeatFlux(body.GetAtmosphericDensity(vessel.Position),
-                vessel.GetSurfaceVelocity(body)) < 500;
+                vessel.GetAirRelativeVelocity(body)) < 500;
     }
 
     private void MaterializePassivePayload(Vessel vessel, double start, double? bodyEpochToRestore = null)
@@ -1429,7 +1429,7 @@ public partial class Universe
         if (thermoTop > body.Atmosphere.MaxAltitude && altitude < thermoTop)
             return true;
 
-        double speed = vessel.GetSurfaceVelocity(body).Magnitude;
+        double speed = vessel.GetAirRelativeVelocity(body).Magnitude;
         double q = 0.5 * density * speed * speed;
         double heatFlux = Physics.ThermalModel.ComputeHeatFlux(
             density, speed, System.Math.Max(0.1, vessel.MaximumDiameter * 0.5));
@@ -1472,7 +1472,7 @@ public partial class Universe
         if (altitude <= boundary || altitude >= atmosphere.ThermosphereTopAltitude)
             return false;
         double density = body.GetAtmosphericDensity(vessel.Position);
-        var surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        var surfaceVelocity = vessel.GetAirRelativeVelocity(body);
         double speed = surfaceVelocity.Magnitude;
         if (0.5 * density * speed * speed >= 0.5
             || vessel.ComputeStagnationHeatFlux(density, surfaceVelocity) >= ResidualCoastMaxHeatFluxWPerM2)
@@ -2036,7 +2036,7 @@ public partial class Universe
         double density = refBody.GetAtmosphericDensity(position);
         if (density > 0.0 && !vessel.IsGroundHeld)
         {
-            var surfVel = velocity-refBody.Velocity-refBody.GetSurfaceVelocity(position);
+            var surfVel = refBody.GetAirRelativeVelocity(position, velocity);
             double airspeed = surfVel.Magnitude;
             double heatFlux = vessel.ComputeStagnationHeatFlux(density, surfVel);
             var flowDirLocal = airspeed > 1e-6

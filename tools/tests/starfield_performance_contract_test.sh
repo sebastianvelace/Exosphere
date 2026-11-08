@@ -31,7 +31,7 @@ rg -q --fixed-strings '_streaks.GlobalTransform = _camera.GlobalTransform;' "$ST
   || fail "air-streak camera transform was removed"
 rg -q --fixed-strings 'body.GetAtmosphericDensity(vessel.Position)' "$STARFIELD" \
   || fail "starfield density cue was removed"
-rg -q --fixed-strings 'vessel.GetSurfaceVelocity(body).Magnitude' "$STARFIELD" \
+rg -q --fixed-strings 'vessel.GetAirRelativeVelocity(body).Magnitude' "$STARFIELD" \
   || fail "starfield speed cue was removed"
 rg -q --fixed-strings 'if (_streaks != null && _streaks.Emitting != streaksOn)' "$STARFIELD" \
   || fail "starfield streak visibility dirty gate missing"

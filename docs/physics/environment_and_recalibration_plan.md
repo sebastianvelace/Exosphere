@@ -101,6 +101,18 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
 - **E0.1 Aire relativo en un punto.** `CelestialBody.GetAirVelocity(position, time)` (hoy:
   rotación) y `Vessel.GetAirRelativeVelocity(body)`; reemplazar los ≥ 8 cálculos.
   *Salida:* suite completa idéntica; `ci_quick` + CI completa verdes.
+  **Hecho (2026-11-08).** `CelestialBody.GetAirVelocity(position)` y
+  `GetAirRelativeVelocity(position, velocity)`, `Vessel.GetAirRelativeVelocity(body)`. Usan el
+  aire: arrastre, sustentación y paracaídas (`Vessel`), aerodinámica distribuida, flaps y momento
+  aerodinámico del 6-DoF (`RigidBodyForceEvaluator`), presión dinámica, calentamiento y cargas
+  térmicas, límites de warp y de costa residual (`Universe`), guiado de giro gravitatorio,
+  trimado de Flight 14, guiado de cápsula, estado de interfaz de entrada, diagnósticos de entrada,
+  y en la capa de juego plasma, ruptura, sonido, vibración, luces, estrellas, Max-Q y térmica del
+  EDL. Siguen con la superficie: contacto, agua, aterrizaje, sujeción en el pad, lecturas de
+  navegación y HUD. Huella de Flight 14 en 6000 pasos idéntica antes y después
+  (`AirRelativeVelocityTests`). **Revisar al llegar el viento (E4):** los controladores de
+  descenso/retorno de Flight 14, el EDL y `SasHold` usan una sola velocidad de superficie para la
+  dirección del flujo y para la tasa vertical; con viento hay que separarlas.
 - **E0.2 Canal `envdata`** con manifiesto, fetch, build determinista, provenance, fixtures y el
   contrato de CI sin red. *Salida:* reconstrucción reproduce el SHA-256; contrato verde.
 - **E0.3 `EnvironmentContext`** con los proveedores actuales envueltos (Kepler, eje fijo, J2,

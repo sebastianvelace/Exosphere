@@ -23,7 +23,7 @@ public static class GravityTurnGuidance
             up, downrange, pitchProgram(elapsedSeconds) * MathUtils.DEG_TO_RAD);
         if (elapsedSeconds < pitchOverEndSeconds) return programmed;
 
-        var airVelocity = vessel.GetSurfaceVelocity(body);
+        var airVelocity = vessel.GetAirRelativeVelocity(body);
         return airVelocity.MagnitudeSquared > 100.0 ? airVelocity.Normalized : programmed;
     }
 }

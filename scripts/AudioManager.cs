@@ -278,7 +278,7 @@ public partial class AudioManager : Node
 
             double alt      = body.GetAltitude(vessel.Position);
             double rho      = body.GetAtmosphericDensity(vessel.Position);
-            var    surfVel  = vessel.GetSurfaceVelocity(body);
+            var    surfVel  = vessel.GetAirRelativeVelocity(body);
             double airspeed = surfVel.Magnitude;
             double q        = vessel.GetDynamicPressure(body);
 

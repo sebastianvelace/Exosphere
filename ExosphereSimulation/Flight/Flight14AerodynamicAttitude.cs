@@ -20,7 +20,7 @@ public static class Flight14AerodynamicAttitude
         var feedback = ship.FlightControlInvertsAerodynamics && authority3.X > 1e-9
                 && authority3.Y > 1e-9 && authority3.Z > 1e-9
             ? ScheduledFeedback(ship.Orientation, reference, ship.AngularVelocity, authority3,
-                ship.GetSurfaceVelocity(body).Magnitude)
+                ship.GetAirRelativeVelocity(body).Magnitude)
             : AttitudeGuidance.ComputeCommand(ship.Orientation, reference, ship.AngularVelocity, 2, 25);
         double authority = ControlAuthority.Evaluate(ship);
         double q = ship.GetDynamicPressure(body);
@@ -29,7 +29,7 @@ public static class Flight14AerodynamicAttitude
         if (body.Atmosphere == null || q <= trimOnsetPressurePa
             || authority <= 0 || !ship.HasFunctionalBodyFlaps()
             || ship.FlightControlInvertsAerodynamics) return feedback;
-        var velocity = ship.GetSurfaceVelocity(body);
+        var velocity = ship.GetAirRelativeVelocity(body);
         double altitude = ship.GetAltitude(body);
         double density = body.Atmosphere.GetDensity(altitude);
         double? centerOffset = ship.Parts.AerodynamicCenterOffsetYM;

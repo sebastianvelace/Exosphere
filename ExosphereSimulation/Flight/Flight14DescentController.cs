@@ -175,7 +175,7 @@ public sealed class Flight14DescentController : IPhysicsStepController
         double altitude = body.GetAltitude(ship.CenterOfMass);
         double density = atmosphere.GetDensity(altitude);
         double temperature = System.Math.Max(1.0, atmosphere.GetTemperature(altitude));
-        var air = ship.GetSurfaceVelocity(body);
+        var air = ship.GetAirRelativeVelocity(body);
         var com = ship.CenterOfMassOffsetLocal;
         var force = DistributedAerodynamics.Evaluate(ship.Parts.GetAeroElements(), ship.Orientation,
             Vector3d.Zero, com, air, density, temperature, ship.MaximumDiameter,

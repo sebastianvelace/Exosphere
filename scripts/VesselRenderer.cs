@@ -1482,7 +1482,7 @@ public partial class VesselRenderer : Node3D
             Vector3d surfaceVelocity = TargetVessel.GetSurfaceVelocity(body);
             radialSpeed = surfaceVelocity.Dot(up);
             heatFlux = TargetVessel.ComputeStagnationHeatFlux(
-                body.GetAtmosphericDensity(TargetVessel.Position), surfaceVelocity);
+                body.GetAtmosphericDensity(TargetVessel.Position), TargetVessel.GetAirRelativeVelocity(body));
         }
         double hottestSkin = 290.0;
         double hottestThermalRatio = 0.0;
@@ -1667,7 +1667,7 @@ public partial class VesselRenderer : Node3D
         if (body?.Atmosphere != null)
         {
             double q = TargetVessel.GetDynamicPressure(body);
-            var surfVel = TargetVessel.GetSurfaceVelocity(body);
+            var surfVel = TargetVessel.GetAirRelativeVelocity(body);
             if (surfVel.Magnitude > 1.0)
             {
                 var localFlow = TargetVessel.Orientation.Inverse().Rotate(surfVel.Normalized);
@@ -1748,7 +1748,7 @@ public partial class VesselRenderer : Node3D
         float align = 1f;
         if (body != null)
         {
-            var surfVel = TargetVessel.GetSurfaceVelocity(body);
+            var surfVel = TargetVessel.GetAirRelativeVelocity(body);
             if (surfVel.Magnitude > 1e-6)
             {
                 Vector3d flowLocal = TargetVessel.Orientation.Inverse().Rotate(surfVel);

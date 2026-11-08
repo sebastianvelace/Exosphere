@@ -328,7 +328,7 @@ public partial class EDLController : Control
         _blackout = comms?.PlasmaBlackout ?? false;
         _blackoutSeconds = comms?.PlasmaBlackoutSeconds ?? 0.0;
 
-        Vector3d surfaceVelocity = vessel.GetSurfaceVelocity(body);
+        Vector3d surfaceVelocity = vessel.GetAirRelativeVelocity(body);
         double density = body.Atmosphere!.GetDensity(_alt);
         RefreshThermalState(vessel, body, density, surfaceVelocity.Magnitude, surfaceVelocity);
     }

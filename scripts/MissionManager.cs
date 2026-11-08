@@ -373,7 +373,7 @@ public partial class MissionManager : Node
                 if (!_maxQTriggered && alt is > 8_000 and < 30_000 && refBody.Atmosphere != null)
                 {
                     double density = refBody.Atmosphere.GetDensity(alt);
-                    var    surfVel = vessel.GetSurfaceVelocity(refBody);
+                    var    surfVel = vessel.GetAirRelativeVelocity(refBody);
                     double dynQ   = 0.5 * density * surfVel.Magnitude * surfVel.Magnitude;
                     if (dynQ > 30_000)
                     {

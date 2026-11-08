@@ -142,7 +142,7 @@ public partial class StarfieldController : Node3D
                 if (_streaks != null && body.Atmosphere != null)
                 {
                     double density = body.GetAtmosphericDensity(vessel.Position);
-                    double speed   = vessel.GetSurfaceVelocity(body).Magnitude;
+                    double speed   = vessel.GetAirRelativeVelocity(body).Magnitude;
                     streaksOn = density > StreakMinDensity && speed > StreakMinSpeed;
                 }
             }

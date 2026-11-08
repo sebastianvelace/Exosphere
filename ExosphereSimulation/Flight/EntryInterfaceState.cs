@@ -41,7 +41,7 @@ public static class EntryInterfaceState
             track * System.Math.Cos(inertialFlightPathRad)
             + up * System.Math.Sin(inertialFlightPathRad)).Normalized;
         var inertial = inertialDirection * inertialSpeedMps;
-        var air = inertial - body.GetSurfaceVelocity(position);
+        var air = inertial - body.GetAirVelocity(position);
         double airSpeed = air.Magnitude;
         double airGamma = airSpeed > 1.0
             ? System.Math.Asin(System.Math.Clamp(air.Normalized.Dot(up), -1.0, 1.0))

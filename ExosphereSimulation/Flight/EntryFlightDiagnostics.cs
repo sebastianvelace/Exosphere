@@ -44,7 +44,7 @@ public static class EntryFlightDiagnostics
 
         Vector3d relativePosition = vessel.Position - body.Position;
         Vector3d inertialVelocity = vessel.Velocity - body.Velocity;
-        Vector3d atmosphereVelocity = vessel.GetSurfaceVelocity(body);
+        Vector3d atmosphereVelocity = vessel.GetAirRelativeVelocity(body);
         Vector3d localUp = body.GetGeodeticUp(vessel.Position);
         Vector3d longitudinalAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
 

@@ -245,7 +245,7 @@ public sealed class CameraShake
                 double density = body.GetAtmosphericDensity(vessel.Position);
                 if (density > 0.0)
                 {
-                    double v = vessel.GetSurfaceVelocity(body).Magnitude;
+                    double v = vessel.GetAirRelativeVelocity(body).Magnitude;
                     double q = 0.5 * density * v * v;
                     qNorm = Mathf.Clamp((float)(q / MaxQReference), 0f, 1.4f);
                 }

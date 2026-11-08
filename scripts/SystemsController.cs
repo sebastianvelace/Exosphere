@@ -497,7 +497,7 @@ public partial class SystemsController : Node
 
         bool inAtmo    = refBody.Atmosphere != null && alt < refBody.Atmosphere.MaxAltitude;
         double atmoTemp = inAtmo ? refBody.Atmosphere!.GetTemperature(alt) : 3.0;
-        var surfaceVelocity = vessel.GetSurfaceVelocity(refBody);
+        var surfaceVelocity = vessel.GetAirRelativeVelocity(refBody);
         double airspeed = surfaceVelocity.Magnitude;
         double airDensity = refBody.GetAtmosphericDensity(vessel.Position);
         double heatFlux = vessel.ComputeStagnationHeatFlux(airDensity, surfaceVelocity);

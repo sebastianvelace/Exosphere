@@ -92,7 +92,7 @@ public partial class ReentryBreakupController : Node3D
         // The plasma controller follows the floating-origin vessel frame. Convert airflow
         // to that same local frame so breakup fragments do not rotate away from the hull.
         var    body    = vessel != null ? SimulationBridge.Instance!.Universe.GetDominantBody(vessel.Position) : null;
-        var    surfVel = body != null ? vessel!.GetSurfaceVelocity(body) : Exosphere.Simulation.Math.Vector3d.Zero;
+        var    surfVel = body != null ? vessel!.GetAirRelativeVelocity(body) : Exosphere.Simulation.Math.Vector3d.Zero;
         Vector3 flow   = ToGodot(vessel!.Orientation.Inverse().Rotate(surfVel));
         flow = flow.LengthSquared() > 1e-6f ? flow.Normalized() : Vector3.Up;
 

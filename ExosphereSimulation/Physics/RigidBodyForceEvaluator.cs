@@ -85,7 +85,7 @@ public static class RigidBodyForceEvaluator
         {
             var body = context.ReferenceBody!;
             double altitude = body.GetAltitude(state.Position);
-            var air = state.Velocity - body.Velocity - body.GetSurfaceVelocity(state.Position);
+            var air = body.GetAirRelativeVelocity(state.Position, state.Velocity);
             var wrench = DistributedAerodynamics.Evaluate(
                 vessel.Parts.GetAeroElements(),
                 state.Orientation,
@@ -165,7 +165,7 @@ public static class RigidBodyForceEvaluator
         if (vessel.FlapActuators.IsZero || !vessel.HasFunctionalBodyFlaps()) return Vector3d.Zero;
         double altitude = body.GetAltitude(state.Position);
         double density = body.Atmosphere!.GetDensity(altitude);
-        var air = state.Velocity - body.Velocity - body.GetSurfaceVelocity(state.Position);
+        var air = body.GetAirRelativeVelocity(state.Position, state.Velocity);
         var angularAccelerationWorld = AerodynamicsModel.ComputeFlapControlAngularAcceleration(
             density, air, state.Orientation, vessel.FlapActuators,
             vessel.VehicleLength, vessel.MaximumDiameter, vessel.Parts.TransverseMomentOfInertia);
@@ -182,9 +182,7 @@ public static class RigidBodyForceEvaluator
 
         double altitude = body.GetAltitude(state.Position);
         double density = body.Atmosphere.GetDensity(altitude);
-        var surfaceVelocity = state.Velocity
-            - body.Velocity
-            - body.GetSurfaceVelocity(state.Position);
+        var surfaceVelocity = body.GetAirRelativeVelocity(state.Position, state.Velocity);
         double speed = surfaceVelocity.Magnitude;
         if (density <= 0.0 || speed <= 1.0) return Vector3d.Zero;
 
