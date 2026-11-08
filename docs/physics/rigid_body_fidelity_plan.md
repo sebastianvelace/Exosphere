@@ -92,7 +92,7 @@ every slender stack (`Universe.DistributedAerodynamicsEnabled`, on by default):
   309 s) remains an F6 item; the flight-control inversion is model-based (modern vehicles);
   historical gain schedules belong to F3.
 
-## F2 findings (2026-10-31, in progress)
+## F2 findings (2026-10-31; closed)
 
 `BodyFlapAerodynamics` models Starship's four body flaps as hinged plates from part data
 (`body_flaps`: hinge station, side, length, span, travel, neutral, servo rate; planforms are the
@@ -302,7 +302,7 @@ real-framebuffer graphics-settings capture/reload check. F3 is closed with the a
 RCS/SAS gates, the Gemini 8 historical recovery gate, exact checkpoint continuation and
 the original Flight 14 descent/contact limits. F4 is reverified and closed (2026-11-06); F5 has started; F6 remains planned.
 
-## F4 findings (2026-11-04, in progress)
+## F4 findings (2026-11-04; history — closed 2026-11-06, see "F4 production closure")
 
 The initial analytic unit is implemented in `GravityGradient`, `MassOutflow`,
 `VariableMassRotationalDynamics` and a stage-dependent mass-sampling overload of
@@ -419,13 +419,19 @@ catalog RCS and the full loaded moving-world return pass (see F3 findings).*
 **F4 — Variable-mass and environment torques (A6, A7).** Jet damping from mass flow and nozzle
 exit position; gravity gradient. Validation: analytic spin/precession cases, Saturn V jet-damping
 magnitude from Apollo dynamics reports.
+*Closed 2026-11-06: shared mass geometry, production transport and the AS-506 S-IC
+jet-damping historical gate (see "F4 production closure and revalidation").*
 
 **F5 — Propellant slosh (A8).** First lateral slosh mode per tank (mass, frequency, damping from
 fill height and tank radius). Validation: analytic pendulum frequency, published Saturn S-IC
 slosh frequencies.
+*Closed 2026-11-07: funded production modes, conservative coasts and the AS-501 S-IC
+frequency gate (see [propellant_slosh.md](propellant_slosh.md)).*
 
 **F6 — Historical recalibration.** Re-run every historical profile (Mercury, Gemini, Apollo 8/11,
 Starship Flight 7/14, Falcon, New Glenn) against its source data after F0–F5; record residuals.
+*Open: profile matrix, source audit and per-vehicle residuals in
+[historical_recalibration.md](historical_recalibration.md).*
 
 Each phase lands as reviewable commits with xUnit tests, an entry in
 `coupled_6dof_migration.md` or `PHYSICS_MODEL.md`, and a full `tools/ci_check.sh` run.
@@ -478,3 +484,22 @@ orbital capsule-plus-retro mass. The prior effective Atlas sustainer remains an 
 calibration gap, not a hardware rating. See [historical_recalibration.md](historical_recalibration.md)
 for the primary-source evidence, table-specific residuals and validation limits.
 F6 stays open until that reconstruction and the profile residual work are complete.
+
+## F6 progress (2026-11-08)
+
+Landed on `codex/f6-historical-recalibration`, each with its provenance and without relaxing
+any acceptance limit: Redstone alcohol propellant identity (MR-3), exterior aerodynamic
+bounds for overlapping assemblies, S-IC cutoff on an exhausted constituent feed, the AS-506
+spacecraft structural interfaces and actuator planes, the docked-stack SPS ignition window
+(`PeriapsisCaptureBurn` on `TranslationalMassKg`) and the measured SP-238 table 8-X SPS
+tank-and-line load. Remaining F6 work, in order:
+
+1. Native SM dry mass, centre of mass and inertia; SPS line geometry and unexpellable residuals.
+2. The SPS nozzle exit plane (the 1966 source describes another configuration).
+3. Apollo 11's own lunar targets (the LOI selector still uses the Apollo 8 proxy).
+4. Native Atlas sustainer and propellant-utilization reconstruction for MA-6
+   ([atlas_ma6_reconstruction.md](atlas_ma6_reconstruction.md)).
+5. S-IC fins, grid fins and a Newtonian blunt-capsule model.
+
+Evidence and residuals: [historical_recalibration.md](historical_recalibration.md).
+

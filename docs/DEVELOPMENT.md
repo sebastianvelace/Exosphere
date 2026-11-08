@@ -141,7 +141,7 @@ Without that exclude, Godot compiles the simulation a second time and can pull x
 
 The simulation is a double-precision, SI-unit model with seconds from J2000 as its clock. It combines data-driven body and part definitions, point-mass gravity plus optional `J2`, rotating-body atmospheres, pressure-corrected propulsion, orientation-dependent aero, thermal protection, multi-point contact, and patched-conic Kepler rail propagation.
 
-The realism front is a coupled rigid-body 6-DoF solver. It integrates centre of mass, attitude, body-frame angular velocity, and the full inertia tensor through four pure RK4 force stages. It stays opt-in. Coast, simplified powered ascent, a short open-loop Flight 7 hardware fixture, controlled pitch and elevation references, and a deterministic engine-out detection and recovery gate with 100 ms sensor latency pass. Production Starship ascent and entry parity, and full SAS, flap, and RCS equivalence, remain open. See the [physics model](physics/PHYSICS_MODEL.md) and the [6-DoF migration record](physics/coupled_6dof_migration.md).
+Off-rails flight runs on a coupled rigid-body 6-DoF RK4 by default (`Universe.IntegrateVesselFullPhysics`). It integrates the centre of mass, attitude, body-frame angular velocity and the full inertia tensor through four candidate-state force stages, with contact, distributed per-part aerodynamics on slender stacks, physical Starship body flaps, actuator-only attitude control from declared RCS thrusters, variable-mass transport with tidal moments, and funded first-mode propellant slosh. The legacy split tick remains only as a comparison baseline. Fidelity phases F0–F5 are closed and F6 (historical recalibration) is open; the phase table and its analytic/historical gates are in [fidelity_gates.md](physics/fidelity_gates.md), the plan in [rigid_body_fidelity_plan.md](physics/rigid_body_fidelity_plan.md). See the [physics model](physics/PHYSICS_MODEL.md) and the [6-DoF migration record](physics/coupled_6dof_migration.md).
 
 ## Data
 
@@ -175,7 +175,7 @@ The default Starship stack uses `decoupler_heavy`, because that stack uses size-
 
 ### Simulation
 
-- Eight body files in `data/bodies/` and 104 part files in `data/parts/`.
+- Eight body files in `data/bodies/` and 106 part files in `data/parts/`. Fidelity values carry source records in `data/provenance/*.json`; [estimates_register.md](physics/estimates_register.md) lists every value that is not published data.
 - Double-precision types: `Vector3d`, `Quaterniond`, `Universe`, `Vessel`, `CelestialBody`, `OrbitalElements`.
 - RK4 integration, Kepler on-rails propagation, sphere-of-influence selection, patched-conic transitions that do not depend on warp resolution, radial and suborbital guards, and hard-impact destruction.
 - Pressure-corrected engines, mass flow, specific impulse, staging, and stage delta-v. The assembly building exposes one engine part per stage. The sim expands `engine_count` into per-instance lifecycle, gimbal, feed, fuel depletion, and torque.
@@ -183,7 +183,7 @@ The default Starship stack uses `decoupler_heavy`, because that stack uses size-
 - Time warp levels: `1, 2, 3, 5, 10, 50, 100, 1000, 10000, 100000`.
 - Hohmann planetary transfers and an ephemeris-targeted Earth–Moon Lambert and B-plane planner, with maximum-warp sphere-of-influence regressions.
 - Patched-conic transitions and encounter prediction for on-rails interplanetary coast. Inside on-rails propagation, body state at the epoch or crossing uses `BodyStateAt(body, t)`, not the end-of-tick global position.
-- Automated tests for gravity, RK4, Kepler, radial and suborbital paths, rails impact, engines, heat shield, aero, sphere of influence, and the assembly catalog.
+- Automated tests for gravity, RK4, Kepler, radial and suborbital paths, rails impact, engines, heat shield, aero, sphere of influence, the assembly catalog, the 6-DoF parity gates, and the analytic and historical fidelity gates.
 
 ## Limitations
 
@@ -192,10 +192,10 @@ The default Starship stack uses `decoupler_heavy`, because that stack uses size-
 - Reentry has windward plasma, tile charring, a survivable belly-flop profile, thermal break-up effects, per-piece structural breakup, and control-loss authority. Powered descent coasts below the target descent profile and rejects sub-m/s lateral noise before lighting minimum-throttle engines. Richer shock and plasma rendering against flight-test references is still pending.
 - The orbital-return path seeds a rotating Starbase intercept plane and predicts the moving catch corridor with surface-relative velocity. The deterministic end-to-end run reaches atmospheric entry and reduces the footprint error. A complete physical tower catch is still pending. The catch gates stay strict.
 - The hull is modelled at the real 9 m diameter, with procedural steel, weld seams, windward tiles, flaps, raceways, Raptor clusters, and a geographically aligned terrain stack around Starbase. Remaining visual work is fine reference matching, target-GPU tuning, and broader collision and detail coverage. See `docs/audits/LOCAL_TERRAIN_REALISM_2026-09-14.md`.
-- Interplanetary planning has tested Hohmann transfers, a geocentric Lambert and B-plane Moon route, patched-conic transitions, encounter prediction, trans-lunar injection and lunar-orbit insertion readouts, and future-window burn arming. Executable lunar-orbit insertion sequencing, dated lunar ephemerides, and timeline maneuver nodes are still open.
-- The coupled 6-DoF path stays disabled by default until powered Starship ascent, controlled entry, and real-framebuffer parity gates close.
-- CI builds the sim and the Godot layer, downloads Godot 4.6.3 .NET, and runs headless smoke checks. Full PNG capture in CI is still a follow-up.
-- There is no export preset and no packaged build. Flight data is loaded from a real directory path, so a PCK export cannot see `data/` through `System.IO`. A first playable folder has to keep that directory beside the executable, or the loader has to read JSON through Godot file access.
+- Interplanetary planning has tested Hohmann transfers, a geocentric Lambert and B-plane Moon route, patched-conic transitions and encounter prediction. Apollo 8/11 fly finite TLI, mid-course corrections, LOI, circularization and TEI burns. Dated lunar ephemerides and timeline maneuver nodes are still open, and Apollo 11's lunar targets still use the Apollo 8 proxy.
+- Historical recalibration (F6) is open: native SM dry mass properties, the SPS nozzle exit, the native Atlas sustainer and propellant-utilization reconstruction, S-IC fins, grid fins and a Newtonian blunt-capsule model remain. See [historical_recalibration.md](physics/historical_recalibration.md).
+- CI builds the sim and the Godot layer, downloads Godot 4.6.3 .NET, runs the contract checks, the full test suite and headless smoke checks, and uploads a pad visual-smoke PNG when one is produced.
+- `tools/export_game.sh` packages a build from `export_presets.cfg`. Simulation loaders read `data/` through `System.IO`, so the export copies the `data/` tree beside the executable and `GameDataPath` prefers it outside the editor.
 - `data/licenses/assets_manifest.json` sets `commercialReleaseBlockedUntilReviewed`. Some textures have an unknown license, and the NASA and SpaceX names used for historical identification are marked `legal_review_required`. A public binary waits on that review. The MIT license covers the source code.
 
 ## Working rules

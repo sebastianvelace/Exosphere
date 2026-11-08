@@ -30,8 +30,9 @@ The update script only runs `dotnet restore`; the SDK/Godot/Xvfb are pre-install
 ### Build / test / run
 
 Standard commands are in `README.md` and `CLAUDE.md` (build both csproj, run xUnit, or
-`bash tools/ci_check.sh`). The latest verified baseline is 897 xUnit tests passing, including
-the coast and simplified powered-ascent physics parity gates. Expected standard: 0 warnings, 0 errors.
+`bash tools/ci_check.sh`). The full suite (1600+ xUnit tests, including the 6-DoF parity and
+fidelity gates) takes 35–50 minutes; the latest verified count is recorded in
+`docs/physics/historical_recalibration.md`. Expected standard: 0 warnings, 0 errors.
 
 - Headless smoke (boot a scene + quit): see `README.md` "Godot smoke test". Use
   `"$GODOT_BIN"` in place of the hardcoded path.
@@ -74,4 +75,6 @@ the coast and simplified powered-ascent physics parity gates. Expected standard:
 
 - Current equations, frames, approximations and activation gates: `docs/physics/PHYSICS_MODEL.md`.
 - Coupled 6-DoF migration and parity evidence: `docs/physics/coupled_6dof_migration.md`.
+- Fidelity phases F0–F6 (status and gates, source of truth): `docs/physics/fidelity_gates.md`;
+  plan: `docs/physics/rigid_body_fidelity_plan.md`; open F6 work: `docs/physics/historical_recalibration.md`.
 - Historical audits are evidence only; use `ROADMAP.md` for active priorities.

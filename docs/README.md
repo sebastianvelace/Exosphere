@@ -13,6 +13,11 @@ as provenance, but they are not the current product plan.
 | Current priorities and delivery order | [`../ROADMAP.md`](../ROADMAP.md) |
 | Physics equations, frames, assumptions and limits | [`physics/PHYSICS_MODEL.md`](physics/PHYSICS_MODEL.md) |
 | Coupled 6-DoF migration and parity gates | [`physics/coupled_6dof_migration.md`](physics/coupled_6dof_migration.md) |
+| Fidelity phases F0–F6: status and analytic/historical gates (source of truth) | [`physics/fidelity_gates.md`](physics/fidelity_gates.md) |
+| Fidelity plan and per-phase findings | [`physics/rigid_body_fidelity_plan.md`](physics/rigid_body_fidelity_plan.md) |
+| Variable-mass transport (F4) and propellant slosh (F5) | [`physics/variable_mass_torques.md`](physics/variable_mass_torques.md), [`physics/propellant_slosh.md`](physics/propellant_slosh.md) |
+| Historical recalibration (F6, open) and source worksheets | [`physics/historical_recalibration.md`](physics/historical_recalibration.md), [`physics/as506_spacecraft_reconstruction.md`](physics/as506_spacecraft_reconstruction.md), [`physics/atlas_ma6_reconstruction.md`](physics/atlas_ma6_reconstruction.md) |
+| Values that are not published data (generated) | [`physics/estimates_register.md`](physics/estimates_register.md) |
 | Starship/Super Heavy data baseline | [`starship_physics_baseline.md`](starship_physics_baseline.md) |
 | Visual and gameplay capture workflow | [`../PLAN_PLAYTEST.md`](../PLAN_PLAYTEST.md), [`../PLAN_VISUAL_REALISM.md`](../PLAN_VISUAL_REALISM.md) |
 | Flight 14 visual references and reconstruction limits | [`research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md`](research/STARSHIP_FLIGHT14_VIDEO_FEASIBILITY_2026-09-30.md) |

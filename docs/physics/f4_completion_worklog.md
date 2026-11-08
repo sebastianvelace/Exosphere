@@ -1,7 +1,6 @@
-> Reverification found Flight 14 altitude/descent failures in the incoming F4 baseline.
-> The full run was interrupted after those failures for targeted debugging. Flow-stop,
-> off-axis opening and surface-velocity regressions reproduced three defects. Directed
-> corrections pass; full mission revalidation is in progress. F4 is open until that validation passes.
+> Historical worklog. F4 closed on 2026-11-06 after the Flight 14 regressions recorded below
+> were fixed (complete CI 1504/1504); current status is in `fidelity_gates.md` and the
+> maintained description in `variable_mass_torques.md` and `PHYSICS_MODEL.md`.
 
 # F4 completion record
 

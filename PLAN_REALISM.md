@@ -3,7 +3,9 @@
 > **Reconciliado el 2026-09-22.** Este archivo conserva el backlog histórico de realismo y sus
 > evidencias de telemetría. Para la descripción vigente de ecuaciones, marcos y límites leer
 > [`docs/physics/PHYSICS_MODEL.md`](docs/physics/PHYSICS_MODEL.md); para el frente activo de
-> integración rígida leer [`docs/physics/coupled_6dof_migration.md`](docs/physics/coupled_6dof_migration.md).
+> integración rígida leer [`docs/physics/rigid_body_fidelity_plan.md`](docs/physics/rigid_body_fidelity_plan.md)
+> y el estado de fases en [`docs/physics/fidelity_gates.md`](docs/physics/fidelity_gates.md)
+> (F0–F5 cerradas, F6 abierta; revisado 2026-11-08).
 > Los estados fechados de julio/agosto que no tengan una prueba o referencia actual deben
 > tratarse como históricos, no como una afirmación del runtime presente.
 

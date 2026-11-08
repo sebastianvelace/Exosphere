@@ -310,3 +310,24 @@ zero-warning/error builds, contracts and Godot startup/main/VAB/graphics-1280 ch
 cases with matching source/data/assembly identities and no missing selectors. Its Apollo 11
 LOI selector still exercises CSM-103 and is labelled as a shared-controller regression,
 not CSM-107 SPS validation. Native phase mass properties and propulsion remain open.
+
+## Docked SPS capture and measured SPS inventory (2026-11-08)
+
+`3a5657f` sizes the `PeriapsisCaptureBurn` half-burn window on the hard-docked stack
+(`TranslationalMassKg`). With the primary's mass alone the CSM-107/LM-5 ignition came about
+75 s late and left a 55.28 km perilune; the controlled-arrival fixture now reaches
+101.94 x 312.02 km (`Apollo11SpsBurnScenarioTests`, which also asserts the ignition window
+lies between the CSM-only and full-stack half-burns).
+
+`637e6d5` loads the SPS from NASA SP-238 table 8-X (preliftoff tank plus line loads):
+15712 lb fuel = 7126.84 kg and 25091 lb oxidizer = 11381.09 kg (oxidizer/fuel 1.597, the
+engine's nominal 1.6 is retained). The previous 51243 lb SM wet aggregate is kept: the
+4103.65 kg newly identified SPS load comes out of the logical dry remainder, now 3825.50 kg.
+That remainder is a logical allocation (structure, non-SPS systems and consumables), not a
+measured empty mass. Records: `data/provenance/as506_sps_inventory_1971.json`; transcription:
+`reference/as506_sps_postflight_inventory.csv`; regression:
+`Apollo11DataTests.ServicePropulsionInventoryMatchesPostflightTankAndLineLoads`.
+
+Native SM dry centre/inertia, line geometry, unexpellable residuals, the SPS exit plane and
+Apollo 11's own lunar targets remain open. F6 remains open.
+

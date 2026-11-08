@@ -1,6 +1,6 @@
 # Exosphere Roadmap
 
-> **Reconciled:** 2026-10-31 · **Current physics front:** rigid-body fidelity (F1–F6), coupled 6-DoF on by default.
+> **Reconciled:** 2026-11-08 · **Current physics front:** rigid-body fidelity — F0–F5 closed, F6 (historical recalibration) open; coupled 6-DoF on by default.
 > The historical phase waves below remain useful evidence, but the active source of truth is
 > [`docs/README.md`](docs/README.md), [`docs/physics/PHYSICS_MODEL.md`](docs/physics/PHYSICS_MODEL.md)
 > and this roadmap.
@@ -466,6 +466,16 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      Sigue F6 (recalibración histórica), con auditoría de fuentes y residuos en curso, de
      `docs/physics/rigid_body_fidelity_plan.md`; aletas del S-IC, grid fins y
      modelo newtoniano para cápsulas romas.
+   - F6 en curso (2026-11-08, rama `codex/f6-historical-recalibration`): identidad del alcohol
+     del Redstone, contorno aerodinámico exterior con ensamblajes solapados, corte del S-IC por
+     agotamiento de un constituyente, interfaces estructurales y planos de actuadores del
+     spacecraft AS-506, ventana de encendido del SPS con la masa del conjunto acoplado (captura
+     CSM-107/LM-5 101,94 × 312,02 km en lugar de 55,28 km de perilunio) y carga SPS medida de
+     SP-238 tabla 8-X (7126,84 kg de combustible, 11381,09 kg de oxidante; masa húmeda
+     conservada con un remanente lógico). Pendiente: masa seca nativa del SM (CG e inercia),
+     salida de tobera del SPS, objetivos lunares propios de Apollo 11, sustainer y PU nativos
+     del Atlas (MA-6), aletas del S-IC, grid fins y cápsulas romas newtonianas. Detalle en
+     `docs/physics/historical_recalibration.md`.
 
 2. **Controles aún no equivalentes en el camino acoplado**
    - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el

@@ -205,7 +205,10 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   (`CaptureRcsFunding`, `CapturePropellantFunding`, `CaptureResourceFunding`) remain
   observational. See `docs/physics/variable_mass_torques.md`. F5 funded slosh is closed;
   its production coupling and validity limits are in `docs/physics/propellant_slosh.md`.
-  Remaining historical recalibration F6 is tracked in `docs/physics/rigid_body_fidelity_plan.md`.
+  Historical recalibration F6 is open (`docs/physics/historical_recalibration.md`, plan "F6 progress"):
+  the SPS capture window uses the docked stack (`TranslationalMassKg`) and the SM carries the
+  measured SP-238 SPS load; native SM mass properties, the SPS exit, Apollo 11 lunar targets
+  and the Atlas sustainer/PU reconstruction remain.
   Material aero/contact velocity excludes the moving-centroid `R*cdot` term. Known feed
   stops transfer internal momentum before clearing it; off-axis openings compensate datum
   velocity for the angular reaction. Per-store relative-flow shares retain their angular
