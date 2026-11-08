@@ -1,0 +1,6 @@
+event,range_time_s,vehicle_mass_kg,sic_dry_mass_kg,lox_in_tank_kg,lox_below_tank_kg,lox_ullage_gas_kg,rp1_in_tank_kg,rp1_below_tank_kg,rp1_ullage_gas_kg
+ground_ignition,-6.4,2938315,130422,1478371,21108,169,642018,4301,73
+holddown_arm_release,0.3,2899008,130422,1446726,21868,235,631847,5983,76
+center_engine_cutoff,135.2,1110189,130422,194782,21851,2809,93076,5983,226
+outboard_engine_cutoff,161.63,827292,130422,1280,16761,3611,8008,5946,249
+sic_sii_separation,162.3,823625,130422,934,14717,3616,6759,5946,250

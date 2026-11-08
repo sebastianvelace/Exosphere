@@ -23,6 +23,8 @@ Thus `X_LV_m = (X_A_in + 2756.555) * 0.0254`; these are not interchangeable orig
 The SM structural span is 162 in = 4.1148 m. The SPS nozzle occupies space inside the
 SLA rather than adding its entire length between the SLA forward plane and the SM body.
 The tower reaches below the CM forward plane; the LES attachment is not its lowest point.
+The separation-plane-to-tip span is a tower reference bound; the drawing does not establish
+the complete BPC/package envelope or its internal mass distribution from those two stations.
 
 The current catalogue instead places the CM aft plane at X=98.870 m, **3.453503 m too
 high**, with a 6.5 m SM and another 1 m serial SPS part. Its LES tip is 107.770 m, so the
@@ -40,6 +42,9 @@ and their existing internal-CG assumptions. Its observations are:
 | Also infer jettison-package CG below | 49821.434822 | 92.451338 | 95.484800 | 107.784420 |
 
 The 68 mm remaining interface offset comes from the unchanged lower assembly/ring datum.
+Stations in this worksheet subtract the retained F-1 exit-to-structural-origin offset of
+2.930 m from `ComputePartLocalPositions().Y`; graph Y is the skirt datum, not Saturn
+structural station zero. The drawing labels the exit at -115.36 in (about -2.930 m).
 These are mass-property observations, not a flight acceptance run. Do not copy the probe's
 in-memory edits into production without provenance, interface regressions, ascent/docking
 checks and visual verification of the overlapping geometry.
@@ -82,6 +87,107 @@ kg m2 in source X/Y/Z axes. The corresponding radii of gyration are 1.61113 / 1.
 diagonals 34445 / 76781 / 79530 slug ft2. Phase and allocation uncertainty also applies
 to these derived quantities; map source axes and product-of-inertia signs explicitly
 before using them in the simulation's local Y-up frame.
+
+## Interface candidate and acceptance failure
+
+The independently sourced interfaces are preserved in
+[`candidates/as506_structural_interfaces.patch`](candidates/as506_structural_interfaces.patch).
+It contains the four catalogue edits, provenance, interface regression, visual adjustment
+and two additional historical-matrix selectors. It is not applied to production. From a
+clean checkout of this checkpoint, reproduce it with:
+
+```bash
+git apply --check docs/physics/candidates/as506_structural_interfaces.patch
+git apply docs/physics/candidates/as506_structural_interfaces.patch
+dotnet test ExosphereSimulation.Tests/ExosphereSimulation.Tests.csproj --filter FullyQualifiedName~SaturnVAscentScenarioTests.As506ReachesParkingOrbitWithTheTranslunarPropellant
+```
+
+The original candidate passed its static interfaces but failed the unchanged TLI capacity
+gate: 3222.114 m/s against a required capacity greater than 3250 m/s. Insertion occurred at
+T+723.56 s with 68040.459 kg of S-IVB propellant. The candidate matrix was cancelled after
+this confirmed failure; `/tmp/exo-f6-profile-interfaces/console.log` is failure evidence,
+not a completed matrix report. No successful TRX was produced by that cancelled run.
+
+The failure exposed two model assumptions: length was the sum of serial part lengths, and
+distributed aerodynamics counted an overlapping SPS as exposed hardware. Its two diameter
+steps both became boat-tails when ordered by component centres. At launch the summed Munk
+area change was 65.921452 m2 instead of the 80.118467 m2 aft section. The independent
+exterior-envelope correction restores that balance and removes duplicate planform.
+
+An isolated comparison using the corrected envelope retains the old catalogue's result
+exactly: T+719.06 s, 69005.111 kg and 3253.890 m/s capacity. With the interface candidate
+it reaches T+721.56 s, 68469.194 kg and **3236.267 m/s**, still below the original gate.
+Adding actuator-based roll damping alone also fails (3221.270 m/s on the uncorrected
+envelope); it is not adopted as a solution. These comparisons use identical engine ratings,
+loads and historical bounds. Do not retune those values merely to recover this gate.
+
+Three actual Godot pad views were captured in an isolated project using Xvfb at 1000x900:
+`/tmp/exo-f6-as506-geometry-view-{0,1,2}.png`; the first two views were inspected. The
+temporary helper and autoload were removed. This validates the candidate's visible module
+connections only, not ascent, docking or historical mass-property closure.
+
+### Confirmed S-IC cutoff trap
+
+A separate trace of the existing catalogue found LF and header LF exhausted by T+164 s,
+while 32059.2 kg of oxidizer remained. The configured aggregate cutoff is 31995 kg;
+the remaining oxidizer could never cross it. The schedule waited until its clock guard
+at T+176.63 s before separating at about T+177.34 s. The small residual above threshold
+therefore created roughly 13 s without S-IC propulsion. Evidence:
+`/tmp/exo-f6-as506-diagnostic/baseline-fueltrace.log`.
+
+The schedule now cuts off when either SIC feed constituent is exhausted, counting main
+and header stores. It preserves the residual, separation delay, guard and AS-503 clock
+policy. This is a model burnout response, not a claim that Apollo 11's actual LOX-level
+sensor responded to exhausted fuel. The native varying mixture ratio and ignition-to-
+liftoff consumption still require reconstruction; figure 5-3 of the FER (printed p. 5-4,
+PDF p. 74) shows a changing flight mixture ratio, unlike the current constant 2.27.
+
+The original FER table 20-I, printed p. 20-3 (PDF p. 235), was also inspected in
+`/tmp/exo-f6-as506-sic-mass-events.png`. Its ACT columns are transcribed in
+[`reference/as506_sic_liquid_event_history.csv`](reference/as506_sic_liquid_event_history.csv).
+Range time is -6.40 s at ground ignition and +0.30 s at holddown-arm release; reported
+vehicle mass falls from 2938315 to 2899008 kg, a 39307 kg change over this startup window.
+Those epochs cannot share one initial inventory. Summing liquid-in-tank and below-tank
+mass reproduces table 5-2's reconstructed quantities at every listed event, including
+OECO LOX 18041 kg and fuel 13954 kg: exactly the configured 31995 kg residual.
+Ullage gas is a separate mass, not burnable liquid. The CSV preserves source rounding
+and event definitions; it is a reference ledger, not a new production loading.
+
+With the cutoff correction, an isolated old-catalogue ascent inserts at T+688.60 s with
+72040.549 kg and capacity 3351.957 m/s. The interface candidate with corrected exposed
+envelope inserts at T+689.52 s with 71843.331 kg and capacity 3345.628 m/s, passing the
+original TLI-capacity bound without a rating, load or guidance change. This supersedes
+the TLI failure as an adoption blocker; the other candidate segments and source-frame
+constraints below remain unverified. The patch stays held pending those checks.
+
+Next reconcile component CG/inertia and the remaining lower-assembly datum against the
+phase-specific sources above, then rerun ascent/TLI, spacecraft segments, conservation
+and rendering. The source interfaces remain a necessary reconstruction, not an accepted
+standalone catalogue update.
+
+### Additional local-frame constraints
+
+The same Data Book PDF, figure 2-3, printed p. 2-4 (PDF p. 17), was inspected in
+`/tmp/exo-f6-csm-module-frames.png`. This page explicitly carries an amendment dated
+13 April 1971, so keep its configuration date separate from figure 2-2 and the 1969 flight.
+It places the RCS-quad reference 41.10 in aft of the CM structural plane. For a 162 in
+SM span, that reference is `(81 - 41.10) * 0.0254 = 1.01346 m` above the SM centre.
+Retaining the catalogue's local Y=2.0 m after shortening the SM would leave the quad
+reference 0.98654 m forward of this drawing. The drawing does not establish each
+individual nozzle offset or its thrust direction. Reconcile those measured/estimated
+offsets before applying a new local station; do not move only the visible module shell.
+
+Figure 2-3 also identifies the SPS gimbal plane at CSM X_A=833.2 in, 4.8 in
+(0.12192 m) aft of the SM structural interface X_A=838.0 in. That is a gimbal reference,
+not the exhaust exit. The candidate's retained 1 m SPS part/outlet remains an estimate;
+derive its gimbal and exit offset together under the F4 transport convention.
+
+The figure labels the LES motor body diameter as 26 in (0.6604 m), distinct from the
+CM/BPC base width. A 3.91 m diameter over the full LES bounds remains an aerodynamic
+envelope approximation. It also gives a 400.76 in tower span, whereas figure 2-2's two
+stations imply 399.610 in: about 29 mm difference between these nominal drawings.
+Do not combine their dimensions as an exact mission-specific survey. These limitations
+further prevent treating the interface-only patch as a closed F6 reconstruction.
 
 ## Local evidence
 

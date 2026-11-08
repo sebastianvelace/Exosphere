@@ -1,0 +1,258 @@
+diff --git a/ExosphereSimulation.Tests/Apollo11DataTests.cs b/ExosphereSimulation.Tests/Apollo11DataTests.cs
+index a52c9e1..679f8b9 100644
+--- a/ExosphereSimulation.Tests/Apollo11DataTests.cs
++++ b/ExosphereSimulation.Tests/Apollo11DataTests.cs
+@@ -14,6 +14,41 @@ public sealed class Apollo11DataTests
+ {
+     private static readonly DirectoryInfo Root = FindRepoRoot();
+
++    [Fact]
++    public void SpacecraftInterfacesPreserveThePublishedStructuralSpansAndOverlaps()
++    {
++        // SNA-8-D-027(I), rev. 3, figure 2-2: source stations in inches.
++        // Relative spans avoid confusing the CSM X_A and Saturn structural origins.
++        const double inch = 0.0254;
++        var vessel = LoadLaunchVariant().Build(LoadParts()).ToVessel("AS-506 interfaces");
++        var positions = vessel.Parts.ComputePartLocalPositions();
++        Part PartWithRole(string role) => vessel.Parts.Parts.Single(p => p.Definition.HasVehicleRole(role));
++        var cm = PartWithRole("command_module");
++        var sm = PartWithRole("service_module");
++        var les = PartWithRole("launch_escape_system");
++        var sps = PartWithRole("service_propulsion_engine");
++        var sla = PartWithRole("sla_lunar_module");
++        var ring = PartWithRole("csm_separation");
++        var provenance = DataProvenanceRegistry.LoadFromDirectory(Path.Combine(Root.FullName, "data", "provenance"));
++        foreach (var part in new[] { cm, sm, les, sps })
++            provenance.RequireFields(part.Definition.Id, "structuralInterfaces");
++        double cmAft = positions[cm].Y - cm.Definition.LengthM * 0.5;
++        double smAft = positions[sm].Y - sm.Definition.LengthM * 0.5;
++
++        Assert.Equal((3756.555 - 3594.555) * inch, sm.Definition.LengthM, 9);
++        Assert.Equal((3890.055 - 3756.555) * inch, cm.Definition.LengthM, 9);
++        Assert.Equal(cmAft, positions[sm].Y + sm.Definition.LengthM * 0.5, 9);
++        Assert.Equal(smAft, positions[ring].Y + ring.Definition.LengthM * 0.5, 9);
++        Assert.Equal(smAft, positions[sps].Y + sps.Definition.LengthM * 0.5, 9);
++        Assert.True(positions[sps].Y - sps.Definition.LengthM * 0.5 < smAft);
++        Assert.Equal(positions[sla].Y + sla.Definition.LengthM * 0.5,
++            positions[ring].Y - ring.Definition.LengthM * 0.5, 9);
++        Assert.Equal(cmAft + (3841.182 - 3756.555) * inch,
++            positions[les].Y - les.Definition.LengthM * 0.5, 9);
++        Assert.Equal(cmAft + (4240.792 - 3756.555) * inch,
++            positions[les].Y + les.Definition.LengthM * 0.5, 9);
++    }
++
+     [Fact]
+     public void As506StackClosesPublishedIgnitionMassDimensionsAndThrust()
+     {
+@@ -26,7 +61,8 @@ public sealed class Apollo11DataTests
+         Assert.Equal("Apollo-Saturn V", variant.Family);
+         Assert.Equal(new DateOnly(1969, 7, 16), variant.AsOfDate);
+         Assert.Equal(2_941_219.9329436, metrics.WetMass, 5);
+-        Assert.Equal(110.7, graph.VehicleLength, 9);
++        // Published upper-module spans plus the unchanged lower assembly datum.
++        Assert.Equal(110.7144198, graph.VehicleLength, 9);
+         Assert.Equal(10.1, graph.MaximumDiameter, 9);
+         Assert.Equal(34_046_038.80284804, metrics.SeaLevelThrust, 5);
+         Assert.InRange(metrics.SeaLevelTwr, 1.179, 1.181);
+diff --git a/data/parts/apollo11_command_module_csm107.json b/data/parts/apollo11_command_module_csm107.json
+index 3898703..9ce111f 100644
+--- a/data/parts/apollo11_command_module_csm107.json
++++ b/data/parts/apollo11_command_module_csm107.json
+@@ -7,7 +7,7 @@
+   "vehicle_role": "command_module",
+   "mass_dry": 5445.5065325,
+   "fuel_capacity_mono": 111,
+-  "length_m": 3.39,
++  "length_m": 3.3909,
+   "diameter_m": 3.91,
+   "drag_coefficient": 0.92,
+   "axial_drag_coefficient": 0.82,
+@@ -47,7 +47,7 @@
+     {"id": "B_roll_ccw", "position": [-1.6, -0.35, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 413.68, "isp_s": 270}
+   ],
+   "attachment_nodes": [
+-    {"id": "top", "position": [0, 1.695, 0], "size": 3, "type": "stack"},
+-    {"id": "bottom", "position": [0, -1.695, 0], "size": 3, "type": "stack"}
++    {"id": "top", "position": [0, 1.69545, 0], "size": 3, "type": "stack"},
++    {"id": "bottom", "position": [0, -1.69545, 0], "size": 3, "type": "stack"}
+   ]
+ }
+diff --git a/data/parts/apollo11_launch_escape_system.json b/data/parts/apollo11_launch_escape_system.json
+index 8fd1a50..842d597 100644
+--- a/data/parts/apollo11_launch_escape_system.json
++++ b/data/parts/apollo11_launch_escape_system.json
+@@ -6,13 +6,13 @@
+   "vehicle_family": "apollo",
+   "vehicle_role": "launch_escape_system",
+   "mass_dry": 4041.5080167,
+-  "length_m": 5.51,
++  "length_m": 10.150094,
+   "diameter_m": 3.91,
+   "nose_length_m": 5.51,
+   "drag_coefficient": 0.25,
+   "axial_drag_coefficient": 0.25,
+   "heat_tolerance": 1300,
+   "attachment_nodes": [
+-    {"id": "bottom", "position": [0, -2.755, 0], "size": 3, "type": "stack"}
++    {"id": "bottom", "position": [0, -3.8336728, 0], "size": 3, "type": "stack"}
+   ]
+ }
+diff --git a/data/parts/apollo11_service_module_csm107.json b/data/parts/apollo11_service_module_csm107.json
+index c5d3c53..0e28b1d 100644
+--- a/data/parts/apollo11_service_module_csm107.json
++++ b/data/parts/apollo11_service_module_csm107.json
+@@ -6,7 +6,7 @@
+   "vehicle_family": "apollo",
+   "vehicle_role": "service_module",
+   "mass_dry": 7929.15451419,
+-  "length_m": 6.5,
++  "length_m": 4.1148,
+   "diameter_m": 3.91,
+   "drag_coefficient": 0.24,
+   "heat_tolerance": 1050,
+@@ -32,7 +32,7 @@
+     {"id": "quad_D_cw", "position": [0.2713, 2.0, -2.1328], "direction": [-0.99885, 0.0, 0.04798], "thrust_n": 444.82, "isp_s": 290}
+   ],
+   "attachment_nodes": [
+-    {"id": "top", "position": [0, 3.25, 0], "size": 3, "type": "stack"},
+-    {"id": "bottom", "position": [0, -3.25, 0], "size": 3, "type": "stack"}
++    {"id": "top", "position": [0, 2.0574, 0], "size": 3, "type": "stack"},
++    {"id": "bottom", "position": [0, -2.0574, 0], "size": 3, "type": "stack"}
+   ]
+ }
+diff --git a/data/parts/apollo11_sps_engine_csm107.json b/data/parts/apollo11_sps_engine_csm107.json
+index d12d83d..2df863e 100644
+--- a/data/parts/apollo11_sps_engine_csm107.json
++++ b/data/parts/apollo11_sps_engine_csm107.json
+@@ -24,6 +24,6 @@
+   "thrust_position_y_m": -0.5,
+   "attachment_nodes": [
+     {"id": "top", "position": [0, 0.5, 0], "size": 3, "type": "stack"},
+-    {"id": "bottom", "position": [0, -0.5, 0], "size": 3, "type": "stack"}
++    {"id": "bottom", "position": [0, 0.5, 0], "size": 3, "type": "stack"}
+   ]
+ }
+diff --git a/docs/physics/estimates_register.md b/docs/physics/estimates_register.md
+index 407b858..fbc7cab 100644
+--- a/docs/physics/estimates_register.md
++++ b/docs/physics/estimates_register.md
+@@ -9,7 +9,7 @@ provenance record is upgraded to `published` with a cited source.
+ | --- | ---: |
+ | calibrated | 52 |
+ | estimated | 242 |
+-| derived | 114 |
++| derived | 118 |
+ | regulatory_envelope | 5 |
+ | published | 118 |
+
+@@ -332,8 +332,12 @@ provenance record is upgraded to `published` with a cited source.
+ | apollo-sps-csm107-1969 | startupTransient |  | Simulator ramp plus or minus 0.3 seconds | NASA Apollo 11 mission maneuver sequence | apollo11_saturn5_as506_lm5_1969.json |
+ | apollo11-lm5-eagle-1969-07-16 | massClosure |  | Engine and separation dry masses are logical allocations | NASA Apollo 11 Press Kit LM-5 weight breakdown | apollo11_saturn5_as506_lm5_1969.json |
+ | apollo11-saturn5-as506-csm107-lm5-1969-07-16 | stageMassAllocation |  | Logical part boundaries; S-II published components differ from its wet total by 10 lb, assigned to dry miscellaneous mass | NASA Apollo 11 Press Kit Saturn V vehicle and weight summaries | apollo11_saturn5_as506_lm5_1969.json |
++| apollo11_command_module_csm107 | structuralInterfaces | 3.3909 | Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds. | SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf | apollo11_spacecraft_interfaces_1970.json |
++| apollo11_launch_escape_system | structuralInterfaces | 10.1501 | Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds. | SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf | apollo11_spacecraft_interfaces_1970.json |
+ | apollo11_lm5_ascent_stage | rcsThrusters |  | quad station ±0.3 m; Isp ±10 s | Apollo LM RCS: four quads of four 100 lbf R-4D engines on the ascent stage (two vertical, two horizontal along the body axes) | reaction_control_2026.json |
+ | apollo11_service_module_csm107 | rcsThrusters |  | station and radius ±0.3 m; Isp ±10 s | Rocket Propulsion Evolution 9.32 (SM RCS): four independent quads 90° apart, four 100 lbf R-4D engines each (two longitudinal, two roll), mount centrelines ~7° off the Y/Z axes, all engines canted 10° outward; R-4D vacuum Isp per the R-4D reference | reaction_control_2026.json |
++| apollo11_service_module_csm107 | structuralInterfaces | 4.1148 | Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds. | SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf | apollo11_spacecraft_interfaces_1970.json |
++| apollo11_sps_engine_csm107 | structuralInterfaces |  | Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds. | SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf | apollo11_spacecraft_interfaces_1970.json |
+ | apollo8-saturn5-as503-csm103-1968-12-21 | completeStackIgnitionMassKg |  | Stage component weights are prelaunch values; spacecraft is postflight actual | Apollo 8 Prelaunch Mission Operation Report table 10 plus postflight spacecraft weight | apollo8_saturn5_as503_1968.json |
+ | apollo8-saturn5-as503-csm103-1968-12-21 | csmMassClosure |  | Consumables grouped into logical dry and propellant buckets | Apollo 8 Mission Report table A.6-I actual separation weights | apollo8_saturn5_as503_1968.json |
+ | apollo8-saturn5-as503-csm103-1968-12-21 | stageMassAllocation |  | Part boundaries are simulator allocations | Apollo 8 prelaunch table 10 inert and expendable weights | apollo8_saturn5_as503_1968.json |
+diff --git a/scripts/HistoricalVehicleMeshes.cs b/scripts/HistoricalVehicleMeshes.cs
+index edc9450..d9a5112 100644
+--- a/scripts/HistoricalVehicleMeshes.cs
++++ b/scripts/HistoricalVehicleMeshes.cs
+@@ -948,6 +948,11 @@ public partial class VesselRenderer
+         {
+             float y0 = -L * 0.5f;
+             var tower = kit[LesOrange];
++            // Full LES bounds include the overlap with the CM. Older catalogues put
++            // the attachment at the lower bound and extend the truss below it.
++            var attachment = d.AttachmentNodes.FirstOrDefault(node => node.Id == "bottom");
++            float attachmentY = attachment != null ? (float)attachment.Position[1] : y0;
++            float trussFoot = Mathf.Min(y0, attachmentY - 0.90f);
+             // Four-leg tower truss, legs anchored on the boost protective cover below.
+             float trussTop = y0 + 0.30f * L;
+             const int bays = 3;
+@@ -955,7 +960,7 @@ public partial class VesselRenderer
+             {
+                 float theta = Mathf.Pi * 0.25f + leg * Mathf.Pi * 0.5f;
+                 float r = Mathf.Lerp(1.05f, 0.44f, t);
+-                return Radial(theta) * r + Vector3.Up * Mathf.Lerp(y0 - 0.90f, trussTop, t);
++                return Radial(theta) * r + Vector3.Up * Mathf.Lerp(trussFoot, trussTop, t);
+             }
+             for (int leg = 0; leg < 4; leg++)
+             {
+diff --git a/tools/physics_profile_audit.py b/tools/physics_profile_audit.py
+index c89eef8..44e3036 100644
+--- a/tools/physics_profile_audit.py
++++ b/tools/physics_profile_audit.py
+@@ -21,10 +21,12 @@ MATRIX = [
+     ("Gemini 8", "gemini8_titan2_1966", ["Gemini8AscentScenarioTests", "Gemini8ReturnScenarioTests"], "historical mission"),
+     ("Apollo 8", "apollo8_saturn5_as503_1968", ["SaturnVAscentScenarioTests.ClosedLoopUpperStagesReachTheParkingOrbit",
+         "TranslunarInjectionScenarioTests"], "historical orbit and finite lunar transfer"),
+-    ("Apollo 11", "apollo11_saturn5_as506_1969", ["SaturnVAscentScenarioTests.As506ReachesParkingOrbitWithTheTranslunarPropellant",
++    ("Apollo 11", "apollo11_saturn5_as506_1969", ["Apollo11DataTests.SpacecraftInterfacesPreserveThePublishedStructuralSpansAndOverlaps",
++        "Apollo11DataTests.As506StackClosesPublishedIgnitionMassDimensionsAndThrust",
++        "SaturnVAscentScenarioTests.As506ReachesParkingOrbitWithTheTranslunarPropellant",
+         "SaturnVJetDampingHistoricalTests", "PropellantSloshTests.As506SicSloshFollowsTheAs501MeasuredFrequencies",
+         "Apollo11TranspositionDockingScenarioTests", "Apollo11PoweredDescentScenarioTests",
+-        "LunarOrbitInsertionBurnTests"], "historical mass history, frequencies, orbit and spacecraft segments"),
++        "LunarOrbitInsertionBurnTests"], "source interfaces, historical mass history, frequencies, orbit and spacecraft segments"),
+     ("Starship Flight 7", "starship_flight7_block2_2025", ["StarshipFlight7DataTests",
+         "PhysicsParityIntegrationTests.Flight7ClosedLoopElevationProgramRemainsWithinParityTolerance"],
+         "catalogue and controlled ascent parity; no measured trajectory residual"),
+diff --git a/data/provenance/apollo11_spacecraft_interfaces_1970.json b/data/provenance/apollo11_spacecraft_interfaces_1970.json
+new file mode 100644
+index 0000000..24c31df
+--- /dev/null
++++ b/data/provenance/apollo11_spacecraft_interfaces_1970.json
+@@ -0,0 +1,48 @@
++{
++  "manifestId": "apollo11-spacecraft-interfaces-1970",
++  "records": [
++    {
++      "dataId": "apollo11_service_module_csm107",
++      "field": "structuralInterfaces",
++      "status": "derived",
++      "source": "SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
++      "accessedDate": "2026-11-07",
++      "variant": "Block II CSM-107 / AS-506",
++      "conditions": "SM structure spans launch stations 3594.555 to 3756.555 inches; excludes the SPS nozzle extension into the SLA.",
++      "uncertainty": "Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds.",
++      "value": 4.1148
++    },
++    {
++      "dataId": "apollo11_command_module_csm107",
++      "field": "structuralInterfaces",
++      "status": "derived",
++      "source": "SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
++      "accessedDate": "2026-11-07",
++      "variant": "Block II CSM-107 / AS-506",
++      "conditions": "CM spans launch stations 3756.555 to 3890.055 inches; excludes ablative material as noted in the drawing.",
++      "uncertainty": "Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds.",
++      "value": 3.3909
++    },
++    {
++      "dataId": "apollo11_launch_escape_system",
++      "field": "structuralInterfaces",
++      "status": "derived",
++      "source": "SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
++      "accessedDate": "2026-11-07",
++      "variant": "Block II CSM-107 / AS-506",
++      "conditions": "Tower reference span runs from its separation plane at station 3841.182 to its tip at 4240.792 inches. Its CM-tip attachment is 1.2413742 m above that plane. This does not establish the full BPC/package envelope or mass distribution; the effective aero shape is a separate estimate.",
++      "uncertainty": "Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds.",
++      "value": 10.150094
++    },
++    {
++      "dataId": "apollo11_sps_engine_csm107",
++      "field": "structuralInterfaces",
++      "status": "derived",
++      "source": "SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
++      "accessedDate": "2026-11-07",
++      "variant": "Block II CSM-107 / AS-506",
++      "conditions": "SPS upper and lower logical stack connections share the SM aft interface. The nozzle extends into the SLA; the existing 1 m engine envelope and outlet are still approximate, not measured engine dimensions.",
++      "uncertainty": "Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds."
++    }
++  ]
++}
