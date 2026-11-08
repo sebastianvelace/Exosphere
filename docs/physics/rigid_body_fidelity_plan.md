@@ -494,7 +494,9 @@ spacecraft structural interfaces and actuator planes, the docked-stack SPS ignit
 (`PeriapsisCaptureBurn` on `TranslationalMassKg`) and the measured SP-238 table 8-X SPS
 tank-and-line load. Remaining F6 work, in order:
 
-1. Native SM dry mass, centre of mass and inertia; SPS line geometry and unexpellable residuals.
+1. ~~Native SM dry mass, centre of mass and inertia~~ — CM and SM dry centres and gyrations
+   derived from SP-238 table B-I (2026-11-08). Still open: SPS tank/line geometry,
+   unexpellable residuals and cryogenic consumption.
 2. The SPS nozzle exit plane (the 1966 source describes another configuration).
 3. Apollo 11's own lunar targets (the LOI selector still uses the Apollo 8 proxy).
 4. Native Atlas sustainer and propellant-utilization reconstruction for MA-6

@@ -472,8 +472,10 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      spacecraft AS-506, ventana de encendido del SPS con la masa del conjunto acoplado (captura
      CSM-107/LM-5 101,94 × 312,02 km en lugar de 55,28 km de perilunio) y carga SPS medida de
      SP-238 tabla 8-X (7126,84 kg de combustible, 11381,09 kg de oxidante; masa húmeda
-     conservada con un remanente lógico). Pendiente: masa seca nativa del SM (CG e inercia),
-     salida de tobera del SPS, objetivos lunares propios de Apollo 11, sustainer y PU nativos
+     conservada con un remanente lógico). Centro y giración secos del CM y del SM derivados de
+     SP-238 tabla B-I: el CSM en el TD&E pasa de +12,5 in a +3,1 in de error de CG y de +24 % a
+     +5 % de giración transversal (compuerta F6 `ApolloCsmMassPropertiesHistoricalTests`).
+     Pendiente: geometría de tanques del SPS y consumo de criogénicos, salida de tobera del SPS, objetivos lunares propios de Apollo 11, sustainer y PU nativos
      del Atlas (MA-6), aletas del S-IC, grid fins y cápsulas romas newtonianas. Detalle en
      `docs/physics/historical_recalibration.md`.
 

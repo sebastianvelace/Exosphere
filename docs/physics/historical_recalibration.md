@@ -331,3 +331,42 @@ measured empty mass. Records: `data/provenance/as506_sps_inventory_1971.json`; t
 Native SM dry centre/inertia, line geometry, unexpellable residuals, the SPS exit plane and
 Apollo 11's own lunar targets remain open. F6 remains open.
 
+## CSM-107 module mass properties from SP-238 table B-I (2026-11-08)
+
+SP-238 appendix B table B-I (printed p. 212) gives postflight mass properties per mission
+phase, from measured module weights and CGs and calculated inertias. Two rows isolate one
+module each: the CM at entry (12095.5 lb, X_A 1040.5 in) and the SM just after CM/SM
+separation (14549.1 lb, X_A 896.1 in). Tables 8-X, 8-XI and 8-XII give the SM's residual SPS
+propellant (5064 lb), RCS (780 lb) and cryogenics (280.2 lb) at that instant.
+
+Before this unit the CM and SM dry masses were uniform part cylinders. Against table B-I the
+CM CG was 26.2 in high with 25–45 % too much inertia, and the CSM at transposition was
+12.5 in high with +24 % transverse and +17 % roll inertia. The CM and SM now declare
+`dry_mass_center_y_m` and `dry_gyration_m` solved so each isolated module reproduces its
+row's CG and radii of gyration (`data/provenance/as506_csm_mass_properties_1971.json`;
+transcribed rows in `reference/sp238_table_b1_csm_mass_properties.csv`). Radii
+rather than inertias are matched, so the catalogue keeps its launch masses.
+
+The two CSM rows that the derivation does not use test the composition:
+
+| Row | CG residual | Axial / transverse gyration |
+| --- | --- | --- |
+| Transposition (full SPS) | +3.1 in (+0.08 m), was +12.5 in | +6.3 % / +5.1 % |
+| TEI ignition (~37 % SPS) | +5.9 in (+0.15 m), was +21.8 in | +3.1 % / +1.5 % |
+
+Gate: `ApolloCsmMassPropertiesHistoricalTests` (F6 historical). Its bands (CG ±0.2 m,
+gyration ±10 %) come from the uniform part-centred SPS store versus four off-axis
+storage/sump tanks; they were set after these results were seen, on that stated basis.
+
+Findings and limits:
+
+- The SM's 3825.50 kg logical remainder is fixed hardware plus 669.1 lb of launch
+  cryogenics: SM-at-separation mass less its residuals gives 8424.9 lb of fixed hardware
+  (with the SPS engine) against 8426.1 lb in the catalogue. The model does not consume
+  cryogenics, so the SM is 390 lb heavy at separation (388.9 lb consumed).
+- SPS propellant is still a uniform store at the SM centre; the flown load sits in four
+  off-axis tanks. Tank geometry, unexpellable residuals and lateral CG (Z_A up to 7.2 in)
+  are not represented. Products of inertia are dropped.
+- The equivalent SM dry cylinder is 5.39 m long against the 4.11 m module: mass concentrates
+  at the aft bulkhead and forward ring. It is an inertia equivalent, not an envelope.
+

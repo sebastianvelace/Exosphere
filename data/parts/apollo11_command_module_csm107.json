@@ -6,6 +6,8 @@
   "vehicle_family": "apollo",
   "vehicle_role": "command_module",
   "mass_dry": 5445.5065325,
+  "dry_mass_center_y_m": -0.6804068,
+  "dry_gyration_m": {"transverse_m": 1.1269668, "axial_m": 1.2400660},
   "fuel_capacity_mono": 111,
   "length_m": 3.3909,
   "diameter_m": 3.91,

@@ -1,0 +1,7 @@
+event,weight_lb,cg_xa_in,cg_ya_in,cg_za_in,ixx_slug_ft2,iyy_slug_ft2,izz_slug_ft2,ixy_slug_ft2,ixz_slug_ft2,iyz_slug_ft2
+transposition_docking_csm,63473.0,934.0,4.0,6.5,34445,76781,79530,-1789,-126,3141
+transearth_injection_ignition_csm,36965.7,943.8,3.0,5.3,20681,56775,63303,-1979,709,336
+transearth_injection_cutoff_csm,26792.7,961.4,-0.1,6.8,15495,49843,51454,-824,180,-232
+cm_sm_separation_service_module,14549.1,896.1,0.1,7.2,9143,14540,16616,-837,885,-153
+cm_sm_separation_command_module,12107.4,1040.4,-0.2,6.0,6260,5470,4995,55,-403,-47
+entry_command_module,12095.5,1040.5,-0.2,5.9,6253,5463,4994,55,-400,-47

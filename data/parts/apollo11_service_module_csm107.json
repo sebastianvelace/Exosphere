@@ -6,6 +6,8 @@
   "vehicle_family": "apollo",
   "vehicle_role": "service_module",
   "mass_dry": 3825.5043428,
+  "dry_mass_center_y_m": -0.8297681,
+  "dry_gyration_m": {"transverse_m": 1.8412055, "axial_m": 1.3935002},
   "length_m": 4.1148,
   "diameter_m": 3.91,
   "drag_coefficient": 0.24,

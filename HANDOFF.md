@@ -33,9 +33,10 @@ aerodinámico exterior con solapes e identidad del alcohol del Redstone.
 
 ## Siguiente trabajo de F6, en orden
 
-1. Masa seca nativa del SM: centro de masa e inercia; geometría de líneas del SPS y residuos
-   no expulsables. Hoy el SM tiene un remanente lógico de 3825,50 kg que conserva la masa
-   húmeda; no es masa estructural medida.
+1. Hecho: centro y giración secos del CM y del SM derivados de SP-238 tabla B-I
+   (`ApolloCsmMassPropertiesHistoricalTests`). Falta: geometría de tanques y líneas del SPS
+   (hoy un almacén uniforme en el centro del SM), residuos no expulsables y consumo de
+   criogénicos (el remanente lógico del SM incluye 669,1 lb de criogénicos de lanzamiento).
 2. Plano de salida de la tobera del SPS (la fuente de 1966 es de otra configuración; hoy hay
    un punto de salida explícito sin fuente).
 3. Objetivos lunares propios de Apollo 11 (el selector de LOI aún usa el proxy de Apollo 8).

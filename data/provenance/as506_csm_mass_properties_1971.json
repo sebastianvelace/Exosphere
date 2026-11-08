@@ -1,0 +1,47 @@
+{
+  "manifestId": "as506-csm-mass-properties-1971",
+  "records": [
+    {
+      "dataId": "apollo11_command_module_csm107",
+      "field": "dryMassCenterYM",
+      "status": "derived",
+      "source": "NASA SP-238, Apollo 11 Mission Report (1971), appendix B, table B-I Mass Properties, row 'Entry': 12095.5 lb, X_A 1040.5 in, Ixx 6253 / Iyy 5463 / Izz 4994 slug-ft2 (postflight analysis; module weights and CGs measured before flight, inertias calculated), printed p. 212 (PDF p. 224): https://ntrs.nasa.gov/api/citations/19710015566/downloads/19710015566.pdf; CSM X_A = 1000 in at the CM aft plane from SNA-8-D-027(I) rev. 3 figure 2-2.",
+      "accessedDate": "2026-11-08",
+      "variant": "CM-107 Columbia at entry interface",
+      "conditions": "Solves the CM dry centre so the catalogue CM (dry mass plus its full 111 kg RCS store, a uniform cylinder at the part centre; table 8-XI shows the CM RCS unused before entry) has the entry CG X_A 1040.5 in. Value is from the part centre (X_A 1066.75 in).",
+      "uncertainty": "The catalogue CM is 155.7 lb (1.3 %) heavier than the entry row because it keeps the launch loading (crew consumables, water); that mass's station is unknown, so the centre carries about +/-0.02 m. Lateral CG (Y_A -0.2, Z_A 5.9 in) is not represented.",
+      "value": -0.6804068
+    },
+    {
+      "dataId": "apollo11_command_module_csm107",
+      "field": "dryGyration",
+      "status": "derived",
+      "source": "NASA SP-238 (1971), table B-I row 'Entry' as for dryMassCenterYM: https://ntrs.nasa.gov/api/citations/19710015566/downloads/19710015566.pdf",
+      "accessedDate": "2026-11-08",
+      "variant": "CM-107 Columbia at entry interface",
+      "conditions": "Dry radii of gyration (transverse 1.1269668 m, axial 1.2400660 m) solved so the CM about its entry CG has the source gyration radii: axial sqrt(Ixx/m) = 1.2431 m and transverse sqrt(mean(Iyy, Izz)/m) = 1.1367 m with m = 12095.5 lb and 1 slug-ft2 = 1.3558179483314 kg m2. Matching radii rather than absolute inertia keeps the catalogue's launch mass.",
+      "uncertainty": "The model is axisymmetric: Iyy and Izz differ by +/-4.5 % about their mean and the products of inertia are dropped. Source inertias are calculated, not measured."
+    },
+    {
+      "dataId": "apollo11_service_module_csm107",
+      "field": "dryMassCenterYM",
+      "status": "derived",
+      "source": "NASA SP-238 (1971), table B-I row 'Command and service module separation, After, Service module': 14549.1 lb, X_A 896.1 in, Ixx 9143 / Iyy 14540 / Izz 16616 slug-ft2; tables 8-X (SPS remaining 1958 lb fuel, 3106 lb oxidizer), 8-XI (SM RCS remaining 780 lb) and 8-XII (cryogenics remaining 280.2 lb, consumed 388.9 lb): https://ntrs.nasa.gov/api/citations/19710015566/downloads/19710015566.pdf",
+      "accessedDate": "2026-11-08",
+      "variant": "SM-107 at CM/SM separation (fixed hardware plus the logical non-SPS allocation)",
+      "conditions": "Solves the SM dry centre so the SM part (dry, plus the table 8-X/8-XI residuals in its uniform part-centred stores) together with the separate 300 kg SPS engine part has the separation CG X_A 896.1 in. Value is from the part centre (X_A 919.0 in).",
+      "uncertainty": "The catalogue keeps the 669.1 lb of launch cryogenics inside the dry allocation, so the model SM is 390.1 lb heavier than the separation row (388.9 lb consumed per table 8-XII); the residual SPS propellant is placed at the part centre rather than in the off-axis sump tanks. Together about +/-0.05 m. Lateral CG (Y_A 0.1, Z_A 7.2 in) is not represented.",
+      "value": -0.8297681
+    },
+    {
+      "dataId": "apollo11_service_module_csm107",
+      "field": "dryGyration",
+      "status": "derived",
+      "source": "NASA SP-238 (1971), table B-I row 'Service module' after CM/SM separation, with tables 8-X, 8-XI and 8-XII, as for dryMassCenterYM: https://ntrs.nasa.gov/api/citations/19710015566/downloads/19710015566.pdf",
+      "accessedDate": "2026-11-08",
+      "variant": "SM-107 at CM/SM separation",
+      "conditions": "Dry radii of gyration (transverse 1.8412055 m, axial 1.3935002 m) solved so the SM plus SPS engine about the separation CG has the source radii: axial 1.3705 m and transverse 1.7890 m (sqrt of Ixx and of mean(Iyy, Izz) over 14549.1 lb). The equivalent dry cylinder is 5.39 m long against the 4.11 m module because the mass sits at the aft bulkhead and forward ring; it is an inertia equivalent, not an envelope.",
+      "uncertainty": "Iyy and Izz differ by +/-6.7 % about their mean (off-axis tanks); products of inertia dropped; source inertias calculated. Independent check: CSM at transposition and at transearth-injection ignition (table B-I), ApolloCsmMassPropertiesHistoricalTests."
+    }
+  ]
+}
