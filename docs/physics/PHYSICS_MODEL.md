@@ -286,7 +286,14 @@ Spacecraft translation uses reaction control independent of the engines: `Transl
 per body axis is a fraction of the declared thrusters' force along that axis
 (`rcs_thrusters` on the part: position, direction, thrust, Isp), allocated together with any
 attitude moment and burned at F / (Isp g0) from the owning system's store (`RcsTranslationTests`,
-`RcsAllocationTests`). Gemini 8's rendezvous flies on it: a terminal-phase-
+`RcsAllocationTests`). With vessels hard-docked, the jets are allocated about the docked
+stack's centre of mass and weighted by the stack's inertia (`Vessel.DockedStackCenterOfMassLocal`,
+refreshed by `Universe` with the docked mass), since that is the body they turn. About the
+primary's own centre, a jet between the two centres has its moment reversed: CSM-107's SM quads
+(X_A 959 in) lie forward of the CSM's centre (934 in) but aft of the CSM+LM stack's (1038 in),
+so docked pitch/yaw commands turned the stack backwards and a large-angle slew diverged
+(`Apollo11SpsBurnScenarioTests.DockedStackTurnsTheWayItsRcsCommandAsks`). A command is a fraction
+of the moment available about that centre. Gemini 8's rendezvous flies on it: a terminal-phase-
 initiation Lambert intercept (`RendezvousPlanner`, 130° transfer, aimed 500 m above the Agena),
 replanned from the flown states 15 min before the burn because the coast is integrated with
 oblateness and drag; a mid-transfer correction re-aimed from the Agena's current state; then

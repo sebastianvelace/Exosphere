@@ -451,6 +451,26 @@ public class Vessel
     public double DockedStackTransverseInertiaKgM2 { get; internal set; }
 
     /// <summary>
+    /// Centre of mass of the whole docked stack in this vessel's frame, or null when nothing is
+    /// docked. RCS torques act about it: a jet aft of the primary's own centre can sit forward
+    /// of the stack's (CSM-107 quads at X_A 959 in, CSM CG 934 in, CSM+LM CG 1038 in), which
+    /// reverses its moment. <see cref="Universe"/> refreshes it with <see cref="DockedSecondaryMassKg"/>.
+    /// </summary>
+    public Vector3d? DockedStackCenterOfMassLocal { get; internal set; }
+
+    /// <summary>Axial (roll) moment of inertia of the docked stack (kg·m²), or 0 when undocked.</summary>
+    public double DockedStackAxialInertiaKgM2 { get; internal set; }
+
+    /// <summary>Torque reference for RCS allocation: the docked stack's centre, else this vessel's.</summary>
+    private Vector3d RcsTorqueReferenceLocal => DockedStackCenterOfMassLocal ?? CenterOfMassOffsetLocal;
+
+    /// <summary>Allocation weights (inverse-inertia ratios) of the body that the jets actually turn.</summary>
+    private (double Transverse, double Axial) RcsInertia =>
+        DockedStackCenterOfMassLocal != null && DockedStackTransverseInertiaKgM2 > 0.0 && DockedStackAxialInertiaKgM2 > 0.0
+            ? (DockedStackTransverseInertiaKgM2, DockedStackAxialInertiaKgM2)
+            : (Parts.TransverseMomentOfInertia, Parts.AxialMomentOfInertia);
+
+    /// <summary>
     /// Factor that turns this vessel's own torque/inertia angular acceleration into the
     /// docked stack's: I_vessel / I_stack (1 when undocked). The same factor is applied to
     /// every axis, a documented approximation for the slaved secondary.
@@ -1325,11 +1345,11 @@ public class Vessel
             var thrusters = Parts.GetRcsThrusters();
             if (thrusters.Count == 0) return Vector3d.Zero;
             const double grid = 0.25;
-            var com = CenterOfMassOffsetLocal;
+            var com = RcsTorqueReferenceLocal;
             com = new Vector3d(System.Math.Round(com.X / grid) * grid, System.Math.Round(com.Y / grid) * grid,
                 System.Math.Round(com.Z / grid) * grid);
-            double ratio = System.Math.Max(1.0, Parts.TransverseMomentOfInertia)
-                / System.Math.Max(1.0, Parts.AxialMomentOfInertia);
+            var (rcsTransverse, rcsAxial) = RcsInertia;
+            double ratio = System.Math.Max(1.0, rcsTransverse) / System.Math.Max(1.0, rcsAxial);
             double magnitude = System.Math.Pow(10.0, System.Math.Floor(System.Math.Log10(ratio)) - 2.0);
             ratio = System.Math.Round(ratio / magnitude) * magnitude;
             ulong mask = 0;
@@ -1401,11 +1421,12 @@ public class Vessel
             return;
         // Weight each axis by its inverse inertia: the allocation minimises the error in
         // angular acceleration, not in N·m.
-        double transverse = System.Math.Max(1.0, Parts.TransverseMomentOfInertia);
-        double axial = System.Math.Max(1.0, Parts.AxialMomentOfInertia);
+        var (rcsTransverse, rcsAxial) = RcsInertia;
+        double transverse = System.Math.Max(1.0, rcsTransverse);
+        double axial = System.Math.Max(1.0, rcsAxial);
         var weights = new Vector3d(1.0, transverse / axial, 1.0);
         double forceWeight = desiredForceBody.MagnitudeSquared > 0.0 ? 1.0 : Physics.RcsAllocation.AttitudeOnlyForceWeight;
-        var torqueReference = CenterOfMassOffsetLocal;
+        var torqueReference = RcsTorqueReferenceLocal;
         var result = Physics.RcsAllocation.Allocate(thrusters, torqueReference,
             desiredTorqueBody, desiredForceBody, _rcsDuty, weights, forceWeight);
         if (!DrawRcsPropellant(thrusters, result, dt))

@@ -2450,6 +2450,7 @@ public partial class Universe
     {
         vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
         vessel.DockedStackTransverseInertiaKgM2 = DockedStackTransverseInertia(vessel);
+        RefreshDockedStackReference(vessel);
         if (vessel.WaterMotionEnabled && vessel.WaterContact is { } water)
         {
             IntegrateVesselWaterMotion(vessel, refBody, water, dt);
@@ -2644,6 +2645,7 @@ public partial class Universe
 
         vessel.DockedSecondaryMassKg = DockedSecondaryMass(vessel);
         vessel.DockedStackTransverseInertiaKgM2 = DockedStackTransverseInertia(vessel);
+        RefreshDockedStackReference(vessel);
         bool sloshRequested = PropellantSloshEnabled && VariableMassTransportEnabled && HasSloshTanks(vessel);
         vessel.CaptureTransportWindow = VariableMassTransportEnabled;
         vessel.BeginCoupledPhysicsStep(dt, refBody, DistributedAerodynamicsEnabled, PhysicalBodyFlapsEnabled);
@@ -3055,6 +3057,20 @@ public partial class Universe
         var offset = state.Orientation.Rotate(shiftBody);
         return new(state.Position + offset, state.Velocity + state.AngularVelocityWorld.Cross(offset),
             state.Orientation, state.AngularVelocityBody);
+    }
+
+    /// <summary>The docked stack's centre and roll inertia in the primary's frame, for RCS allocation.</summary>
+    private void RefreshDockedStackReference(Vessel vessel)
+    {
+        if (vessel.DockedSecondaryMassKg <= 0.0 || !vessel.Parts.TryGetMassProperties(out _))
+        {
+            vessel.DockedStackCenterOfMassLocal = null;
+            vessel.DockedStackAxialInertiaKgM2 = 0.0;
+            return;
+        }
+        var composite = DockedCompositeMassProperties(vessel, vessel.GetMassProperties());
+        vessel.DockedStackCenterOfMassLocal = composite.CenterOfMassBody;
+        vessel.DockedStackAxialInertiaKgM2 = composite.InertiaBody.M22;
     }
 
     private Physics.RigidBodyMassProperties DockedCompositeMassProperties(

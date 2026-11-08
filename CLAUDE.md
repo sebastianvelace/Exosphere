@@ -187,7 +187,8 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   "F3 findings"): SAS and the 20°/s pilot envelope are commands, nothing
   writes ω, and there is no generic RCS floor. RCS comes from per-part `rcs_thrusters`
   (position, direction, thrust, Isp; fed from the owning part's `fuel_capacity_mono` store or
-  the shared feed; owning demands are reserved before shared draw), allocated by `Physics/RcsAllocation` (couples first, inertia-weighted);
+  the shared feed; owning demands are reserved before shared draw), allocated by `Physics/RcsAllocation` (couples first, inertia-weighted; about the docked stack's
+  centre and inertia when docked, `Vessel.DockedStackCenterOfMassLocal`);
   `rcs_arms_with_stage` and `rcs_arms_when_isolated` arm systems at separation; flaps take
   their share before the jets, and under thrust a slewing gimbal (≥ 1°/s) owns its axes.
   F4 is reverified in production: tidal moments act in coupled off-rails/water stages and Kepler attitude

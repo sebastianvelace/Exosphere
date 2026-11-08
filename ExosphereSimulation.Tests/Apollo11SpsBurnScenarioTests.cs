@@ -77,6 +77,37 @@ public sealed class Apollo11SpsBurnScenarioTests(ITestOutputHelper output)
         Assert.InRange(burn.BurnSeconds, 300.0, 430.0);
     }
 
+    /// <summary>
+    /// With LM-5 docked the stack's centre of mass (table B-I X_A 1038 in) lies forward of the
+    /// SM RCS quads (X_A 959 in), while the CSM's own lies aft of them (934 in). Allocating the
+    /// jets about the CSM's own centre picks couples whose moment reverses about the stack's,
+    /// so a commanded pitch/yaw turned the stack the wrong way and the pointing law spun it up.
+    /// Commands must turn the docked stack the way they turn the CSM alone.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void DockedStackTurnsTheWayItsRcsCommandAsks(int axis)
+    {
+        var (universe, moon, csm, lm) = CreateDockedArrival(3_000.0);
+        universe.Tick(StepSeconds); // Universe publishes the stack reference before each step.
+        Assert.NotNull(csm.DockedStackCenterOfMassLocal);
+        Assert.True(csm.DockedStackCenterOfMassLocal!.Value.Y > csm.CenterOfMassOffsetLocal.Y);
+        csm.SASEnabled = false;
+        var command = axis == 0 ? new Vector3d(1.0, 0.0, 0.0) : new Vector3d(0.0, 1.0, 0.0);
+        for (int i = 0; i < 50; i++)
+        {
+            csm.PitchYawRoll = command;
+            universe.Tick(StepSeconds);
+        }
+        var rateLocal = csm.Orientation.Inverse().Rotate(csm.AngularVelocity);
+        // PitchYawRoll (pitch, yaw, roll) drives body X, Z and Y (AttitudeGuidance).
+        double turned = axis == 0 ? rateLocal.X : rateLocal.Z;
+        output.WriteLine($"axis={axis} body rate {rateLocal} stack centre {csm.DockedStackCenterOfMassLocal} own {csm.CenterOfMassOffsetLocal}");
+        Assert.True(turned > 0.0, $"commanded +{(axis == 0 ? "pitch" : "yaw")} turned the stack at {turned:E3} rad/s");
+        Assert.Single(universe.DockingConnections);
+    }
+
     private static (Universe Universe, CelestialBody Moon, Vessel Csm, Vessel Lm)
         CreateDockedArrival(double timeToPeriapsisSeconds)
     {

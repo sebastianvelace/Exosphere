@@ -51,10 +51,14 @@ public sealed class DockedStackThrustTests
             vessel.PitchYawRoll = new Vector3d(0.5, 0.0, 0.0);
         }
 
+        var aloneTorque = Vector3d.Zero;
+        var dockedTorque = Vector3d.Zero;
         for (int step = 0; step < 50; step++)
         {
             alone.Tick(0.02);
             docked.Tick(0.02);
+            aloneTorque += aloneVessel.RcsThrusterTorqueBody;
+            dockedTorque += primary.RcsThrusterTorqueBody;
         }
 
         double totalMass = primary.TotalMass + secondary.TotalMass;
@@ -64,7 +68,12 @@ public sealed class DockedStackThrustTests
             + primary.TotalMass * (primary.CenterOfMass - centre).MagnitudeSquared
             + secondary.Parts.TransverseMomentOfInertia
             + secondary.TotalMass * (secondary.CenterOfMass - centre).MagnitudeSquared;
-        double expected = primary.Parts.TransverseMomentOfInertia / stackInertia;
+        // A command is a fraction of the moment the jets have about the body they turn: about
+        // the stack's centre, single jets have longer arms, so the same half command asks the
+        // docked stack for more torque. The rates then follow each body's torque over inertia.
+        double expected = dockedTorque.Magnitude / stackInertia
+            / (aloneTorque.Magnitude / primary.Parts.TransverseMomentOfInertia);
+        Assert.True(dockedTorque.Magnitude >= aloneTorque.Magnitude * (1.0 - 1e-9));
         double ratio = primary.AngularVelocity.Magnitude / aloneVessel.AngularVelocity.Magnitude;
         Assert.True(aloneVessel.AngularVelocity.Magnitude > 1e-4);
         Assert.InRange(ratio, expected * 0.98, expected * 1.02);
