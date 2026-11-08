@@ -15,11 +15,11 @@
       "dataId": "apollo11_service_module_csm107",
       "field": "rcsThrusters",
       "status": "derived",
-      "source": "Rocket Propulsion Evolution 9.32 (SM RCS): four independent quads 90° apart, four 100 lbf R-4D engines each (two longitudinal, two roll), mount centrelines ~7° off the Y/Z axes, all engines canted 10° outward; R-4D vacuum Isp per the R-4D reference",
-      "accessedDate": "2026-11-04",
+      "source": "Rocket Propulsion Evolution 9.32 (SM RCS): four independent quads 90° apart, four 100 lbf R-4D engines each (two longitudinal, two roll), mount centrelines ~7° off the Y/Z axes, all engines canted 10° outward; R-4D vacuum Isp per the R-4D reference; nominal axial quad reference: SNA-8-D-027(I), revision 3, figure 2-3 (amended 13 April 1971), p. 2-4 (PDF p. 17): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
+      "accessedDate": "2026-11-08",
       "variant": "CSM-107 SM RCS",
-      "conditions": "same quad geometry as CSM-103; 610 kg aggregate RCS load retained",
-      "uncertainty": "station and radius ±0.3 m; Isp ±10 s"
+      "conditions": "Nominal quad plane is 41.10 in aft of the CM structural interface: (162/2 - 41.10) * 0.0254 = 1.01346 m above the SM centre. All four jets in each quad share this reference in the simplified model; individual nozzle offsets are unresolved. CSM-103 radial layout, directions, Isp and 610 kg aggregate load retained.",
+      "uncertainty": "Later amended Block II reference, not a CSM-107 as-flown survey; individual jet offsets and radius remain estimated at ±0.3 m; Isp ±10 s."
     },
     {
       "dataId": "apollo8_command_module_csm103",

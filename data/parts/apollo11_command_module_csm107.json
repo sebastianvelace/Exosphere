@@ -7,7 +7,7 @@
   "vehicle_role": "command_module",
   "mass_dry": 5445.5065325,
   "fuel_capacity_mono": 111,
-  "length_m": 3.39,
+  "length_m": 3.3909,
   "diameter_m": 3.91,
   "drag_coefficient": 0.92,
   "axial_drag_coefficient": 0.82,
@@ -47,7 +47,7 @@
     {"id": "B_roll_ccw", "position": [-1.6, -0.35, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 413.68, "isp_s": 270}
   ],
   "attachment_nodes": [
-    {"id": "top", "position": [0, 1.695, 0], "size": 3, "type": "stack"},
-    {"id": "bottom", "position": [0, -1.695, 0], "size": 3, "type": "stack"}
+    {"id": "top", "position": [0, 1.69545, 0], "size": 3, "type": "stack"},
+    {"id": "bottom", "position": [0, -1.69545, 0], "size": 3, "type": "stack"}
   ]
 }

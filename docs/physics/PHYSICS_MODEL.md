@@ -314,11 +314,22 @@ estimate 2.3x too long), cut on the flown periapsis or at burnout (`Gemini8Ascen
 proximity operations take over where braking the planned arrival speed at 80% of the OAMS
 deceleration ends at the target, with the port facing the line of sight so braking is axial.
 
+The AS-506 catalogue uses the published Block II SM/CM structural spans, with the SPS
+overlapping the SLA instead of adding a serial metre to the stack. Tower reference bounds
+overlap the CM; its effective aerodynamic shape and internal mass distribution remain
+estimates. The nominal SM RCS quad plane is 41.10 in aft of the CM interface (local SM
+Y=1.01346 m), and SPS thrust acts at CSM X_A=833.2 in, 0.12192 m aft of the SM structure.
+The runtime adds the part's axial thrust offset to its cluster mount. Individual RCS
+nozzle offsets, the SPS logical 1 m envelope and its point-outlet fallback remain
+unresolved; the gimbal station does not establish the physical bell exit. See
+`as506_spacecraft_reconstruction.md` for source revisions and mass-property limits.
+
 Apollo 11's transposition, docking and extraction use the same `ProximityApproach` on the SM RCS
 (four quads: 1780 N per axis, Isp 290 s, 610 kg). The CSM leaves the S-IVB/SLA on the
 separation impulse, turns end over end to face Eagle's drogue and closes to a real capture
-(`Apollo11TranspositionDockingScenarioTests`: docked 308 s after separation on 17.6 kg of RCS;
-flight: about 7 min). Both docking ports face out of their vehicle's +Y top. The LM drogue was
+(`Apollo11TranspositionDockingScenarioTests`: latest AS-506 reference-geometry gate docks
+344 s after separation on 86.6 kg of RCS; flight: about 7 min). The consumption is a model
+observation, not a validated historical residual; native CSM mass distributions remain open. Both docking ports face out of their vehicle's +Y top. The LM drogue was
 declared along −Y, which let the teleported CSM dock without turning around and, under RCS,
 docked it from inside Eagle; the test now requires a nose-to-nose finish and a probe that never
 crosses the drogue plane. Armstrong and Aldrin move to Eagle through the tunnel only while

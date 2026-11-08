@@ -233,7 +233,6 @@ The probe's loaded stage masses, Isp estimates and vertical flight program remai
 inputs. A finite climb verifies production funding and integration; it does not measure
 mass-to-orbit capability or establish a historical trajectory residual.
 
-
 ## Verified F5-production profile snapshot (2026-11-07)
 
 The nine-profile matrix passed 50/50 cases, with no skips or missing selectors. Preserved
@@ -272,8 +271,8 @@ their numeric observations, as documented above.
 
 The current correction supports explicit axial overlaps/gaps in vehicle length and counts
 only the exposed coaxial aerodynamic sections. All 12 catalogue variants retain exactly
-the previous ordered aerodynamic-element bits. The AS-506 source-interface candidate
-remains separate from production; see the reconstruction worksheet.
+the previous ordered aerodynamic-element bits. At this checkpoint the AS-506 source-interface candidate
+remained separate from production; its later implementation is recorded below.
 
 An independent runtime trace exposed an aggregate-residual cutoff trap: SIC fuel and
 header fuel ran out while 32059.2 kg of oxidizer remained above the 31995 kg cutoff.
@@ -292,5 +291,22 @@ Complete CI passed 1607/1607 tests without skips or failures (47 m 50 s), four b
 with zero warnings/errors, contracts and Godot startup/main/VAB/graphics checks.
 `/tmp/exo-f6-overlap-cutoff-ci.exit` is 0. The same unfiltered full-suite TRX supplies
 the matrix in `/tmp/exo-f6-overlap-cutoff-ci-profiles/report.json`: all 50 selected cases
-over nine profiles pass, no missing selectors, and `--verify-only` confirms current
+over nine profiles pass, no missing selectors, and `--verify-only` confirmed that checkpoint's
 source/data/assembly identities. F6 remains open for the reconstructions documented above.
+
+## AS-506 source-interface implementation (2026-11-08)
+
+The source-interface candidate is now implemented with the nominal RCS quad reference
+and SPS thrust application plane reconciled to the changed SM geometry. Provenance
+separates the 1970 structural stations, 1971 amended actuator drawing and unresolved
+individual nozzle offsets, engine bounds and mass properties. The SPS mount and part
+thrust-plane offsets are summed once; its unsourced point outlet remains explicit.
+See [the reconstruction worksheet](as506_spacecraft_reconstruction.md#structural-and-actuator-reference-implementation-2026-11-08)
+for dimensions, source scope and completed interface verification. Engine ratings, inventories,
+guidance, and original physical acceptance limits are unchanged. The previous 1607/50-case
+checkpoint is baseline evidence. New acceptance: 1609/1609 tests (46 m 57 s), four
+zero-warning/error builds, contracts and Godot startup/main/VAB/graphics-1280 checks;
+`/tmp/exo-f6-as506-interfaces-ci.exit` = 0. The same full-suite TRX yields 53/53 profile
+cases with matching source/data/assembly identities and no missing selectors. Its Apollo 11
+LOI selector still exercises CSM-103 and is labelled as a shared-controller regression,
+not CSM-107 SPS validation. Native phase mass properties and propulsion remain open.

@@ -21,9 +21,9 @@
   "engine_cluster_id": "apollo-sps-single-csm107-1969",
   "mixture_ratio": 1.6,
   "min_throttle": 1,
-  "thrust_position_y_m": -0.5,
+  "thrust_position_y_m": 0.37808,
   "attachment_nodes": [
     {"id": "top", "position": [0, 0.5, 0], "size": 3, "type": "stack"},
-    {"id": "bottom", "position": [0, -0.5, 0], "size": 3, "type": "stack"}
+    {"id": "bottom", "position": [0, 0.5, 0], "size": 3, "type": "stack"}
   ]
 }

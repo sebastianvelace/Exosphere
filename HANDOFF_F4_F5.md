@@ -318,3 +318,41 @@ No Engram/runtime memory tools may be called until the host re-registers an auth
 runtime session identity. No agents have been spawned. Both the F5 baseline and the current F6 Redstone work-unit
 verifications are complete; the explicit successful retry log/exit and fresh matrix above
 are authoritative. Continue F6 after this checkpoint without merging main.
+
+## AS-506 interface checkpoint (2026-11-08)
+
+The candidate from `be2b81e` is implemented with reconciled nominal RCS/SPS references:
+SM 4.1148 m, CM 3.3909 m, LES reference span 10.150094 m; SPS stack nodes coincide at
+the SM aft plane. RCS local Y=1.01346 m; SPS thrust local Y=0.37808 m is already summed
+with cluster mounts by Part. The SPS 1 m logical envelope and point outlet remain estimates.
+Provenance separates dated Block II drawings from an as-flown CSM-107 survey. No masses,
+loads, engine ratings, guidance or original physical gates changed.
+
+Two independent data regressions first failed old geometry. Initial data/RCS/torque checks
+pass 26/26. Directed segment/controller checks pass 6/6 (3 m 59 s): AS-506 inserts T+690 s,
+S-IVB 71.8 t / vehicle 130.9 t / capacity 3346 m/s; docking 344 s / 86.6 kg RCS. The four
+LOI tests use Apollo 8 / CSM-103 and do not validate CSM-107's SPS. Increased RCS use is a
+model observation pending native mass-property reconstruction.
+
+Renderer changes bound the SM shell, use catalogue RCS hubs and anchor LES truss feet.
+Real before/after captures at identical angles cover AS-506 and AS-503; authoritative
+outputs `/tmp/exo-f6-as506-render-after-rebuilt-{0..5}.png` were inspected. Metadata:
+`/tmp/exo-f6-as506-render-comparison.json`. Helpers removed. Production pad PNG exists;
+its generic smoke gate rejects a Starbase-specific condition at LC-39A, not accepted as
+smoke success. No gate was loosened. See the reconstruction worksheet for source limits.
+
+**Full CI PASS:** `/tmp/exo-f6-as506-interfaces-ci.log`, `.exit` = 0; 1609/1609 tests,
+zero skips/failures (46 m 57 s), four builds 0/0, contracts, Flight 60-frame startup,
+Godot main/VAB and graphics-1280. Same unfiltered TRX and identities:
+`/tmp/exo-f6-as506-interfaces-ci-profiles/`; profile `--verify-only` passes **53/53**,
+no missing selectors. Supervisor finished. Commit/push this unit on F6, no main merge.
+
+Next isolated evidence: `/tmp/exo-f6-as506-next-source-evidence.md`. A real docked
+CSM-107/LM-5 fixture exposes PeriapsisCaptureBurn's own-CSM mass estimate: perilune
+55.28 km (fails 81 km minimum). Using TranslationalMassKg gives 101.94 km and passes
+with both native-load candidate and original inventory. Focused ignition-window test is
+red before the fix; corrected two docked + four Apollo 8 cases pass 6/6 (3 m 56 s).
+Readable next-unit test: `/tmp/exo-f6-docked-loi-production.cs.txt`; not applied to main.
+The SPS inventory candidate is separate: table 8-X gives 18507.92947311 kg loaded versus
+14404.27930172 kg current. Preserve original wet mass as a logical allocation and validate
+native tank/line ownership and phase budgets before adoption; do not mix it into the fix.

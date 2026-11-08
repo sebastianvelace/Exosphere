@@ -1,0 +1,59 @@
+{
+  "manifestId": "apollo11-spacecraft-interfaces-1970",
+  "records": [
+    {
+      "dataId": "apollo11_service_module_csm107",
+      "field": "structuralInterfaces",
+      "status": "derived",
+      "source": "SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "Block II CSM-107 / AS-506",
+      "conditions": "SM structure spans launch stations 3594.555 to 3756.555 inches; excludes the SPS nozzle extension into the SLA.",
+      "uncertainty": "Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds.",
+      "value": 4.1148
+    },
+    {
+      "dataId": "apollo11_command_module_csm107",
+      "field": "structuralInterfaces",
+      "status": "derived",
+      "source": "SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "Block II CSM-107 / AS-506",
+      "conditions": "CM spans launch stations 3756.555 to 3890.055 inches; excludes ablative material as noted in the drawing.",
+      "uncertainty": "Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds.",
+      "value": 3.3909
+    },
+    {
+      "dataId": "apollo11_launch_escape_system",
+      "field": "structuralInterfaces",
+      "status": "derived",
+      "source": "SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "Block II CSM-107 / AS-506",
+      "conditions": "Tower reference span runs from its separation plane at station 3841.182 to its tip at 4240.792 inches. Its CM-tip attachment is 1.2413742 m above that plane. This does not establish the full BPC/package envelope or mass distribution; the effective aero shape is a separate estimate.",
+      "uncertainty": "Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds.",
+      "value": 10.150094
+    },
+    {
+      "dataId": "apollo11_sps_engine_csm107",
+      "field": "structuralInterfaces",
+      "status": "derived",
+      "source": "SNA-8-D-027(I), revision 3 (15 April 1970), figure 2-2, p. 2-3 (PDF p. 16): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
+      "accessedDate": "2026-11-07",
+      "variant": "Block II CSM-107 / AS-506",
+      "conditions": "SPS upper and lower logical stack connections share the SM aft interface. The nozzle extends into the SLA; the existing 1 m engine envelope is a logical approximation, not a measured engine bound.",
+      "uncertainty": "Source station conversion uses 0.0254 m/in exactly; preserves existing module masses. Absolute station retains the approximately 68 mm lower-assembly datum discrepancy; internal mass distributions are not established by external bounds."
+    },
+    {
+      "dataId": "apollo11_sps_engine_csm107",
+      "field": "thrustApplicationPoint",
+      "status": "derived",
+      "source": "SNA-8-D-027(I), revision 3, figure 2-3 (amended 13 April 1971), p. 2-4 (PDF p. 17), and section 4.4.4.3 (MSG-07765 Vol. I), p. 4.4-20 (PDF p. 169): https://www.ibiblio.org/apollo/Documents/CSM_Data_Book_Part_I_Rev_3_Partial.pdf",
+      "accessedDate": "2026-11-08",
+      "variant": "Block II CSM-107 / AS-506",
+      "conditions": "Gimbal/thrust application plane at CSM X_A = 833.2 in, 4.8 in aft of the SM structural plane at 838 in. With the retained 1 m logical engine envelope centred 0.5 m below that interface, part-local Y = 0.5 - 4.8 * 0.0254 = 0.37808 m. Runtime adds this part offset to the cluster mount at zero.",
+      "uncertainty": "Nominal Block II reference, not an as-flown CSM-107 survey; section 4.5 quotes \u00b10.25 in for the gimbal axes. The catalogue still has no sourced gimbal-to-nozzle-exit distance: the point outlet falls back to this thrust point, with zero radius. This does not establish the real nozzle exit or engine mass distribution.",
+      "value": 0.37808
+    }
+  ]
+}

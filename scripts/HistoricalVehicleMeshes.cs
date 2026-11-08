@@ -948,6 +948,11 @@ public partial class VesselRenderer
         {
             float y0 = -L * 0.5f;
             var tower = kit[LesOrange];
+            // Full LES bounds include the overlap with the CM. Older catalogues put
+            // the attachment at the lower bound and extend the truss below it.
+            var attachment = d.AttachmentNodes.FirstOrDefault(node => node.Id == "bottom");
+            float attachmentY = attachment != null ? (float)attachment.Position[1] : y0;
+            float trussFoot = Mathf.Min(y0, attachmentY - 0.90f);
             // Four-leg tower truss, legs anchored on the boost protective cover below.
             float trussTop = y0 + 0.30f * L;
             const int bays = 3;
@@ -955,7 +960,7 @@ public partial class VesselRenderer
             {
                 float theta = Mathf.Pi * 0.25f + leg * Mathf.Pi * 0.5f;
                 float r = Mathf.Lerp(1.05f, 0.44f, t);
-                return Radial(theta) * r + Vector3.Up * Mathf.Lerp(y0 - 0.90f, trussTop, t);
+                return Radial(theta) * r + Vector3.Up * Mathf.Lerp(trussFoot, trussTop, t);
             }
             for (int leg = 0; leg < 4; leg++)
             {
@@ -1083,7 +1088,7 @@ public partial class VesselRenderer
         return HAttach(root, "apollo_sm_" + d.Id + (stacked ? "S" : "s"), kit =>
         {
             float y0 = -L * 0.5f, y1 = L * 0.5f;
-            float fairingBottom = y1 - 0.45f, bodyBottom = y1 - 4.40f;
+            float fairingBottom = y1 - 0.45f, bodyBottom = Mathf.Max(y0, y1 - 4.40f);
             var radiator = HPaint("sm_radiator", new Color(0.92f, 0.92f, 0.90f), 0.5f);
             HRollPattern(kit, R, fairingBottom, y1, 48, 0, radiator, ApolloAluminium);
             HCylinder(kit[ApolloAluminium], R, bodyBottom, fairingBottom, 72);
@@ -1096,13 +1101,18 @@ public partial class VesselRenderer
                     0.03f, fairingBottom - bodyBottom, 0.006f);
             // Four RCS quads.
             var quadMat = HMetal("rcs_quad", new Color(0.82f, 0.82f, 0.80f), 0.45f, 0.36f, emission: 0.12f);
-            float yq = fairingBottom - 1.35f;
-            for (int k = 0; k < 4; k++)
+            var quadCentres = d.RcsThrusters.Select(jet => new Vector3(
+                (float)jet.Position[0], (float)jet.Position[1], (float)jet.Position[2]))
+                .Distinct().ToArray();
+            if (quadCentres.Length == 0)
+                quadCentres = Enumerable.Range(0, 4).Select(k =>
+                    Radial(Mathf.Pi * 0.25f + k * Mathf.Pi * 0.5f) * (R + 0.20f)
+                    + Vector3.Up * (fairingBottom - 1.35f)).ToArray();
+            foreach (Vector3 hub in quadCentres)
             {
-                float theta = Mathf.Pi * 0.25f + k * Mathf.Pi * 0.5f;
+                float theta = Mathf.Atan2(hub.Z, hub.X), yq = hub.Y;
                 kit[quadMat].SurfaceBox(theta, R, yq, 0.62f, 1.05f, 0.10f);
                 Vector3 radial = Radial(theta), tangent = Tangent(theta);
-                Vector3 hub = radial * (R + 0.20f) + Vector3.Up * yq;
                 kit[quadMat].Box(hub, new Basis(tangent, Vector3.Up, radial), new Vector3(0.22f, 0.22f, 0.20f));
                 foreach (Vector3 dir in new[] { Vector3.Up, Vector3.Down, tangent, -tangent })
                     kit[HDarkMetal].Frustum(hub + dir * 0.10f, hub + dir * 0.30f, 0.035f, 0.07f, 10);
@@ -1110,7 +1120,8 @@ public partial class VesselRenderer
             if (stacked)
             {
                 // The SLA's forward fixed ring wraps the SPS nozzle on the pad.
-                HCylinder(kit[SlaWhite], R, y0, bodyBottom, 64);
+                if (bodyBottom > y0)
+                    HCylinder(kit[SlaWhite], R, y0, bodyBottom, 64);
                 HBand(kit[HDarkMetal], R, bodyBottom, 0.05f, 0.01f, 64);
                 return;
             }

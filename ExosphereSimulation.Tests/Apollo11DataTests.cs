@@ -15,6 +15,76 @@ public sealed class Apollo11DataTests
     private static readonly DirectoryInfo Root = FindRepoRoot();
 
     [Fact]
+    public void SpacecraftInterfacesPreserveThePublishedStructuralSpansAndOverlaps()
+    {
+        // SNA-8-D-027(I), rev. 3, figure 2-2: source stations in inches.
+        // Relative spans avoid confusing the CSM X_A and Saturn structural origins.
+        const double inch = 0.0254;
+        var vessel = LoadLaunchVariant().Build(LoadParts()).ToVessel("AS-506 interfaces");
+        var positions = vessel.Parts.ComputePartLocalPositions();
+        Part PartWithRole(string role) => vessel.Parts.Parts.Single(p => p.Definition.HasVehicleRole(role));
+        var cm = PartWithRole("command_module");
+        var sm = PartWithRole("service_module");
+        var les = PartWithRole("launch_escape_system");
+        var sps = PartWithRole("service_propulsion_engine");
+        var sla = PartWithRole("sla_lunar_module");
+        var ring = PartWithRole("csm_separation");
+        double cmAft = positions[cm].Y - cm.Definition.LengthM * 0.5;
+        double smAft = positions[sm].Y - sm.Definition.LengthM * 0.5;
+
+        Assert.Equal((3756.555 - 3594.555) * inch, sm.Definition.LengthM, 9);
+        Assert.Equal((3890.055 - 3756.555) * inch, cm.Definition.LengthM, 9);
+        Assert.Equal(cmAft, positions[sm].Y + sm.Definition.LengthM * 0.5, 9);
+        Assert.Equal(smAft, positions[ring].Y + ring.Definition.LengthM * 0.5, 9);
+        Assert.Equal(smAft, positions[sps].Y + sps.Definition.LengthM * 0.5, 9);
+        Assert.True(positions[sps].Y - sps.Definition.LengthM * 0.5 < smAft);
+        Assert.Equal(positions[sla].Y + sla.Definition.LengthM * 0.5,
+            positions[ring].Y - ring.Definition.LengthM * 0.5, 9);
+        Assert.Equal(cmAft + (3841.182 - 3756.555) * inch,
+            positions[les].Y - les.Definition.LengthM * 0.5, 9);
+        Assert.Equal(cmAft + (4240.792 - 3756.555) * inch,
+            positions[les].Y + les.Definition.LengthM * 0.5, 9);
+        var provenance = DataProvenanceRegistry.LoadFromDirectory(Path.Combine(Root.FullName, "data", "provenance"));
+        foreach (var part in new[] { cm, sm, les, sps })
+            provenance.RequireFields(part.Definition.Id, "structuralInterfaces");
+    }
+
+    [Fact]
+    public void SpacecraftActuatorsUseThePublishedModuleReferencePlanes()
+    {
+        // SNA-8-D-027(I), figure 2-3 (amended 13 April 1971). These are
+        // nominal module references, not a survey of CSM-107's individual nozzles.
+        const double inch = 0.0254;
+        var vessel = LoadLaunchVariant().Build(LoadParts()).ToVessel("AS-506 actuators");
+        var positions = vessel.Parts.ComputePartLocalPositions();
+        var sm = vessel.Parts.Parts.Single(p => p.Definition.HasVehicleRole("service_module"));
+        var sps = vessel.Parts.Parts.Single(p => p.Definition.HasVehicleRole("service_propulsion_engine"));
+        double smForward = positions[sm].Y + sm.Definition.LengthM * 0.5;
+        double smAft = positions[sm].Y - sm.Definition.LengthM * 0.5;
+
+        Assert.Equal(16, sm.Definition.RcsThrusters.Count);
+        foreach (var jet in sm.Definition.RcsThrusters)
+            Assert.Equal(smForward - 41.10 * inch, positions[sm].Y + jet.Position[1], 9);
+
+        double gimbalY = smAft - (838.0 - 833.2) * inch;
+        Assert.Equal(gimbalY, positions[sps].Y + sps.Definition.ThrustPositionYM, 9);
+        Assert.True(sps.HasEngineRuntime);
+        var thrust = Assert.Single(sps.GetEngineInstanceThrustGeometry(0.0));
+        Assert.Equal(gimbalY, positions[sps].Y + thrust.PositionM.Y, 9);
+        // The catalogue has no sourced nozzle-exit plane yet: the point-outlet
+        // fallback is explicit and must not be mistaken for a measured bell exit.
+        var instance = Assert.Single(sps.EngineStates);
+        Assert.True(sps.TryGetNozzleExit(instance.InstanceId, out var exit, out var normal, out double radius));
+        Assert.Equal(gimbalY, positions[sps].Y + exit.Y, 9);
+        Assert.Equal(-Vector3d.Up, normal);
+        Assert.Equal(0.0, radius);
+
+        var provenance = DataProvenanceRegistry.LoadFromDirectory(Path.Combine(Root.FullName, "data", "provenance"));
+        provenance.RequireFields(sm.Definition.Id, "rcsThrusters");
+        provenance.RequireFields(sps.Definition.Id, "thrustApplicationPoint");
+    }
+
+    [Fact]
     public void As506StackClosesPublishedIgnitionMassDimensionsAndThrust()
     {
         PartCatalog parts = LoadParts();
@@ -26,7 +96,8 @@ public sealed class Apollo11DataTests
         Assert.Equal("Apollo-Saturn V", variant.Family);
         Assert.Equal(new DateOnly(1969, 7, 16), variant.AsOfDate);
         Assert.Equal(2_941_219.9329436, metrics.WetMass, 5);
-        Assert.Equal(110.7, graph.VehicleLength, 9);
+        // Published upper-module spans plus the unchanged lower assembly datum.
+        Assert.Equal(110.7144198, graph.VehicleLength, 9);
         Assert.Equal(10.1, graph.MaximumDiameter, 9);
         Assert.Equal(34_046_038.80284804, metrics.SeaLevelThrust, 5);
         Assert.InRange(metrics.SeaLevelTwr, 1.179, 1.181);

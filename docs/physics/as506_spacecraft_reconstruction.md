@@ -93,8 +93,9 @@ before using them in the simulation's local Y-up frame.
 The independently sourced interfaces are preserved in
 [`candidates/as506_structural_interfaces.patch`](candidates/as506_structural_interfaces.patch).
 It contains the four catalogue edits, provenance, interface regression, visual adjustment
-and two additional historical-matrix selectors. It is not applied to production. From a
-clean checkout of this checkpoint, reproduce it with:
+and two additional historical-matrix selectors. It preserves the held candidate at
+`be2b81e`; the later implementation below supersedes it. From a clean checkout of
+`be2b81e`, reproduce that historical candidate with:
 
 ```bash
 git apply --check docs/physics/candidates/as506_structural_interfaces.patch
@@ -157,13 +158,13 @@ With the cutoff correction, an isolated old-catalogue ascent inserts at T+688.60
 72040.549 kg and capacity 3351.957 m/s. The interface candidate with corrected exposed
 envelope inserts at T+689.52 s with 71843.331 kg and capacity 3345.628 m/s, passing the
 original TLI-capacity bound without a rating, load or guidance change. This supersedes
-the TLI failure as an adoption blocker; the other candidate segments and source-frame
-constraints below remain unverified. The patch stays held pending those checks.
+the TLI failure as an adoption blocker. At that checkpoint the other candidate segments
+and source-frame constraints below remained unverified; the patch was held.
 
 Next reconcile component CG/inertia and the remaining lower-assembly datum against the
 phase-specific sources above, then rerun ascent/TLI, spacecraft segments, conservation
-and rendering. The source interfaces remain a necessary reconstruction, not an accepted
-standalone catalogue update.
+and rendering. Passing the source-interface unit does not close the aggregate historical
+mass-property reconstruction.
 
 ### Additional local-frame constraints
 
@@ -198,6 +199,78 @@ further prevent treating the interface-only patch as a closed F6 reconstruction.
 - Baseline component stations: `/tmp/exo-f6-module-stations.log`.
 - In-memory comparison: `/tmp/exo-f6-module-stations-source-geometry.log`.
 
-Next implementation should correct the independently sourced interfaces first and then
-apply phase-consistent component mass geometry. Preserve physical thrust/flow references,
+After the structural-interface unit, apply phase-consistent component mass geometry.
+Preserve physical thrust/flow references,
 split ownership and the original ascent/TLI/docking/conservation gates.
+
+## Structural and actuator reference implementation (2026-11-08)
+
+The catalogue now adopts figure 2-2's SM/CM spans and overlapping SPS/LES interfaces.
+The SM renderer bounds its shell to the part and draws RCS hubs at their catalogue centres.
+The 1 m SPS part remains a logical allocation; both stack connections sit at the SM aft
+plane. The LES truss renderer derives its feet from the attachment and reference bounds
+so the longer part does not pull its truss below the capsule.
+
+Figure 2-3's nominal RCS reference is now local SM Y=1.01346 m. Each simplified quad
+still puts its four jets in that plane; radial positions, directions and Isp remain the
+prior estimates, with their uncertainty retained. This is not a measured CSM-107 nozzle
+layout. SPS thrust is at local engine Y=0.37808 m, or 0.12192 m aft of the SM interface.
+`Part` adds this offset to the cluster mount for thrust, gimbal authority, fault isolation
+and its outlet fallback; the zero mount offset must not receive the same correction twice.
+Section 4.4.4.3 (printed p. 4.4-20 / PDF p. 169) independently places thrust application
+and the gimbal plane at X_A=833.2 in; section 4.5 quotes a ±0.25 in gimbal-axis tolerance.
+
+The [Apollo Operations Handbook, Block II, volume 1](https://www.ibiblio.org/apollo/Documents/49176721-Apollo-Operations-Handbook-Block-II-Spacecraft-Volume-1.pdf),
+printed p. 2.4-43 / PDF p. 212, basic 15 April 1969, changed 16 July 1969, gives maximum
+engine length 159.944 in (4.0625776 m) and nozzle inside exit diameter 98.4 in (2.49936 m).
+The original scan was inspected in `/tmp/exo-f6-sps-dimensions-1969.png`. These values
+supersede the coarse 1968 News Reference's approximately 7 ft exit diameter as the next
+geometry reference, but maximum overall length does not give gimbal-to-exit distance.
+No exit offset or finite exit radius is adopted here: the existing point outlet remains
+a declared approximation at the thrust point, not the physical bell exit. The reference
+interface correction does not establish SPS dry CG/inertia or close F4 nozzle geometry.
+
+Independent regressions first failed the old SM span (6.5 m versus 4.1148 m) and RCS
+reference plane. The corrected catalogue passes the initial 26 data, RCS-catalogue and
+engine-torque checks. All six targeted segment/controller cases pass in
+`/tmp/exo-f6-as506-interface-segments/segments.trx`. Two exercise AS-506: insertion
+T+690 s, S-IVB 71.8 t / vehicle 130.9 t, capacity 3346 m/s; docking 344 s / 86.6 kg RCS.
+The four `LunarOrbitInsertionBurnTests` use CSM-103 (Apollo 8), so their LOI/circularization
+results are shared-controller regression evidence only, not validation of CSM-107's SPS.
+A separate docked CSM-107/LM-5 finite-burn scenario is still required.
+The higher docking consumption than the prior geometry is retained as an observation,
+not calibrated away. Native CG/inertia and nozzle offsets remain open. Full CI and
+framebuffer evidence below define acceptance for this interface unit.
+
+### Framebuffer verification
+
+A real production Flight capture was written to
+`/tmp/exo_play-f6-as506-interfaces/exo_play_pad.png` at 1920x1080. Its harness reached
+`SUMMARY reason=SMOKE_OK frames=50`, but `--verify-only` rejected the generic smoke
+contract because it expects the Starbase single-hero complex, not LC-39A. This is a
+failed harness run, not full smoke acceptance; its inputs and image remain evidence.
+No launch-complex acceptance limit was removed or relaxed.
+
+An isolated scene then compared the original `be2b81e` renderer with the new renderer,
+using the same corrected catalogue, camera and lighting, with real Xvfb/llvmpipe pixels.
+Six 1280x1000 captures per version cover two oblique views and a close-up for AS-506
+and AS-503. Authoritative outputs are `/tmp/exo-f6-as506-render-before-{0..5}.png`
+and `/tmp/exo-f6-as506-render-after-rebuilt-{0..5}.png`; AS-506 views 0, 1 and 2 and
+AS-503 close-up 5 were inspected. The corrected tower feet stay at the CM attachment
+rather than running into its side; the shorter SM shell stays within its axial span;
+RCS hubs follow catalogue centres. The AS-503 body/tower retains its earlier bounds,
+while its visible RCS hubs now agree with its existing physics catalogue.
+
+The first incremental after-build reused stale output after source timestamps were
+copied; those identically rendered frames were discarded. A full isolated `Rebuild`
+produced the verified after-rebuilt set. Comparison metadata and renderer hash are in
+`/tmp/exo-f6-as506-render-comparison.json`. Both final builds have zero warnings/errors,
+no engine/script errors were logged, and the temporary scripts/scenes were removed.
+This verifies the affected static meshes, not a complete ascent/return visual mission.
+
+Full CI for this unit passes 1609/1609 tests with zero skips/failures (46 m 57 s), four
+zero-warning/error builds, contracts, Flight 60-frame startup and main/VAB/graphics-1280
+checks. Result `/tmp/exo-f6-as506-interfaces-ci.exit` is 0. The same unfiltered TRX supplies
+`/tmp/exo-f6-as506-interfaces-ci-profiles/report.json`: 53/53 selected cases over nine
+profiles pass with no missing selectors; `--verify-only` confirms source/data/assembly
+identities. The failed LC-39A generic smoke run above remains separate evidence.
