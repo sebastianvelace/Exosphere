@@ -1,278 +1,248 @@
-# Plan: entorno fechado (tiempo, efemérides, gravedad, viento) y recalibración histórica
+# Plan: entorno fechado (tiempo, orientación, efemérides, gravedad, atmósfera y viento) y cierre de la recalibración histórica
 
-Estado: plan, 2026-11-08. Nada de esto está implementado todavía. Sigue a F0–F5 (cerradas) y se
-intercala con el cierre de F6. Orden de prioridad: física primero, visual al final. Cada fase
-cierra con una compuerta analítica y otra histórica registradas en `fidelity_gates.md`, con
-procedencia en `data/provenance/*.json`, sin aflojar tolerancias existentes y con el
-interruptor nuevo apagado hasta pasar paridad.
+Estado: plan revisado 2026-11-08 (versión 2), listo para ejecutar. Nada está implementado todavía.
+Física primero, visual al final. Este plan reemplaza a la versión 1 del mismo día: incorpora
+acceso verificado a las APIs y archivos de NASA/JPL, prototipos medidos y una arquitectura de
+datos escalable.
 
-## 0. Diagnóstico del código actual (verificado 2026-11-08)
+## 0. Diagnóstico del código actual (verificado)
 
-| Tema | Estado en el código | Consecuencia |
+| Tema | Estado | Consecuencia |
 | --- | --- | --- |
-| Tiempo | `Universe.CurrentTime` = segundos desde J2000, sin escala declarada (TT/TDB/UTC) | Ninguna misión puede arrancar en su fecha real |
-| Efemérides | Cada cuerpo tiene elementos keplerianos fijos de dos cuerpos (`data/bodies/*.json`, `epoch` 0); el Sol está fijo en el origen (`Universe.BodyStateAt`) | La Luna no tiene perturbaciones solares (regresión nodal 18,6 años, precesión apsidal 8,85 años, errores de miles de km); geometría Tierra–Luna–Sol arbitraria en Apollo 8/11 |
-| Rotación terrestre | `RotationAxis` es fijo (eclíptica J2000 inclinada `axial_tilt` hacia +Y); el meridiano cero es una convención de la simulación en `t = 0`, no Greenwich (`GetSurfacePositionAtTime`) | Entre 1969 y 2000 la precesión movió el polo ~0,43°: sitios de lanzamiento y planos orbitales fechados no pueden ser correctos |
-| Luna como cuerpo | Polo aproximado (mismo acimut de inclinación que todos), periodo sidéreo, sin libraciones | Sin marco de ejes principales, no se puede usar un campo de gravedad lunar real |
-| Gravedad | Punto masa para todos los cuerpos + J2 de primer orden (`CelestialBody.GetGravityAt`) en una base ecuatorial que no rota | Sin J3/J4 ni teserales terrestres; sin mascons lunares (SP-238: el potencial lunar movió la órbita de Apollo 11 ~2,5 mi náuticas) |
-| Atmósfera | Un perfil fijo por cuerpo (capas USSA-76 en `data/bodies/earth.json`) y cola termosférica | Sin variación diurna, estacional ni solar; decaimiento en LEO sin clima espacial |
-| Viento | No existe. La velocidad aérea es `v − v_cuerpo − ω×r`, calculada por separado en al menos 8 sitios (`Vessel.cs` líneas ~537, 826, 936, 1042, 1080, 1108; `Universe.cs` ~2039; `GravityTurnGuidance`) | Ninguna carga de viento, cizalladura ni deriva; no hay un punto único donde agregarlo |
+| Tiempo | `Universe.CurrentTime` = segundos desde J2000 sin escala declarada | Ninguna misión arranca en su fecha |
+| Cuerpos | Elementos keplerianos fijos de dos cuerpos (`data/bodies/*.json`, `epoch` 0); el Sol fijo en el origen (`Universe.BodyStateAt`) | La Luna sin perturbación solar (nodo 18,6 años, apsis 8,85 años); geometría Tierra–Luna–Sol arbitraria |
+| Orientación terrestre | `RotationAxis` fijo (eclíptica J2000 inclinada hacia +Y); meridiano cero = convención de la simulación en `t = 0` | El polo de 1969 está a 0,169° del de J2000 (medido con SPICE) y la precesión en longitud acumula ~0,42° en el ángulo sidéreo entre 1969 y 2000: sitios y planos fechados no pueden ser exactos |
+| Luna | Mismo acimut de polo que todos los cuerpos, periodo sidéreo, sin libraciones | Sin marco de ejes principales no hay gravedad lunar real |
+| Gravedad | Punto masa + J2 de primer orden en una base ecuatorial que no rota (`CelestialBody.GetGravityAt`) | Sin teserales terrestres ni mascons lunares |
+| Atmósfera | Perfil USSA-76 fijo + cola termosférica | Sin variación diurna/solar; decaimiento LEO sin clima espacial |
+| Viento | No existe; aire relativo `v − v_cuerpo − ω×r` calculado en ≥ 8 sitios (`Vessel.cs` ~537, 826, 936, 1042, 1080, 1108; `Universe.cs` ~2039; `GravityTurnGuidance`) | Sin cargas de viento ni deriva; no hay un punto único donde agregarlo |
 
-## 1. Principios de implementación (aplican a todas las fases)
+## 1. Acceso a datos verificado (2026-11-08)
 
-1. **Un solo punto de verdad por magnitud.** Escala de tiempo, estado de cuerpos, orientación
-   de cuerpos, gravedad y aire relativo se consultan con una sola función cada uno.
-2. **Datos fuera del código.** Coeficientes y tablas se generan con herramientas Python
-   reproducibles en `tools/ephemeris/` a partir de los archivos primarios, se guardan en `data/`
-   con hash SHA-256 del archivo fuente, y cada valor de fidelidad tiene registro de procedencia.
-3. **Interruptor por fase, apagado por defecto** (`Universe.DatedEnvironmentEnabled`,
-   `Universe.WindEnabled`, etc.) hasta que la paridad con el comportamiento actual esté probada
-   con el interruptor apagado y las compuertas nuevas pasen con él encendido.
-4. **Determinismo y guardado.** Toda entrada nueva (época de misión, perfil de viento, semilla de
-   ráfagas) va en `SaveGameV2` con campos opcionales; un guardado viejo carga con el
-   comportamiento viejo.
-5. **Presupuesto de rendimiento.** Cada evaluación nueva se mide por paso RK4 a 50 Hz; objetivo
-   menor a 10 µs por evaluación de gravedad y menor a 2 µs por estado de cuerpo. Los modelos se
-   evalúan en raíles solo donde importan.
-6. **Pruebas rápidas primero.** Las compuertas analíticas no pueden tardar más de segundos; las
-   históricas largas se marcan en `tools/slow_tests.txt`.
-
-## 2. Fase E1 — Tiempo y orientación de la Tierra
-
-**Objetivo.** Que `CurrentTime` sea TDB en segundos desde J2000.0 (2000-01-01 12:00 TT) y que
-la Tierra tenga orientación fechada (precesión, nutación, rotación con UT1).
-
-**Fuentes primarias.**
-- IERS Conventions 2010 (TN36), capítulos 5 (transformación celeste–terrestre) y 10 (escalas).
-- IAU SOFA (rutinas de referencia para validar; revisar su licencia antes de portar código;
-  la alternativa es implementar desde TN36 y usar SOFA solo como oráculo en pruebas).
-- IERS EOP 14 C04 / 20 C04: UT1−UTC y movimiento del polo diarios desde 1962.
-- Tabla TAI−UTC (USNO/IERS), incluida la UTC "elástica" de 1961–1971.
-
-**Diseño.**
-- `Time/TimeScales`: UTC↔TAI↔TT↔TDB (TDB−TT por la serie de Fairhead–Bretagnon truncada,
-  ~2 ms) y UT1 desde la tabla EOP. Entrada de misión en UTC civil; conversión una vez.
-- `Earth/EarthOrientation`: precesión IAU 2006, nutación IAU 2000B (error < 1 mas, suficiente),
-  ERA(UT1); movimiento del polo opcional (≤ 15 m en superficie). Devuelve la rotación del marco
-  terrestre (ITRS) al celeste (GCRS).
-- Marco de la simulación: hoy es eclíptico J2000. Se mantiene como marco inercial de trabajo
-  (rotación fija por la oblicuidad IAU 2006 ε0 = 84381,406″ desde ICRF; el sesgo de marco de
-  ~23 mas se documenta y se ignora). `CelestialBody.RotationAxis` y la base de superficie pasan
-  a depender del tiempo.
-- `GetSurfacePositionAtTime`, `ToBodyFixedDirection`, `GetSurfaceVelocity` y la base de J2
-  consumen la misma orientación; la longitud pasa a ser Greenwich real.
-- Época por misión: `MissionDefinition.LaunchEpochUtc` (por ejemplo Apollo 11
-  1969-07-16 13:32:00 UTC; SP-238 tabla 3-I) y `SaveGameV2.EpochScale`.
-
-**Compuertas.**
-- Analíticas: ida y vuelta de escalas (error < 1 µs); casos de prueba publicados de SOFA para
-  precesión-nutación (< 1 mas) y ERA; la velocidad de superficie sigue siendo la derivada
-  exacta de la posición de superficie (la prueba actual se conserva).
-- Histórica: posición inercial de LC-39A en el lanzamiento de Apollo 11 contra una referencia
-  independiente (Horizons/SPICE con ITRF); el acimut de lanzamiento de 72,058° del AS-506 se
-  reproduce con el plano de la Luna fechado (enlaza con E2).
-
-**Riesgos.** Los perfiles que hoy dependen de la convención `t = 0` (sitios, ventanas lunares,
-Flight 14) cambian de geometría: se recalibran solo con el interruptor encendido, conservando
-sus tolerancias originales.
-
-## 3. Fase E2 — Efemérides fechadas
-
-**Objetivo.** Estados del Sol, la Luna, los planetas y el baricentro Tierra–Luna desde JPL
-DE440, más los ángulos de libración lunar, para cualquier fecha entre 1957 y 2035.
-
-**Fuentes primarias.**
-- Park et al. 2021, AJ 161, 105 (DE440/DE441). DE440 cubre 1550–2650; DE440s (≈32 MB) cubre
-  1849–2150. NAIF recomienda DE440 para datos modernos; DE441 para épocas muy antiguas.
-- Formato: polinomios de Chebyshev por intervalos; incluye libraciones lunares (ángulos de Euler
-  del manto) integradas junto con las órbitas.
-
-**Diseño.**
-- `tools/ephemeris/extract_de440.py` (jplephem o el formato ASCII de JPL) extrae 1957–2035 para
-  Sol, Mercurio–Saturno, BTL, Luna geocéntrica y libraciones; escribe un binario compacto
-  `data/ephemerides/de440_1957_2035.bin` (estimado < 8 MB; verificarlo al generar) con su hash.
-- `Ephemeris/ChebyshevEphemeris`: evaluación de posición y velocidad (derivada analítica de
-  Chebyshev), sin asignaciones por llamada.
-- `Universe.BodyStateAt` usa la efeméride cuando el interruptor está encendido; los elementos
-  keplerianos quedan como respaldo fuera del rango y para el modo sandbox sin fecha.
-- La Tierra deja de orbitar el Sol con dos cuerpos: Tierra = BTL − Luna·μL/(μT+μL).
-- El Sol deja de estar fijo en el origen: origen = baricentro del sistema solar (ICRF), rotado
-  al marco de trabajo. Comprobar que la precisión doble alcanza (1 AU ≈ 1,5e11 m: resolución
-  ~3e-5 m; suficiente).
-- Marcos lunares: orientación del manto desde las libraciones de DE440 (marco de ejes
-  principales); IAU WGCCRE como respaldo.
-- Raíles y SOI: `KeplerPropagator` para naves sigue siendo cónico respecto a su cuerpo, pero los
-  cuerpos se mueven por la efeméride; revisar el cruce de SOI con cuerpos no keplerianos (el
-  contrato `BodyStateAt(body, t)` ya existe).
-
-**Compuertas.**
-- Analíticas: la evaluación reproduce los vectores de prueba que publica JPL para DE440
-  (archivo `testpo`) a mejor que 1 mm; continuidad de posición y velocidad entre intervalos.
-- Históricas: (a) la geometría Tierra–Luna en la TLI de Apollo 11 contra SP-238 tabla 7-II;
-  (b) con guiado fechado, la hora de LOI de Apollo 11 (75:49:50 GET) y la de Apollo 8 dentro de
-  una banda justificada por el error de la TLI simulada.
-
-**Riesgos.** Las misiones lunares hoy calibradas con la Luna kepleriana cambiarán; las
-compuertas de Apollo se re-evalúan con su fecha real, no se ajustan para conservar números viejos.
-
-## 4. Fase E3 — Gravedad
-
-**Objetivo.** Gravedad terrestre con armónicos hasta grado configurable y gravedad lunar con
-mascons, en marcos fijos al cuerpo fechados (E1/E2).
-
-**Fuentes primarias.**
-- Tierra: EGM2008 (NGA, completo a grado y orden 2159; archivo `EGM2008_to2190_TideFree`);
-  usar grado ≤ 20 para LEO y ≤ 8 para cálculo rápido. Alternativa histórica: JGM-3 20×20.
-- Luna: GRAIL GRGM1200A (PDS Geosciences, `GGGRX_1200A_SHA.TAB`, coeficientes normalizados 4π,
-  radio de referencia 1738 km). Confirmar en la etiqueta PDS el marco (ejes principales de la
-  efeméride usada por GRAIL) y transformarlo al marco de DE440 si difiere. Truncar a grado
-  50–100 según la altitud mínima (para 100 km, comparar las aceleraciones de grado 50, 70 y 100
-  y elegir el corte por error y no por costo).
-
-**Diseño.**
-- `Physics/SphericalHarmonicGravity`: recursión de Pines (sin singularidad en los polos) o de
-  Cunningham normalizada, coeficientes en un arreglo plano, aceleración en el marco fijo al cuerpo
-  rotada al marco inercial. Precomputar factores; cero asignaciones.
-- `CelestialBody.Gravity` pasa a ser una estrategia: punto masa / J2 actual (paridad) /
-  armónicos esféricos. El J2 actual queda como caso particular comprobado.
-- Rendimiento: grado n cuesta O(n²); medir y fijar grado por cuerpo en el JSON
-  (`gravity_model`, `max_degree`) con procedencia.
-- Gradiente de gravedad (F4) sigue usando el punto masa salvo que se demuestre necesario.
-
-**Compuertas.**
-- Analíticas: aceleración contra una implementación de referencia independiente (pyshtools o
-  evaluación directa de Legendre en Python) en 200 puntos, error relativo < 1e-12; potencial y
-  aceleración consistentes (diferencias finitas); J2-only reproduce el modelo actual bit a bit
-  o < 1e-15; precesión nodal por J2 de una órbita circular contra la fórmula analítica.
-- Históricas lunares: SP-238 sección 7: desde la órbita de circularización de 53,8 × 65,7 mi
-  náuticas a las 80:12 GET, la órbita a las 126 h fue de 56,6 × 62,4 mi náuticas (el modelo R2
-  de la época predecía 59,3 × 59,9); el modelo debe acercarse a lo observado más que R2. Apollo 8
-  (Apollo 8 Mission Report, MSC-PA-R-69-1; verificar la designación) como segundo caso. Bandas a justificar con la incertidumbre del
-  estado inicial antes de mirar el resultado.
-- Histórica terrestre: deriva nodal y apsidal de una órbita de estacionamiento publicada
-  (Gemini/Apollo) durante varias revoluciones.
-
-## 5. Fase E4 — Atmósfera y viento
-
-**Objetivo.** Viento medido o modelado en todas las altitudes donde hay aire, densidad variable
-con la fecha y ráfagas opcionales, con un único punto de cálculo del aire relativo.
-
-**Paso previo obligatorio (refactor sin cambio de comportamiento).**
-`CelestialBody.GetAirVelocity(position, time)` = rotación del cuerpo + viento. Reemplazar los
-~8 cálculos repetidos de `v − v_cuerpo − ω×r` por `vessel.GetAirRelativeVelocity(body)`; con el
-viento en cero, toda la suite debe quedar bit a bit igual (compuerta de paridad).
-
-**Fuentes primarias.**
-- Viento de lanzamiento histórico: los FER de Saturn V publican viento escalar, dirección,
-  componentes de cabeceo/guiñado y cizalladuras en el apéndice A (AS-506: figuras A-1 a A-5,
-  tablas A-3 a A-5; viento en superficie 3,3 m/s del sur a 18,3 m; pico 9,6 m/s a 11,40 km).
-- Sondeos numéricos: NOAA IGRA v2 (radiosondas desde 1905, viento incluido). Estaciones a
-  confirmar en la lista de IGRA: Cabo Cañaveral (USM00074794) y Brownsville (USM00072250, para
-  Starbase).
-- Termosfera: HWM14 (viento horizontal, NRL; código Fortran y tres archivos binarios de datos).
-- Densidad: NRLMSIS 2.0 (suelo a exobase) con F10.7 y Ap históricos de CelesTrak (`SW-All.txt`).
-- Ráfagas: espectros de Dryden o von Kármán (MIL-HDBK-1797) con semilla fija.
-
-**Diseño.**
-- `Environment/WindField`: interfaz `Vector3d WindAt(geodeticLat, lon, altitude, time)` en el
-  marco local ENU convertido a inercial; implementaciones: cero, perfil por altitud tabulado por
-  misión (`data/winds/<mission>.json`, digitalizado del FER con procedencia o importado de IGRA),
-  HWM14 por encima del perfil medido, mezcla suave entre capas.
-- `Environment/AtmosphereModel`: el perfil USSA-76 actual queda como caso por defecto;
-  NRLMSIS 2.0 opcional por fecha. La presión que usan los motores y la densidad que usa la
-  aerodinámica salen del mismo estado.
-- Ráfagas: filtro de Dryden discreto en el paso de control, determinista por semilla.
-- Rendimiento: el perfil se evalúa por interpolación en tabla; NRLMSIS solo por encima de 80 km
-  o con caché por paso.
-
-**Compuertas.**
-- Analíticas: viento uniforme ⇒ una partícula solo con arrastre alcanza la velocidad del viento
-  con la constante de tiempo m/(½ρCdA·v); paridad exacta con viento cero; NRLMSIS contra sus
-  vectores de prueba publicados; espectro de la ráfaga sintética contra el de Dryden.
-- Históricas (AS-506, FER tabla 11-2 y figura 11-5), con el perfil de viento del día:
-  ángulo de ataque máximo 1,82° en cabeceo (T+117,1 s) y 1,42° en guiñado (T+73,0 s); producto
-  Qα máximo 4,93 deg·N/cm² (T+91,4 s); deflexión media de gimbal 0,23°/−0,44°; aceleración
-  normal −0,331 / 0,306 m/s². Bandas fijadas antes de correr, desde la incertidumbre del perfil
-  (resolución de la figura) y del modelo de normal-force.
-
-**Riesgos.** El guiado actual de ascenso no compensa viento; con viento real puede necesitar
-el bias de viento que usaban los programas de inclinación (documentar, no inventar ganancias).
-
-## 6. Cierre de F6 (recalibración histórica) — pendientes concretos
-
-Orden por impacto físico; cada uno con su fuente primaria y compuerta:
-
-1. **AS-506 inserción** (+10 s, −6,7 t de S-IVB, −7,6 t de vehículo frente al FER): reconstruir
-   flujo y mezcla del F-1 en altura (el par empuje/Isp de vacío implica 2712 kg/s contra 2616 a
-   nivel del mar), la época inicial y el PU del J-2. Fuente: FER tablas 5-I y 20-x.
-2. **Tanques del SPS**: cuatro tanques fuera del eje (almacenamiento y sumidero por
-   constituyente), drenaje almacenamiento→sumidero, residuos no expulsables y criogénicos
-   (SP-238 tablas 8-X a 8-XII; CSM Data Book para la geometría). Cierra el residuo de giración
-   de +6 % del CSM en el TD&E.
-3. **Salida de tobera del SPS** para la configuración CSM-107 (el documento de 1966 es de otra
-   versión): buscar el CSM Data Book o el AOH de 1969.
-4. **MA-6 Atlas nativo**: sustainer, verniers y PU desde el ledger previo al vuelo ya localizado
-   (`atlas_ma6_reconstruction.md`), reemplazando el sustainer efectivo de calibración.
-5. **Aerodinámica pendiente**: aletas del S-IC (Saturn V CP/Cmα de túnel de viento NASA),
-   grid fins de Super Heavy, modelo newtoniano modificado para cápsulas romas (Mercury, Gemini,
-   Apollo CM) con sus datos de túnel.
-6. **Estaciones S-II/S-IVB estimadas** → datos del FER o del manual del vehículo.
-7. **AS-503**: misma geometría de tanques que AS-506 para que F5 aplique a Apollo 8.
-8. **Gemini 8**: lanzamiento con el Agena en su órbita fechada (requiere E1/E2), no colocado
-   arriba por geometría de escenario.
-9. **Flight 14**: marco y dato de la velocidad mostrada en la transmisión y el desajuste de
-   velocidad hipersónica tardía; selección exacta del océano.
-
-## 7. Mejoras pendientes de la física fuera de F6 (después de E1–E4)
-
-| Fase propuesta | Contenido | Fuente / compuerta guía |
+| Recurso | Acceso desde la sesión | Uso |
 | --- | --- | --- |
-| G1 Guiado | IGM iterativa para la inserción de S-II/S-IVB y la TLI (hoy prograda) | MSFC IGM equations; TLI residual ~6 m/s en la primera MCC de Apollo |
-| F7 Flexión | Modos de viga por etapa acoplados al TVC y a los sensores | FER AS-506 dice efecto despreciable en Saturn V: priorizar Starship |
-| F8 Térmica | Ablación y recesión del escudo, conducción interna, apagón de plasma | Datos de vuelo de Apollo 4/6 (calorímetros), FIRE II |
-| F9 Motores | Transitorios de encendido/apagado, dinámica del actuador de gimbal, deriva de mezcla, modos de falla | FER tablas de arranque F-1/J-2; Raptor sin datos públicos (estimado) |
-| F10 Slosh | Modos superiores y líquido no asentado en costa | SP-106 cap. 11 (baja gravedad) |
+| JPL Horizons API (`ssd.jpl.nasa.gov/api/horizons.api`) | Probado: Luna geocéntrica ICRF en 1969-07-16 13:32 UTC, `source: DE441` | Oráculo independiente para pruebas |
+| NAIF generic kernels | Descargados y con SHA-256: `de440s.bsp` (32,7 MB), `earth_620120_260806.bpc` (12,3 MB, orientación terrestre desde 1962-01-20 con EOP), `moon_pa_de440_200625.bpc`, `moon_de440_250416.tf`, `naif0012.tls`, `pck00011.tpc`, `gm_de440.tpc` | Fuente de efemérides y orientación lunar; oráculo de la Tierra |
+| SpiceyPy 8.3.0 (CSPICE N0067) y jplephem | Instalados con pip | Herramientas de generación offline |
+| NASA NTRS API (`ntrs.nasa.gov/api/citations/search`) | Probado (38 resultados para AS-506) | Localizar y citar informes por ID |
+| PDS Geosciences (GRAIL) | Probado: `gggrx_1200a_sha.tab`, encabezado R = 1738 km, GM = 4902,8001224453 km³/s², normalización 4π, filas `n, m, C, S, σC, σS`; el marco es el de ejes principales **DE430** según la etiqueta | Gravedad lunar |
+| NOAA NCEI IGRA v2 | Probado: `USM00074794` CAPE KENNEDY (1950–2026) y `USM00072250` BROWNSVILLE/INT. (1929–2026); sondeo del 1969-07-16 14Z con 17 niveles de viento, superficie 180°/1 m/s = FER tabla A-I | Viento medido por fecha |
+| FER AS-506 (MPR-SAT-FE-69-9, archive.org) | Texto extraído: apéndice A (viento), tabla 11-2 (parámetros de control S-IC) | Compuerta histórica de viento |
 
-## 8. Visual (después de la física)
+**Prototipos medidos** (ajuste de Chebyshev contra SPICE, 1962–2035, error máximo en 60 tramos
+aleatorios × 40 puntos):
 
-1. Composición atmósfera–superficie (Tierra en espacio escalado tapando el casco, bruma
-   opaca, capa cian fija).
-2. Comparación fotográfica lado a lado: hot-staging, encendido, pluma de vacío, reentrada,
-   grid fins, casco, torre.
-3. Nubes con silueta y clima coherente con el viento de E4 (mismo dato de la fecha).
-4. Reentrada con choque y plasma más ricos; agua y salpicadura; captura en torre.
+| Serie | Tramo / grado | Error máximo | Tamaño |
+| --- | --- | --- | --- |
+| Luna geocéntrica | 8 d / 16 | 0,7 mm | 1,38 MB |
+| Baricentro Tierra–Luna | 16 d / 13 | 5,4 mm | 0,57 MB |
+| Sol (baricéntrico) | 32 d / 11 | 25 mm | 0,24 MB |
+| Orientación de la Luna (ejes principales DE440) | 8 d / 12 | 2 µm en superficie | 2,75 MB |
+| Orientación terrestre compactada desde SPICE | cualquier tramo | ~35–40 m | — |
+
+La orientación terrestre **no** se compacta bien desde SPICE: el movimiento del polo, fijo en el
+marco terrestre, hace que el polo ITRF gire a diario alrededor del polo celeste y acopla los
+ángulos (verificado con segundas diferencias). La Tierra se implementa con el modelo IERS
+estándar y SPICE queda como oráculo.
+
+## 2. Arquitectura escalable
+
+### 2.1 Canal de datos (`tools/envdata/`, Python, versiones fijadas en `requirements.txt`)
+
+- `data/environment/manifest.json`: una entrada por dataset externo con URL, versión, licencia,
+  fecha de obtención y SHA-256 del archivo fuente; una entrada por producto generado con el
+  comando que lo produce y el SHA-256 de su salida.
+- `envdata fetch` descarga a una caché local (fuera de git) y verifica los hashes.
+- `envdata build <producto>` genera binarios deterministas (little-endian, cabecera con versión,
+  marco, escala de tiempo, intervalo, grado y hash de la fuente). Reconstruir debe dar el mismo
+  SHA-256.
+- `envdata provenance` escribe los registros de `data/provenance/` a partir del manifiesto, de
+  modo que ningún dato llega sin fuente.
+- `envdata fixtures` consulta Horizons y SPICE y guarda vectores de referencia en
+  `ExosphereSimulation.Tests/Fixtures/environment/` con la consulta exacta y la fecha.
+- Contrato de CI (sin red): cada producto en `data/environment/` coincide con el SHA-256 del
+  manifiesto y tiene procedencia. La red solo se usa al regenerar.
+
+**Escalabilidad:** agregar un cuerpo, una misión o un perfil de viento es agregar una entrada al
+manifiesto y a la configuración JSON, sin código nuevo.
+
+### 2.2 Servicios en la simulación (`ExosphereSimulation/Environment/`, sin Godot)
+
+| Interfaz | Implementaciones | Configuración |
+| --- | --- | --- |
+| `ITimeScale` | `TimeScales` (UTC↔TAI↔TT↔TDB, UT1 desde EOP) | `data/environment/time/*.bin` |
+| `IEphemerisProvider` | `ChebyshevEphemeris` (DE440), `KeplerEphemeris` (actual, respaldo y sandbox) | `ephemeris` en `data/bodies/*.json` |
+| `IBodyOrientation` | `IersEarthOrientation`, `ChebyshevOrientation` (Luna), `IauRotationModel` (resto), `FixedAxisRotation` (actual) | `orientation` en el JSON del cuerpo |
+| `IGravityField` | `PointMass`, `ZonalJ2` (actual, bit a bit), `SphericalHarmonics` (Pines) | `gravity: {model, file, max_degree}` |
+| `IAtmosphere` | `LayeredAtmosphere` (actual), `NrlMsis2` | `atmosphere` en el JSON del cuerpo |
+| `IWindField` | `NoWind`, `ProfileWind` (tabla por altitud), `Hwm14Wind`, `CompositeWind`, `DrydenGusts` | `wind` en la misión |
+
+`EnvironmentContext` agrupa los proveedores y la época de la misión; `Universe` lo consulta a
+través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `GravityAt`,
+`AirVelocityAt`, `AtmosphereAt`.
+
+### 2.3 Reglas transversales
+
+1. Interruptor por capacidad (`Universe.Environment.DatedEphemerides`, `.EarthOrientation`,
+   `.SphericalGravity`, `.Wind`, `.DatedAtmosphere`), apagado hasta pasar paridad y compuertas.
+2. Con todo apagado la suite completa queda **bit a bit igual** (compuerta de paridad).
+3. `SaveGameV2`: campos opcionales para la época, la escala y los identificadores de dataset;
+   un guardado viejo carga con el entorno viejo.
+4. Rendimiento (medido en la suite y en Godot): estado de cuerpo < 1 µs, orientación < 1 µs,
+   gravedad grado 50 < 15 µs, viento por perfil < 0,5 µs; caché por paso RK4.
+5. Pruebas: analíticas en segundos; históricas largas en `tools/slow_tests.txt`.
+6. Precisión doble: con origen en el baricentro del sistema solar, 1 AU tiene resolución
+   ~3·10⁻⁵ m; el integrador de la nave sigue trabajando relativo a su cuerpo de referencia.
+
+## 3. Unidades de trabajo (cada una es un PR verificable)
+
+### E0 — Fundaciones (sin cambio de comportamiento)
+
+- **E0.1 Aire relativo en un punto.** `CelestialBody.GetAirVelocity(position, time)` (hoy:
+  rotación) y `Vessel.GetAirRelativeVelocity(body)`; reemplazar los ≥ 8 cálculos.
+  *Salida:* suite completa idéntica; `ci_quick` + CI completa verdes.
+- **E0.2 Canal `envdata`** con manifiesto, fetch, build determinista, provenance, fixtures y el
+  contrato de CI sin red. *Salida:* reconstrucción reproduce el SHA-256; contrato verde.
+- **E0.3 `EnvironmentContext`** con los proveedores actuales envueltos (Kepler, eje fijo, J2,
+  USSA-76, sin viento). *Salida:* paridad bit a bit.
+
+### E1 — Tiempo y orientación terrestre
+
+- **E1.1 Escalas de tiempo.** TT = TAI + 32,184 s; TAI−UTC de la tabla oficial, incluida la UTC
+  con fracciones de 1961–1971; TDB−TT por la serie de Fairhead–Bretagnon truncada (< 10 µs);
+  UT1 desde EOP 20 C04 (desde 1962). *Analítica:* ida y vuelta < 1 µs; contra `spiceypy.unitim`
+  y `et2utc` en 100 instantes 1962–2035 (< 10 µs).
+- **E1.2 Orientación terrestre.** Precesión IAU 2006, nutación IAU 2000B, ERA(UT1), movimiento
+  del polo (x_p, y_p) y s′; tabla EOP diaria ~0,5 MB. Antes de 1962-01-20 (Freedom 7): modelo
+  sin EOP (UT1 ≈ UTC) con la incertidumbre declarada. *Analítica:* contra
+  `pxform("ITRF93","J2000")` del kernel `earth_620120_260806.bpc` en 500 instantes: < 0,5 m en
+  superficie (IAU 2000B ~1 mas + diferencia ITRF93/ITRF actual). *Histórica:* posición inercial
+  de LC-39A en el lanzamiento de Apollo 11 contra Horizons (sitio topocéntrico) < 1 m.
+- **E1.3 Época por misión.** `MissionDefinition.LaunchEpochUtc` y conversión única a TDB;
+  Apollo 11: 1969-07-16 13:32:00 UTC (SP-238). Sitios en ITRF desde `data/launch_sites` con
+  datum declarado. *Salida:* con el interruptor apagado, nada cambia.
+
+### E2 — Efemérides fechadas
+
+- **E2.1 Producto `de440_1957_2035`.** Sol, Mercurio a Saturno (baricentros), BTL y Luna
+  geocéntrica, con los tramos y grados de la tabla de prototipos (la Luna de 8 d / 16), marco
+  ICRF/J2000 y TDB. Tamaño medido < 4 MB.
+- **E2.2 `ChebyshevEphemeris`.** Posición y velocidad (derivada analítica), sin asignaciones;
+  Tierra = BTL − Luna·μ_L/(μ_T + μ_L) con los GM de `gm_de440.tpc`; origen en el baricentro.
+- **E2.3 Marco de trabajo.** La simulación pasa de eclíptica J2000 a ICRF (rotación fija por
+  ε₀ = 84381,406″ en el cambio; sesgo de marco ~23 mas documentado). Se adapta
+  `OrbitalElements` y los datos que dependen del marco, con pruebas de equivalencia.
+- **E2.4 Integración.** `BodyStateAt` y SOI usan la efeméride; Kepler queda como respaldo fuera
+  del rango y para el sandbox.
+- *Analítica:* contra los vectores de prueba de JPL y contra fixtures de SPICE (< 1 mm Luna);
+  continuidad en los bordes de tramo. *Histórica:* geometría de la TLI y hora de LOI de Apollo 11
+  (75:49:50,4 GET, SP-238 tabla 7-II) con guiado fechado; mismo caso para Apollo 8.
+
+### E3 — Gravedad
+
+- **E3.1 Orientación lunar** desde `moon_pa_de440_200625.bpc` (8 d / 12, 2 µm). GRGM1200A está
+  en el marco de ejes principales DE430: la rotación DE430→DE440 se toma de NAIF y su efecto
+  se declara (< 1″ esperado; medirlo en el build).
+- **E3.2 `SphericalHarmonics`** (recursión de Pines, coeficientes normalizados 4π, grado
+  configurable). *Analítica:* contra evaluación directa de Legendre en Python en 200 puntos
+  (error relativo < 1e-12); potencial y gradiente consistentes; `ZonalJ2` reproduce el modelo
+  actual bit a bit; precesión nodal de J2 contra la fórmula.
+- **E3.3 Datos.** Luna: GRGM1200A truncado (grado a elegir por error de aceleración a 100 km
+  entre 50, 70 y 100). Tierra: EGM2008 tide-free hasta grado 20 (LEO) y 8 (rápido).
+- *Histórica lunar (SP-238 sección 7):* desde 53,8 × 65,7 mi náuticas tras la circularización
+  (80:12 GET), la órbita a las 126 h fue 56,6 × 62,4; el modelo R2 de la época predecía
+  59,3 × 59,9. Compuerta: el modelo nuevo se acerca a lo observado más que R2, con banda fijada
+  antes de correr desde la incertidumbre del estado inicial. Apollo 8 como segundo caso.
+- *Histórica terrestre:* evolución de una órbita de estacionamiento publicada (Gemini/Apollo).
+
+### E4 — Atmósfera y viento
+
+- **E4.1 `ProfileWind`.** Perfil por misión (`data/winds/<misión>.json`): altitud, velocidad,
+  dirección, con fuente por tramo. AS-506: estructura fina digitalizada del FER (figuras A-1 a
+  A-4, pico 9,6 m/s a 11,40 km; superficie 3,3 m/s del sur a 18,3 m) y control cruzado con IGRA
+  14Z (17 niveles). Herramienta de digitalización con la incertidumbre de lectura registrada.
+- **E4.2 `Hwm14Wind`** por encima del perfil medido, con mezcla suave.
+- **E4.3 `NrlMsis2`** con F10.7/Ap de CelesTrak `SW-All.txt` por fecha; presión de motores y
+  densidad aerodinámica del mismo estado.
+- **E4.4 `DrydenGusts`** (MIL-HDBK-1797) con semilla guardada.
+- *Analíticas:* viento uniforme ⇒ deriva con la constante de tiempo de arrastre; viento cero ⇒
+  paridad exacta; NRLMSIS contra sus vectores de prueba; espectro de Dryden.
+- *Histórica (FER AS-506 tabla 11-2):* ángulo de ataque máximo 1,82° en cabeceo (T+117,1 s) y
+  1,42° en guiñado (T+73,0 s); Qα máximo 4,93 deg·N/cm² (T+91,4 s); gimbal medio 0,23°/−0,44°;
+  aceleración normal −0,331/0,306 m/s². Bandas desde la incertidumbre del perfil y del
+  coeficiente de fuerza normal, fijadas antes de correr.
+
+### E5 — Encender el entorno fechado por defecto
+
+Recalibrar los perfiles históricos con el entorno nuevo **sin aflojar ninguna tolerancia**;
+los que fallen se investigan como hallazgos físicos. CI completa verde y Godot verificado.
+
+## 4. Cierre de F6 (recalibración histórica)
+
+Orden por impacto físico, cada uno con fuente primaria y compuerta:
+
+1. **Inserción del AS-506** (+10 s, −6,7 t de S-IVB, −7,6 t de vehículo frente al FER): flujo
+   y mezcla del F-1 en altura (el par empuje/Isp de vacío implica 2712 kg/s contra 2616 a nivel
+   del mar), PU del J-2 y época real (E1/E2). Fuente: FER tablas 5-I y 20-x.
+2. **Tanques del SPS:** cuatro tanques fuera del eje, drenaje almacenamiento→sumidero, residuos
+   no expulsables y criogénicos (SP-238 tablas 8-X a 8-XII; CSM Data Book vía NTRS). Cierra el
+   +6 % de giración del CSM en el TD&E.
+3. **Salida de tobera del SPS** para CSM-107 (buscar CSM Data Book/AOH 1969 en NTRS).
+4. **MA-6 Atlas nativo:** sustainer, verniers y PU desde el ledger previo al vuelo
+   (`atlas_ma6_reconstruction.md`).
+5. **Aerodinámica:** aletas del S-IC (CP/Cmα de túnel de viento NASA), grid fins, Newton
+   modificado para cápsulas romas con sus datos de túnel.
+6. **Estaciones S-II/S-IVB** desde FER o manuales.
+7. **AS-503** con geometría de tanques para que F5 aplique a Apollo 8.
+8. **Gemini 8** con el Agena en su órbita fechada (requiere E1/E2).
+9. **Flight 14:** marco de la velocidad de transmisión, desajuste hipersónico tardío, océano.
+
+## 5. Física posterior (cada una como fase con compuertas)
+
+| Fase | Contenido | Fuente o compuerta guía |
+| --- | --- | --- |
+| G1 Guiado | IGM iterativa para S-II/S-IVB y la TLI (hoy prograda) | Ecuaciones IGM de MSFC; primera MCC de Apollo ~6 m/s |
+| F7 Flexión | Modos de viga acoplados al TVC y sensores | El FER del AS-506 dice efecto despreciable en Saturn V: priorizar Starship |
+| F8 Térmica | Ablación, recesión, conducción interna, apagón de plasma | Apollo 4/6, FIRE II |
+| F9 Motores | Transitorios, actuador de gimbal, deriva de mezcla, fallas | FER (arranque F-1/J-2) |
+| F10 Slosh | Modos superiores y baja gravedad | SP-106 cap. 11 |
+
+## 6. Visual (después de la física)
+
+1. Composición atmósfera–superficie (Tierra escalada tapando el casco, bruma opaca, capa cian fija).
+2. Comparación fotográfica lado a lado: hot-staging, encendido, pluma de vacío, reentrada, grid fins, casco, torre.
+3. Nubes y clima coherentes con el viento y la fecha de E4.
+4. Reentrada (choque y plasma), agua y salpicadura, captura en torre.
 5. Capturas automáticas en CI con heurísticas.
 
-## 9. Secuencia y criterios de salida
+## 7. Secuencia y estimación
 
-| Paso | Entregable | Salida |
+| Paso | Unidades | Bloquea a |
 | --- | --- | --- |
-| 1 | Refactor del aire relativo a un único punto (E4 paso previo) | Suite bit a bit igual |
-| 2 | E1 escalas de tiempo + orientación terrestre | Compuertas E1; interruptor apagado sin cambios |
-| 3 | E2 efemérides DE440 | Vectores de prueba JPL; Apollo 11 TLI/LOI fechados |
-| 4 | E4 viento AS-506 | Tabla 11-2 del FER |
-| 5 | E3 gravedad lunar + terrestre | SP-238 evolución orbital a 126 h |
-| 6 | Cierre de F6 (lista de la sección 6) | Residuos documentados dentro de bandas fuente |
-| 7 | Encender por defecto el entorno fechado | CI completa verde con el entorno nuevo |
-| 8 | G1, F7–F10 | Una fase por vez, con sus compuertas |
-| 9 | Visual | Ver sección 8 |
+| 1 | E0.1, E0.2, E0.3 | todo lo demás |
+| 2 | E1.1 → E1.2 → E1.3 | E2, E3, E4.3 |
+| 3 | E2.1 → E2.4 | E3.1, F6.8 |
+| 4 | E4.1 (AS-506) → E4.2 → E4.3 → E4.4 | E5 |
+| 5 | E3.1 → E3.3 | E5 |
+| 6 | E5 | — |
+| 7 | F6.1–F6.9 (F6.2–F6.7 pueden ir en paralelo con E1–E4) | — |
+| 8 | G1, F7–F10 | — |
+| 9 | Visual | — |
 
-## Fuentes consultadas para este plan
+## Fuentes
 
-- [JPL: DE440 y DE441](https://ssd.jpl.nasa.gov/doc/de440_de441.html) y
-  [NAIF de440_and_de441.pdf](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440_and_de441.pdf);
-  [exportación de efemérides JPL](https://ssd.jpl.nasa.gov/planets/eph_export.html);
-  [Skyfield: tamaños y rangos](https://rhodesmill.org/skyfield/planets.html);
+- Efemérides: [JPL DE440/DE441](https://ssd.jpl.nasa.gov/doc/de440_de441.html),
+  [NAIF de440_and_de441.pdf](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440_and_de441.pdf),
+  [NAIF PCK](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/),
+  [Horizons API](https://ssd.jpl.nasa.gov/api/horizons.api),
   Park et al. 2021, [AJ 161, 105](https://ui.adsabs.harvard.edu/abs/2021AJ....161..105P).
-- [GRGM1200A (GSFC PGDA)](https://pgda.gsfc.nasa.gov/products/50) y su
-  [etiqueta PDS](https://pds-geosciences.wustl.edu/grail/grail-l-lgrs-5-rdr-v1/grail_1001/shadr/gggrx_1200b_sha.xml).
-- [NOAA IGRA](https://www.ncei.noaa.gov/products/weather-balloon/integrated-global-radiosonde-archive),
-  [descripción IGRA v2](https://www.ncei.noaa.gov/pub/data/igra/igra2-product-description.pdf).
-- [EGM2008](https://en.wikipedia.org/wiki/Earth_Gravitational_Model) (archivo NGA
-  `EGM2008_to2190_TideFree`), [HWM14 (CCMC)](https://ccmc.gsfc.nasa.gov/models/HWM14~2014),
-  [pymsis / NRLMSIS 2.0](https://github.com/SWxTREC/pymsis),
-  [formato de clima espacial CelesTrak](https://celestrak.org/SpaceData/SpaceWx-format.php).
-- [IERS EOP C04](https://hpiers.obspm.fr/iers/eop/eopc04/readme), [IAU SOFA](https://iausofa.org/current-software).
-- MPR-SAT-FE-69-9 (FER del AS-506), apéndice A y tabla 11-2,
-  [copia en archive.org](https://archive.org/download/nasa_techdoc_19900066485/19900066485.pdf);
-  NASA SP-238 (Apollo 11 Mission Report), sección 7 y apéndice B.
+- Orientación y tiempo: [IERS EOP C04](https://hpiers.obspm.fr/iers/eop/eopc04/readme),
+  IERS Conventions 2010 (TN36), [IAU SOFA](https://iausofa.org/current-software).
+- Gravedad: [GRGM1200A](https://pgda.gsfc.nasa.gov/products/50) y su
+  [etiqueta PDS](https://pds-geosciences.wustl.edu/grail/grail-l-lgrs-5-rdr-v1/grail_1001/shadr/gggrx_1200a_sha.xml);
+  EGM2008 (NGA, `EGM2008_to2190_TideFree`).
+- Atmósfera y viento: [NOAA IGRA v2](https://www.ncei.noaa.gov/products/weather-balloon/integrated-global-radiosonde-archive),
+  [HWM14](https://ccmc.gsfc.nasa.gov/models/HWM14~2014), [pymsis / NRLMSIS 2.0](https://github.com/SWxTREC/pymsis),
+  [CelesTrak clima espacial](https://celestrak.org/SpaceData/SpaceWx-format.php).
+- Vuelo: MPR-SAT-FE-69-9 (FER AS-506, [archive.org](https://archive.org/download/nasa_techdoc_19900066485/19900066485.pdf)),
+  NASA SP-238 (Apollo 11 Mission Report), [NTRS API](https://ntrs.nasa.gov/api/citations/search).
