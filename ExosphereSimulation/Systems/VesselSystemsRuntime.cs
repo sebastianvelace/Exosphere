@@ -27,8 +27,7 @@ public readonly record struct VesselSystemsTickInput(
     /// <summary>True when all sampled values are finite and physically usable.</summary>
     public bool IsValid => DeltaSeconds > 0.0
         && double.IsFinite(DeltaSeconds)
-        && double.IsFinite(SimulationTime)
-        && SimulationTime >= 0.0
+        && double.IsFinite(SimulationTime) // seconds from J2000; negative before 2000
         && CrewCount >= 0
         && Enum.IsDefined(Phase)
         && IsFinite(VesselPosition)
@@ -78,7 +77,7 @@ public sealed class VesselSystemsRuntime
     {
         if (string.IsNullOrWhiteSpace(vesselId))
             throw new ArgumentException("Vessel id is required.", nameof(vesselId));
-        if (!double.IsFinite(simulationTime) || simulationTime < 0.0)
+        if (!double.IsFinite(simulationTime)) // seconds from J2000; negative before 2000
             throw new ArgumentOutOfRangeException(nameof(simulationTime));
 
         VesselId = vesselId;
@@ -129,7 +128,7 @@ public sealed class VesselSystemsRuntime
         input.Validate();
         double expectedEpoch = SimulationTime + input.DeltaSeconds;
         if (!double.IsFinite(expectedEpoch)
-            || System.Math.Abs(input.SimulationTime - expectedEpoch) > EpochToleranceSeconds)
+            || !SimulationClock.SameEpoch(input.SimulationTime, expectedEpoch, EpochToleranceSeconds))
         {
             throw new InvalidOperationException(
                 $"Systems runtime '{VesselId}' received a non-contiguous epoch: "
@@ -197,7 +196,7 @@ public sealed class VesselSystemsRuntime
     /// <summary>Resets subsystem values while retaining the stable vessel identity.</summary>
     public void Reset(double simulationTime)
     {
-        if (!double.IsFinite(simulationTime) || simulationTime < 0.0)
+        if (!double.IsFinite(simulationTime)) // seconds from J2000; negative before 2000
             throw new ArgumentOutOfRangeException(nameof(simulationTime));
 
         LifeSupport.Reset();

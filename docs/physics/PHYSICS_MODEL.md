@@ -251,8 +251,14 @@ reached TLI with 30 t instead of ~72 t, ran dry halfway through the injection, a
 `SaturnVAscentScenarioTests` checks that AS-506 inserts at T+684 s with 72.9 t in the S-IVB,
 3,380 m/s for a 3,182 m/s TLI (flight: T+709 s, 75.7 t).
 
-Lunar launches hold on the pad for a launch window (`Navigation/LunarLaunchWindow`). Flights
-start at J2000, not on the historical date, so the Moon's geometry at [L] is arbitrary. A
+Lunar launches hold on the pad for a launch window (`Navigation/LunarLaunchWindow`). Historical
+missions fly on their own date (`Campaign/MissionEnvironment`, environment plan E5: launch
+epoch in TDB, IERS Earth orientation, DE440, launch-day wind and thermosphere where declared),
+so Apollo 11's window opens 12 min before its historical Range Zero
+(`LunarLaunchWindowHistoricalTests`); sandbox flights still start at J2000 on Kepler rails,
+where the Moon's geometry at [L] is arbitrary. Planners read the Moon through
+`CelestialBody.PlanningElementsAt(t)` (osculating at the arrival on the dated path) and dated
+integration frames accelerate with the n-body pull of the other bodies. A
 coplanar TLI needs a parking orbit whose plane contains the Moon at arrival; at liftoff that
 plane must also contain the pad, which fixes it, and Earth's rotation sweeps the required
 azimuth through the day. The countdown resumes once the azimuth enters Apollo's 72°–108°

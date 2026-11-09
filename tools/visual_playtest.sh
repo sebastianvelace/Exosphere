@@ -48,6 +48,7 @@ EARTH_VIEW=""
 VARIANT_FILE=""
 VARIANT_SITE=""
 VARIANT_PROFILE=""
+VARIANT_MISSION=""
 CLEAR_SOLAR_ECLIPSE=0
 SKIP_BUILD=0
 PROJECT_BACKUP=""
@@ -225,6 +226,7 @@ while [[ $# -gt 0 ]]; do
       shift ;;
     --gemini-mission)
       MODE="gemini_mission"
+      VARIANT_MISSION="mission-gemini8-1966"
       VARIANT_FILE="gemini8_titan2_1966.json"
       VARIANT_SITE="cape_canaveral_lc19"
       VARIANT_PROFILE="gemini8-rendezvous-emergency-return"
@@ -236,6 +238,7 @@ while [[ $# -gt 0 ]]; do
       shift ;;
     --apollo8-mission)
       MODE="apollo8_mission"
+      VARIANT_MISSION="mission-apollo8-1968"
       VARIANT_FILE="apollo8_saturn5_as503_1968.json"
       VARIANT_SITE="kennedy"
       VARIANT_PROFILE="apollo8-lunar-orbit-return"
@@ -254,6 +257,7 @@ while [[ $# -gt 0 ]]; do
       shift ;;
     --apollo11-mission)
       MODE="apollo11_mission"
+      VARIANT_MISSION="mission-apollo11-1969"
       VARIANT_FILE="apollo11_saturn5_as506_1969.json"
       VARIANT_SITE="kennedy"
       VARIANT_PROFILE="apollo11-lunar-landing-return"
@@ -1006,6 +1010,17 @@ public partial class _PlaytestShot : Node
                 VehicleVariantId = variant.Id,
                 LaunchSiteId = "${VARIANT_SITE}",
                 FlightProfileId = "${VARIANT_PROFILE}",
+                // Mission modes fly the mission's dated environment (environment plan E5).
+                MissionId = "${VARIANT_MISSION}".Length > 0 ? "${VARIANT_MISSION}" : null,
+                // Observation runs start any mission: its prerequisites count as flown.
+                CampaignState = "${VARIANT_MISSION}".Length > 0
+                    ? new Exosphere.Simulation.Persistence.CampaignSaveV2
+                    {
+                        CompletedMissionIds = Exosphere.Simulation.Campaign.MissionDefinitionCatalog
+                            .LoadFromDirectory(Path.Combine(data, "missions")).Ordered
+                            .Select(m => m.Id).Where(id => id != "${VARIANT_MISSION}").ToHashSet(),
+                    }
+                    : null,
                 Craft = craft,
             });
         }

@@ -272,7 +272,7 @@ public partial class SystemsController : Node
             throw new System.IO.InvalidDataException(
                 "Loaded systems state targets another vessel.");
         if (!double.IsFinite(expectedSimulationTime)
-            || System.Math.Abs(state.SimulationTime - expectedSimulationTime) > 1e-9)
+            || !SimulationClock.SameEpoch(state.SimulationTime, expectedSimulationTime, 1e-9))
         {
             throw new System.IO.InvalidDataException(
                 "Loaded systems state is at another epoch.");
@@ -386,7 +386,7 @@ public partial class SystemsController : Node
         Exosphere.Simulation.Vessel vessel,
         double simulationTime)
     {
-        if (!double.IsFinite(simulationTime) || simulationTime < 0.0)
+        if (!double.IsFinite(simulationTime)) // seconds from J2000; dated 1960s missions are negative
         {
             ControlLimited = true;
             GD.PushError("[Systems] Cannot activate runtime at an invalid epoch.");

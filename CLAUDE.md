@@ -120,7 +120,10 @@ Important implemented systems:
   opt-in per `Universe.Use*` switch (IERS orientation, DE440, spherical-harmonic gravity,
   measured wind + HWM14 via `CelestialBody.Wind`, seeded von Kármán turbulence, NRLMSIS via
   `CelestialBody.AtmosphereField`; aero/engines read the atmosphere through
-  `AtmosphericDensityAt/TemperatureAt/PressureAt`). Plan: `docs/physics/environment_and_recalibration_plan.md`
+  `AtmosphericDensityAt/TemperatureAt/PressureAt`). Historical missions declare `datedEnvironment`
+  and fly it (`Campaign/MissionEnvironment`, applied by `SimulationBridge`); absolute epochs are
+  then negative (1969 ≈ −9.6e8 s), so never treat t < 0 as invalid and compare epochs with
+  `SimulationClock.SameEpoch`. Saves record `EphemerisId`. Plan: `docs/physics/environment_and_recalibration_plan.md`
 - Hohmann planetary transfers, Earth–Moon Lambert/B-plane planning, encounter prediction, and patched-conic SOI transitions in `ExosphereSimulation/Navigation` and `Universe`
 
 ## Game Layer Rules

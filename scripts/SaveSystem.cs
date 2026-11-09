@@ -110,6 +110,10 @@ public static class SaveSystem
             var save = SaveGameV2Json.DeserializeOrMigrate(text);
             string partsPath = GameDataPath.Combine("parts");
             var catalog = PartCatalog.LoadFromDirectory(partsPath);
+            // A save made on the dated ephemeris needs its mission's environment before the
+            // bodies are put back at its epoch (environment plan E5).
+            if (save.EphemerisId == "de440" && bridge.Universe.Environment.Ephemeris.Id != "de440")
+                bridge.ApplyMissionEnvironment(save.Mission.MissionId, setLaunchEpoch: false);
             SaveGameV2Codec.Restore(bridge.Universe, save, catalog);
             LastLoadedMetadata = save;
             PendingSystemsState = null;

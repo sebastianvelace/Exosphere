@@ -15,6 +15,14 @@ public sealed class SaveGameV2
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public DateTimeOffset SavedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public double SimulationTime { get; set; }
+    /// <summary>
+    /// Ephemeris the save was made with ("kepler", "de440"; absent in pre-E5 saves, which were all
+    /// Kepler). Body positions at <see cref="SimulationTime"/> depend on it, so a save restores
+    /// only into a universe on the same ephemeris.
+    /// </summary>
+    public string? EphemerisId { get; set; }
+    /// <summary>The compensated clock's carried rounding (<see cref="Universe.ClockCompensationSeconds"/>); absent = 0.</summary>
+    public double? ClockCompensationSeconds { get; set; }
     public double TimeScale { get; set; } = 1.0;
     public string? ActiveVesselId { get; set; }
     public List<VesselSaveV2> Vessels { get; set; } = new();
@@ -284,6 +292,8 @@ public static class SaveGameV2Codec
         save.SchemaVersion = SaveGameV2.CurrentSchemaVersion;
         save.SavedAtUtc = DateTimeOffset.UtcNow;
         save.SimulationTime = universe.CurrentTime;
+        save.EphemerisId = universe.Environment.Ephemeris.Id;
+        save.ClockCompensationSeconds = universe.ClockCompensationSeconds == 0.0 ? null : universe.ClockCompensationSeconds;
         save.TimeScale = universe.TimeScale;
         save.ActiveVesselId = universe.ActiveVessel?.Id;
         save.Vessels = universe.Vessels.Select(CaptureVessel).ToList();
@@ -303,6 +313,10 @@ public static class SaveGameV2Codec
         ArgumentNullException.ThrowIfNull(universe);
         ArgumentNullException.ThrowIfNull(catalog);
         Validate(save);
+        string saved = save.EphemerisId ?? "kepler";
+        if (saved != universe.Environment.Ephemeris.Id)
+            throw new InvalidDataException(
+                $"The save was made on the '{saved}' ephemeris; this universe runs '{universe.Environment.Ephemeris.Id}'.");
 
         // Build the complete replacement first. A bad definition or joint cannot leave the
         // live universe half-cleared.
@@ -333,6 +347,7 @@ public static class SaveGameV2Codec
             universe.RestoreDockingConnection(connection);
 
         universe.SetSimulationTime(save.SimulationTime);
+        universe.ClockCompensationSeconds = save.ClockCompensationSeconds ?? 0.0;
         universe.TimeScale = save.TimeScale;
         if (save.ActiveVesselId != null && !universe.SetActiveVessel(save.ActiveVesselId))
             throw new InvalidDataException($"Active vessel '{save.ActiveVesselId}' is missing.");
@@ -569,7 +584,7 @@ public static class SaveGameV2Codec
                 throw new InvalidDataException(
                     $"Systems state id mismatch for '{vesselId}'.");
             RequireFinite(systems.SimulationTime, vesselId);
-            if (System.Math.Abs(systems.SimulationTime - save.SimulationTime) > 1e-9)
+            if (!SimulationClock.SameEpoch(systems.SimulationTime, save.SimulationTime, 1e-9))
                 throw new InvalidDataException(
                     $"Systems state for '{vesselId}' is not at save epoch.");
             systems.Validate();

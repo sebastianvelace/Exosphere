@@ -146,7 +146,20 @@ public partial class FloatingOrigin : Node
         if (activeVessel == null) return;
 
         var liveEarth = bridge.Universe.GetBody("earth");
-        if (liveEarth != null)
+        if (liveEarth?.Orientation is Exosphere.Simulation.Environment.IDatedBodyOrientation)
+        {
+            // Dated Earth (environment plan E5): the texture frame is the ITRS of the instant,
+            // the same basis that places the pads, so Greenwich and the coastlines sit where
+            // the simulation's launch sites are. Columns: texture x → Greenwich, y → pole, z → 90°E.
+            liveEarth.GetRotatingBasis(out var greenwich, out var ninetyEast, out var pole);
+            var dated = new Basis(
+                new Godot.Vector3((float)greenwich.X, (float)greenwich.Y, (float)greenwich.Z),
+                new Godot.Vector3((float)pole.X, (float)pole.Y, (float)pole.Z),
+                new Godot.Vector3((float)ninetyEast.X, (float)ninetyEast.Y, (float)ninetyEast.Z));
+            EarthTextureBasis = dated;
+            PlanetOrientation = dated.GetRotationQuaternion();
+        }
+        else if (liveEarth != null)
         {
             var axis = ToGodotV3(liveEarth.RotationAxis).Normalized();
             var spin = new Godot.Quaternion(axis,

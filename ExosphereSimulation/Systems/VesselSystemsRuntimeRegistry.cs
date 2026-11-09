@@ -123,7 +123,8 @@ public sealed class VesselSystemsRuntimeRegistry
 
     private static void ValidateEpoch(double epoch)
     {
-        if (!double.IsFinite(epoch) || epoch < 0.0)
+        // Seconds from J2000: a dated 1969 epoch is negative and valid.
+        if (!double.IsFinite(epoch))
             throw new ArgumentOutOfRangeException(nameof(epoch));
     }
 
@@ -133,7 +134,7 @@ public sealed class VesselSystemsRuntimeRegistry
         string vesselId)
     {
         if (!double.IsFinite(actual)
-            || System.Math.Abs(actual - expected) > EpochToleranceSeconds)
+            || !SimulationClock.SameEpoch(actual, expected, EpochToleranceSeconds))
         {
             throw new InvalidOperationException(
                 $"Systems runtime '{vesselId}' is at epoch {actual:R}, "

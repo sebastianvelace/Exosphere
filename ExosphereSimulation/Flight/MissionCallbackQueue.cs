@@ -60,8 +60,7 @@ public sealed class MissionCallbackQueueState
                 || callback.OwnerVesselId is { Length: 0 }
                 || callback.OwnerVesselId is { } owner
                     && string.IsNullOrWhiteSpace(owner)
-                || !double.IsFinite(callback.SimulationTime)
-                || callback.SimulationTime < 0.0)
+                || !double.IsFinite(callback.SimulationTime))
             {
                 throw new InvalidDataException(
                     $"Invalid callback payload for sequence {callback.Sequence}.");
@@ -92,7 +91,8 @@ public sealed class MissionCallbackQueue
             throw new ArgumentException("Callback event type is required.", nameof(eventType));
         if (payload == null)
             throw new ArgumentNullException(nameof(payload));
-        if (!double.IsFinite(simulationTime) || simulationTime < 0.0)
+        // Absolute simulation time is seconds from J2000: dated missions before 2000 are negative.
+        if (!double.IsFinite(simulationTime))
             throw new ArgumentOutOfRangeException(nameof(simulationTime));
         ValidateOwnerVesselId(ownerVesselId);
 

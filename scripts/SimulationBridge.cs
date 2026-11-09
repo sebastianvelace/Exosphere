@@ -3,6 +3,7 @@ namespace Exosphere.Game;
 using System.Diagnostics;
 using Godot;
 using Exosphere.Simulation;
+using Exosphere.Simulation.Campaign;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
@@ -208,6 +209,10 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             LaunchSiteId = pendingIntent.LaunchSiteId;
             ActiveFlightProfileId = pendingIntent.FlightProfileId;
         }
+        // Environment plan E5: a historical mission flies on its own date (IERS Earth, DE440 and
+        // its launch-day products). A continued save applies it itself from the save's ephemeris.
+        if (string.IsNullOrWhiteSpace(pendingIntent?.SaveSlot))
+            ApplyMissionEnvironment(pendingIntent?.MissionId, setLaunchEpoch: true);
         var sites = LaunchSite.LoadAllFromDirectory(System.IO.Path.Combine(dataPath, "launch_sites"));
         if (!sites.TryGetValue(LaunchSiteId, out _launchSite))
             GD.PushWarning($"[Sim] Launch site '{LaunchSiteId}' not found; pad will fall back to the equator.");
@@ -767,6 +772,22 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             GD.Print($"[CATCH] state=ARMED valid=starbase-entry alt={altitude:F0} " +
                 $"speed={surfaceSpeed:F0} vUp={verticalSpeed:F0} pins={vessel.CatchContactPoints.Count}");
         return armed;
+    }
+
+    /// <summary>
+    /// Puts the universe in a mission's dated environment (<see cref="MissionEnvironment"/>);
+    /// false for sandbox flights and missions that declare none.
+    /// </summary>
+    public bool ApplyMissionEnvironment(string? missionId, bool setLaunchEpoch)
+    {
+        if (string.IsNullOrWhiteSpace(missionId)) return false;
+        var dataPath = GameDataPath.Resolve(DataDirectory);
+        var catalog = MissionDefinitionCatalog.LoadFromDirectory(System.IO.Path.Combine(dataPath, "missions"));
+        if (!catalog.Definitions.TryGetValue(missionId, out var mission)) return false;
+        bool applied = MissionEnvironment.Apply(Universe, mission, dataPath, setLaunchEpoch);
+        if (applied)
+            GD.Print($"[Sim] {missionId}: dated environment, t = {Universe.CurrentTime:F1} s TDB from J2000");
+        return applied;
     }
 
     private void SpawnPendingConstructedVessel(

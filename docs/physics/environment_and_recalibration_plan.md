@@ -372,6 +372,30 @@ los que fallen se investigan como hallazgos físicos. CI completa verde y Godot 
   Apollo 11 (antes el del Apollo 8, 6,7 h antes). **Abierto:** volar TLI→LOI fechado como compuerta
   necesita la guía de inyección iterativa (G1): la TLI prograda deja una primera corrección de
   ~140 m/s contra ~6 m/s históricos.
+- **E5.4 (2026-11-09): el juego vuela las misiones históricas fechadas.** `SimulationBridge`
+  aplica `MissionEnvironment` a toda misión lanzada con su `MissionId` (antes de colocar el
+  vehículo; una partida continuada lo aplica desde su propia efeméride). Las partidas guardan
+  `EphemerisId` (las previas a E5 se leen como Kepler) y solo se restauran sobre la misma
+  efeméride, porque la posición de los cuerpos en su época depende de ella. El render de la
+  Tierra usa el ITRS del instante (`GetRotatingBasis`): Greenwich y las costas quedan donde la
+  simulación pone los pads. **Hallazgos al encenderlo:** (1) varias guardas trataban el tiempo
+  absoluto negativo como inválido (sistemas de a bordo, cola de callbacks), pero 1969 está a
+  −9,6e8 s de J2000; (2) a esa magnitud un double resuelve 1,2e-7 s, así que la contigüidad de
+  épocas con tolerancia absoluta fija rechazaba ticks contiguos: `SimulationClock` escala la
+  tolerancia con 16 ulp de la época (~1,9 µs en 1969); (3) el reloj acumulaba un sesgo sistemático
+  de 3,4 ms por hora de pasos de 60 Hz (~2 m de rotación terrestre por hora frente al movimiento
+  integrado): ahora es una suma compensada (Neumaier), < 1 µs en la misma hora.
+  En el juego, la ventana del Apollo 11 se abre en el propio Range Zero (azimut requerido 73,9°),
+  el AS-506 alcanza la órbita de aparcamiento a 191 km y la TLI planificada es de 3181 m/s (la
+  histórica, ~3182 m/s). La compensación del reloj solo actúa desde |t| ≥ 2^26 s (~2,1 años de
+  J2000), así que el mundo por defecto conserva su reloj bit a bit; las partidas guardan el
+  residuo (`ClockCompensationSeconds`) y un vuelo reanudado continúa bit a bit.
+  **Hallazgos previos a E5 destapados al volar fechado (fuera de su alcance, abiertos como tareas
+  aparte):** (a) un conjunto sin empuje en LEO pierde energía específica (con J2) en proporción a
+  la aceleración temporal: +3,3 kJ/kg a ×1, −9,4 a ×10, −43,6 a ×100 en 900 s, igual con y sin
+  entorno fechado; (b) en una misión de campaña, el runtime de sistemas materializado para el
+  dueño de un callback (la S-IC soltada) no avanza, y el guardado del hito ORBIT falla por épocas
+  mezcladas.
 
 ## 4. Cierre de F6 (recalibración histórica)
 

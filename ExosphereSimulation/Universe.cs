@@ -199,6 +199,40 @@ public partial class Universe
     /// <summary>Current simulation time (seconds since J2000).</summary>
     public double CurrentTime { get; private set; } = 0.0;
 
+    // Rounding carried by the clock (Neumaier). Dated missions run at |t| ~ 1e9 s, where one
+    // 1/60 s step rounds by up to 6e-8 s with a systematic sign: a plain sum drifted 3.4 ms per
+    // hour of 60 Hz steps from the integrated motion (~2 m of Earth rotation per hour).
+    private double _clockCompensation;
+
+    /// <summary>
+    /// |t| from which the clock is a compensated sum (2^26 s, ~2.1 years from J2000; a plain
+    /// double drifts < 0.4 ms per hour of 60 Hz steps below it). The default world near J2000
+    /// keeps its plain, bit-identical clock.
+    /// </summary>
+    public const double CompensatedClockThresholdSeconds = 67_108_864.0;
+
+    /// <summary>Rounding the compensated clock still carries; saved so a resumed flight continues bit for bit.</summary>
+    public double ClockCompensationSeconds
+    {
+        get => _clockCompensation;
+        set => _clockCompensation = double.IsFinite(value) ? value
+            : throw new ArgumentOutOfRangeException(nameof(value));
+    }
+
+    private void AdvanceClock(double step)
+    {
+        if (_clockCompensation == 0.0 && System.Math.Abs(CurrentTime) < CompensatedClockThresholdSeconds)
+        {
+            CurrentTime += step;
+            return;
+        }
+        double t = CurrentTime, s = t + step;
+        _clockCompensation += System.Math.Abs(t) >= System.Math.Abs(step) ? (t - s) + step : (step - s) + t;
+        double folded = s + _clockCompensation;
+        _clockCompensation -= folded - s;
+        CurrentTime = folded;
+    }
+
     /// <summary>
     /// Restores simulation time from a save. Re-propagates celestial bodies to
     /// <paramref name="t"/> so vessel relative state matches the saved epoch.
@@ -208,6 +242,7 @@ public partial class Universe
         if (!double.IsFinite(t))
             throw new ArgumentOutOfRangeException(nameof(t));
         CurrentTime = t;
+        _clockCompensation = 0.0;
         _pendingSimulationSeconds = 0.0;
         _deferredRailAnchors.Clear();
         _nextDeferredRailDeadline.Clear();
@@ -354,6 +389,7 @@ public partial class Universe
         if (!double.IsFinite(secondsSinceJ2000))
             throw new ArgumentOutOfRangeException(nameof(secondsSinceJ2000));
         CurrentTime = secondsSinceJ2000;
+        _clockCompensation = 0.0;
         _pendingSimulationSeconds = 0.0;
         _deferredRailAnchors.Clear();
         _nextDeferredRailDeadline.Clear();
@@ -1079,7 +1115,7 @@ public partial class Universe
                 step = PrepareControlledPhysicsStep(step, out bool controlCadenceActive);
                 _tickOuterSubsteps++;
                 TickPhysics(step);
-                CurrentTime += step;
+                AdvanceClock(step);
                 remaining   -= step;
                 _tickProcessedSimulationSeconds += step;
                 CompleteControlledPhysicsStep(step, controlCadenceActive);
@@ -1104,7 +1140,7 @@ public partial class Universe
                 step = PrepareControlledPhysicsStep(step, out bool controlCadenceActive);
                 _tickOuterSubsteps++;
                 TickPhysicsMixed(step);
-                CurrentTime += step;
+                AdvanceClock(step);
                 remaining   -= step;
                 _tickProcessedSimulationSeconds += step;
                 CompleteControlledPhysicsStep(step, controlCadenceActive);
@@ -1129,7 +1165,7 @@ public partial class Universe
                     double step = System.Math.Min(remaining, MaxCoastStep);
                     _tickOuterSubsteps++;
                     TickRails(step);
-                    CurrentTime += step;
+                    AdvanceClock(step);
                     remaining -= step;
                     _tickProcessedSimulationSeconds += step;
                 }
@@ -1138,7 +1174,7 @@ public partial class Universe
             {
                 _tickOuterSubsteps++;
                 TickRails(remaining);
-                CurrentTime += remaining;
+                AdvanceClock(remaining);
                 _tickProcessedSimulationSeconds += remaining;
                 remaining = 0.0;
             }
