@@ -479,12 +479,18 @@ vuelos reales. El switch `Universe.Coupled6DofIntegrationEnabled` sigue desactiv
      Objetivos lunares propios de Apollo 11 (SP-238): LOI a 60,0 × 169,7 mi náuticas y
      circularización no circular a 53,7 × 65,7 con `ApsidesTargetBurn` (modelo 53,75 × 65,71 en
      16,3 s; volado 53,8 × 65,7 en 16,7 s).
-     Pendiente: geometría de tanques del SPS y consumo de criogénicos, salida de tobera del SPS, efemérides lunares fechadas, sustainer y PU nativos
+     Pendiente: geometría de tanques del SPS y consumo de criogénicos, salida de tobera del SPS, sustainer y PU nativos
      del Atlas (MA-6), aletas del S-IC, grid fins y cápsulas romas newtonianas. Detalle en
      `docs/physics/historical_recalibration.md`.
-   - Plan siguiente (2026-11-08): entorno fechado E1–E4 (tiempo y orientación terrestre,
-     efemérides DE440, gravedad con armónicos y mascons, viento y atmósfera variable) junto al
-     cierre de F6; ver `docs/physics/environment_and_recalibration_plan.md`.
+   - Entorno fechado E0–E5 implementado (2026-11-09; `docs/physics/environment_and_recalibration_plan.md`):
+     escalas de tiempo, cadena IERS 2010, DE440, GRGM1200A/EGM2008 y ejes principales lunares,
+     sondeo del día + HWM14, NRLMSIS 2.1, turbulencia de von Kármán (NASA/TM-2008-215633), y las
+     misiones históricas vuelan en su fecha (`MissionEnvironment`, también en Godot). E1 cerrado.
+     Abiertos con su causa: E2 TLI→LOI fechado como compuerta (necesita guía de inyección
+     iterativa, G1), E3 evolución de la órbita lunar (falta un vector de estado inicial
+     publicado), E4 α/Qα del AS-506 (necesita el programa de inclinación del S-IC). Hallazgos
+     previos destapados al volar fechado, en tareas aparte: pérdida de energía en costa según la
+     aceleración temporal y runtimes de sistemas obsoletos en guardados de hito.
 
 2. **Controles aún no equivalentes en el camino acoplado**
    - Flaps ya tienen contrato de estado, rate limit, saturación y torque compartido; falta que el
