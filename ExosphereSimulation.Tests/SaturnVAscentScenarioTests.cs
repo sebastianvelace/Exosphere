@@ -58,4 +58,27 @@ public sealed class SaturnVAscentScenarioTests(ITestOutputHelper output)
         output.WriteLine($"S-IVB TLI capacity {tliCapacity:F0} m/s");
         Assert.True(tliCapacity > 3_250.0, $"S-IVB can give only {tliCapacity:F0} m/s for TLI.");
     }
+
+    /// <summary>
+    /// Environment plan E5: the same AS-506 ascent and the same historical bands, flown in the
+    /// dated environment of 1969-07-16 13:32 UTC: LC-39A on the IERS Earth of the day, DE440,
+    /// the launch-day Cape Kennedy sounding with HWM14 above it and the NRLMSIS thermosphere.
+    /// </summary>
+    [Trait("FidelityGate", "E4")]
+    [Trait("GateKind", "historical")]
+    [Fact]
+    public void As506ReachesParkingOrbitInItsDatedEnvironment()
+    {
+        var flight = SaturnVAscentFlight.Fly(variantFile: "apollo11_saturn5_as506_1969.json",
+            missionFile: "apollo11_1969.json");
+        output.WriteLine($"dated: inserted={flight.Inserted} at T+{flight.InsertionElapsedSeconds:F1}s, "
+            + $"S-IVB {flight.SivbPropellantKg / 1000:F2} t, vehicle {flight.Vessel.TotalMass / 1000:F2} t, orbit "
+            + $"{(flight.Orbit.Periapsis - flight.Earth.Radius) / 1000:F1} x {(flight.Orbit.Apoapsis - flight.Earth.Radius) / 1000:F1} km");
+        Assert.True(flight.Inserted);
+        Assert.InRange(flight.InsertionElapsedSeconds, 680.0, 740.0);
+        Assert.True(flight.SivbPropellantKg > 66_000.0, $"Only {flight.SivbPropellantKg / 1000:F1} t left for TLI.");
+        double tliCapacity = 428.7 * 9.80665 * System.Math.Log(flight.Vessel.TotalMass
+            / (flight.Vessel.TotalMass - flight.SivbPropellantKg));
+        Assert.True(tliCapacity > 3_250.0, $"S-IVB can give only {tliCapacity:F0} m/s for TLI.");
+    }
 }

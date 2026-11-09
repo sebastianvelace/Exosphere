@@ -10,6 +10,7 @@
   "launchEpochUtc": "1962-02-20T14:47:39Z",
   "launchEpochSourceId": "nasa-ma6-flight-report",
   "launchEpochEvidence": "MA-6 flight report: \"The launch occurred at 9:47:39 a.m. e.s.t.\" (EST = UTC - 5 h; SP-4012 vol. II rounds it to 9:47 a.m.).",
+  "datedEnvironment": {},
   "vehicleVariantId": "mercury-atlas6-friendship7-1962-02-20",
   "launchSiteId": "cape_canaveral_lc14",
   "flightProfileId": "mercury-atlas6-three-orbit",

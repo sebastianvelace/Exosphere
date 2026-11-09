@@ -86,6 +86,21 @@ public sealed class MissionSourceDefinition
     public string Description { get; set; } = "";
 }
 
+/// <summary>
+/// The dated environment a historical mission flies in (environment plan E5): its launch epoch
+/// with the IERS Earth orientation and the DE440 ephemeris, plus the launch-day products it
+/// declares (envdata ids). Applied by <see cref="MissionEnvironment"/>.
+/// </summary>
+public sealed class MissionDatedEnvironmentDefinition
+{
+    /// <summary>Measured wind profile (<c>winds/&lt;id&gt;.bin</c>), e.g. the launch-day sounding.</summary>
+    public string WindProfileId { get; set; } = "";
+    /// <summary>Upper-atmosphere wind stacked above the profile (<c>winds/&lt;id&gt;.bin</c>, HWM14).</summary>
+    public string UpperWindProfileId { get; set; } = "";
+    /// <summary>Dated thermosphere (<c>atmosphere/&lt;id&gt;.bin</c>, NRLMSIS 2.1).</summary>
+    public string ThermosphereId { get; set; } = "";
+}
+
 public sealed class MissionDefinition
 {
     public string Id { get; set; } = "";
@@ -106,6 +121,8 @@ public sealed class MissionDefinition
     public string LaunchEpochUtc { get; set; } = "";
     public string LaunchEpochSourceId { get; set; } = "";
     public string LaunchEpochEvidence { get; set; } = "";
+    /// <summary>Optional: fly this mission in its dated environment (environment plan E5).</summary>
+    public MissionDatedEnvironmentDefinition? DatedEnvironment { get; set; }
     public string VehicleVariantId { get; set; } = "";
     public string LaunchSiteId { get; set; } = "";
     public string FlightProfileId { get; set; } = "";
@@ -145,6 +162,10 @@ public sealed class MissionDefinition
         if (Sources.All(source => source.Id != LaunchEpochSourceId))
             throw new InvalidDataException(
                 $"Mission '{Id}' launch epoch cites unknown source '{LaunchEpochSourceId}'.");
+        if (DatedEnvironment is { } dated && string.IsNullOrWhiteSpace(dated.WindProfileId)
+            && !string.IsNullOrWhiteSpace(dated.UpperWindProfileId))
+            throw new InvalidDataException(
+                $"Mission '{Id}' stacks an upper wind without a wind profile to stack it on.");
         RequireUnique(Procedure.Select(item => item.Id), "procedure step");
         foreach (var step in Procedure)
         {

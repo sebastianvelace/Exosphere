@@ -10,6 +10,11 @@
   "launchEpochUtc": "1969-07-16T13:32:00Z",
   "launchEpochSourceId": "apollo11-mission-report",
   "launchEpochEvidence": "NASA SP-238 Apollo 11 mission report: \"Range zero - 13:32:00 G.m.t., July 16, 1969\", lift-off 00:00:00.6 (AS-506 flight evaluation: 9:32:00 EDT, tail plug disconnect 9:32:00.6 EDT).",
+  "datedEnvironment": {
+    "windProfileId": "wind_as506",
+    "upperWindProfileId": "hwm_as506",
+    "thermosphereId": "msis_as506"
+  },
   "vehicleVariantId": "apollo11-saturn5-as506-csm107-lm5-1969-07-16",
   "launchSiteId": "kennedy",
   "flightProfileId": "apollo11-lunar-landing-return",

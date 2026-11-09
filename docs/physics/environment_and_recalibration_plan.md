@@ -353,6 +353,14 @@ los que fallen se investigan como hallazgos físicos. CI completa verde y Godot 
   demás cuerpos (el mismo campo que siente el vehículo); frente a la segunda derivada de DE440
   en el lanzamiento del Apollo 11 la diferencia es 1,0e-9 m/s² para la Tierra y la Luna
   (`DatedPlanningFrameTests`, compuerta analítica E2). Con Kepler sigue la cadena de raíles.
+- **E5.2 hecho (2026-11-09): `MissionEnvironment`.** Cada misión histórica declara
+  `datedEnvironment` en su JSON; `Campaign/MissionEnvironment.Apply` enciende la orientación IERS
+  y DE440, pone el reloj en la época de lanzamiento (TDB) y carga los productos del día que la
+  misión declare (Apollo 11: sondeo de Cape Kennedy + HWM14 y NRLMSIS; las demás solo los marcos
+  fechados). Con una partida guardada se aplica sin tocar el reloj. **Primer vuelo histórico
+  fechado:** el AS-506 en su entorno del 1969-07-16 13:32 UTC, con las mismas bandas del FER que
+  la compuerta sin fechar, inserta a T+687,4 s con 72,3 t en el S-IVB (sin fechar: T+690 s,
+  71,8 t; FER: T+709 s, 75,7 t). El viento del día se acerca 0,5 t al dato histórico.
 
 ## 4. Cierre de F6 (recalibración histórica)
 

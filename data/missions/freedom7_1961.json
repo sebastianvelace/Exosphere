@@ -10,6 +10,7 @@
   "launchEpochUtc": "1961-05-05T14:34:13Z",
   "launchEpochSourceId": "nasa-historical-data-book-v2",
   "launchEpochEvidence": "NASA SP-4012 vol. II, Mercury-Redstone 3 mission events: \"launch May 5 9:34:13 a.m., EST\" (EST = UTC - 5 h).",
+  "datedEnvironment": {},
   "vehicleVariantId": "mercury-redstone3-freedom7-1961-05-05",
   "launchSiteId": "cape_canaveral_lc5",
   "flightProfileId": "mercury-redstone3-suborbital",

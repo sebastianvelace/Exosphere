@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
+using Exosphere.Simulation.Campaign;
 using Exosphere.Simulation.Construction;
 using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
@@ -28,7 +29,8 @@ internal static class SaturnVAscentFlight
         double separationErrorDeg = 0.0, double separationRateRadPerS = 0.0,
         string variantFile = "apollo8_saturn5_as503_1968.json", SaturnVAscentSchedule? scheduleOverride = null,
         Action<Vessel, double, bool>? afterTick = null,
-        Action<Vessel, CelestialBody, double, bool>? afterTickWithBody = null, double? untilElapsedSeconds = null)
+        Action<Vessel, CelestialBody, double, bool>? afterTickWithBody = null, double? untilElapsedSeconds = null,
+        string? missionFile = null)
     {
         if (untilElapsedSeconds is { } limit && (!double.IsFinite(limit) || limit <= 0))
             throw new ArgumentOutOfRangeException(nameof(untilElapsedSeconds));
@@ -39,7 +41,14 @@ internal static class SaturnVAscentFlight
         var schedule = scheduleOverride ?? (variantFile.Contains("as506", StringComparison.Ordinal)
             ? SaturnVAscentSchedule.As506 : SaturnVAscentSchedule.As503);
         var universe = Universe.LoadFromDataDirectory(root);
-        universe.SetCurrentTime(liftoffEpoch);
+        if (missionFile != null)
+        {
+            // Environment plan E5: the mission's dated environment, the clock at its launch epoch.
+            MissionEnvironment.Apply(universe, MissionDefinition.LoadFromJson(Path.Combine(root, "missions", missionFile)), root);
+            liftoffEpoch = universe.CurrentTime;
+        }
+        else
+            universe.SetCurrentTime(liftoffEpoch);
         var earth = universe.GetBody("earth")!;
         var site = LaunchSite.LoadFromJson(Path.Combine(root, "launch_sites", "kennedy.json"));
         var pad = site.GetPosition(earth, liftoffEpoch);

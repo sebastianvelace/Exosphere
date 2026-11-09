@@ -10,6 +10,7 @@
   "launchEpochUtc": "1968-12-21T12:51:00Z",
   "launchEpochSourceId": "as503-flight-evaluation",
   "launchEpochEvidence": "AS-503 flight evaluation report: \"Range zero time, the basic time reference for this report, is 7:51:00 Eastern Standard Time (EST) (12:51:00 Universal Time [UT])\"; S-IC tail plug disconnect at 7:51:00.67 EST.",
+  "datedEnvironment": {},
   "vehicleVariantId": "apollo8-saturn5-as503-csm103-1968-12-21",
   "launchSiteId": "kennedy",
   "flightProfileId": "apollo8-lunar-orbit-return",
