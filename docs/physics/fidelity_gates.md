@@ -28,7 +28,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | E1 | open | Dated time and Earth orientation (environment plan): UTC/TAI/TT/TDB, the IERS 2010 chain behind `Universe.UseIersEarthOrientation` and sourced mission epochs; closes when missions fly dated (E5) |
 | E2 | open | Dated DE440 ephemerides behind `Universe.UseDatedEphemeris`; historical gate (Apollo 11 TLI/LOI with dated guidance) arrives with E5 |
 | E3 | open | Spherical-harmonic gravity (GRGM1200A lunar, EGM2008 Earth) and the DE440 lunar principal axes behind `Universe.UseLunarGravityField`/`UseEarthGravityField`; historical lunar-orbit evolution gate (SP-238) pending its initial state |
-| E4 | open | Measured launch-day wind (`Universe.UseWindProfile`, AS-506 IGRA sounding) and dated NRLMSIS 2.1 thermosphere (`Universe.UseThermosphere`); historical AS-506 α/Qα gate needs the S-IC's historical open-loop tilt program (the simulation flies a zero-α turn that aligns with the wind) |
+| E4 | open | Measured launch-day wind (`Universe.UseWindProfile`, AS-506 IGRA sounding) HWM14 above it, dated NRLMSIS 2.1 thermosphere (`Universe.UseThermosphere`) and seeded von Kármán turbulence (`Universe.UseTurbulence`); historical AS-506 α/Qα gate needs the S-IC's historical open-loop tilt program (the simulation flies a zero-α turn that aligns with the wind) |
 
 ## Gates
 
@@ -106,6 +106,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | E3 | analytic | `SphericalHarmonicGravityTests.RecursionMatchesTheDirectLegendreReference` | Cunningham V/W recursion vs direct 4π Legendre sums at 40 digits (degree 12 and 60, 100 points each, poles included): 3.3e-15 of the point-mass acceleration; degree-2 field equals the zonal J2 model to 8e-16 |
 | E4 | analytic | `WindFieldTests.AerodynamicsAreGalileanUnderWind` | A Saturn-class stack resting in the AS-506 11 km wind (7.0 m/s) feels the drag of moving at −W through still air to 1e-9 relative |
 | E4 | analytic | `NrlmsisAtmosphereTests.TabulatedThermosphereFollowsNrlmsis` | Tabulated NRLMSIS 2.1 for the Apollo 11 days vs the model at 300 free points (120–950 km): density 2.9 % worst / 0.42 % mean, temperature 0.67 %, pressure 1.7 % |
+| E4 | analytic | `TurbulenceTests.TurbulenceHasTheVonKarmanStatistics` | 800-seed ensemble of the NASA/TM-2008-215633 von Kármán turbulence at 10 km (severe): component variances within 0.7 % of the table, longitudinal and transverse correlations within 0.012 of von Kármán's closed forms at 0.1–4 L |
 
 F3 regression coverage also includes `Flight14EntryCheckpointTests` (exact 60-second
 continuation), `AttitudeActuatorBlendingTests` (shutdown trim, coupled bank reversal,

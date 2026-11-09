@@ -133,6 +133,17 @@
       "licence": "MIT (wrapper); HWM14 public release by NRL",
       "sha256": "707a61e1520e81ecadeda3e2facc47a6def69f9bbf0eafc42d0c9acfe0370a08",
       "bytes": 1479013
+    },
+    {
+      "id": "nasa_tm2008_215633",
+      "title": "Terrestrial Environment (Climatic) Criteria Guidelines for Use in Aerospace Vehicle Development, 2008 Revision (NASA/TM-2008-215633, D.L. Johnson ed.)",
+      "publisher": "NASA Marshall Space Flight Center, via NASA Technical Reports Server 20090022159",
+      "url": "https://ntrs.nasa.gov/api/citations/20090022159/downloads/20090022159.pdf",
+      "file": "20090022159.pdf",
+      "accessed": "2026-11-09",
+      "licence": "US Government work, public domain",
+      "sha256": "896d715558417b1f47fe5c1dd888203598cfce63bbcdfb189ca7e482d8e4927f",
+      "bytes": 96809443
     }
   ],
   "products": [
@@ -469,6 +480,27 @@
       },
       "sha256": "3b0258d241a631744b4529c94721402b318c69cb91e7bf50e93128718c959377",
       "bytes": 7056
+    },
+    {
+      "id": "turbulence_msfc2008",
+      "builder": "turbulence",
+      "series": "turbulence_msfc2008",
+      "inputs": [
+        "nasa_tm2008_215633"
+      ],
+      "output": "turbulence/turbulence_msfc2008.bin",
+      "model": "von Karman multimission turbulence statistics, NASA/TM-2008-215633 sec. 2.3.13.5, Tables 2-70 and 2-71 (Justus et al., NASA TM-4168, 1990), parsed from the PDF with pdftotext",
+      "accessed": "2026-11-09",
+      "provenance": {
+        "dataId": "environment_turbulence",
+        "field": "turbulenceStatistics",
+        "status": "published",
+        "variant": "Light/moderate/severe horizontal and vertical standard deviations and length scales, 10 m-200 km",
+        "conditions": "Tables 2-70 (10-1000 m, severe) and 2-71 (1-200 km) join exactly at 1 km. Below 1 km derived: horizontal sigma = sqrt((s1^2+s2^2)/2) and horizontal scale = (L1+L2)/2 of the longitudinal and lateral columns; light and moderate scale the severe boundary-layer profile by their 1 km ratio.",
+        "uncertainty": "Climatological statistics from Jimsphere and smoke-trail profiles (Justus et al. 1990); a realization is one random sample, not a day's measured turbulence. The derived boundary-layer light/moderate profiles are not published."
+      },
+      "sha256": "bc650b670c94f3ec5224f6ab6b22578107f4dac148b95b4ffbab6527295c5ed8",
+      "bytes": 4440
     }
   ]
 }

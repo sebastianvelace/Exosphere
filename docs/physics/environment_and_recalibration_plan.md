@@ -304,6 +304,27 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   de NRLMSIS ~15 %). Bajo 80 km responde el perfil USSA-76 bit a bit; 80–120 km mezcla continua.
   `Universe.UseThermosphere` (apagado por defecto; la hora local sale de la longitud IERS).
 - **E4.4 `DrydenGusts`** (MIL-HDBK-1797) con semilla guardada.
+  **E4.4 hecho (2026-11-09) con von Kármán en lugar de Dryden.** MIL-F-8785C y MIL-HDBK-1797 no
+  son accesibles desde aquí; la fuente citable es NASA/TM-2008-215633 (Terrestrial Environment
+  Guidelines, MSFC, NTRS 20090022159), que recomienda von Kármán cuando se dispone de él (sec.
+  2.3.13) y da su modelo multimisión (sec. 2.3.13.5) con las tablas 2-70 (capa límite 10–1000 m)
+  y 2-71 (1–200 km, ligera/moderada/severa, de Justus et al., NASA TM-4168). envdata extrae
+  ambas tablas del PDF fijado con pdftotext (nada transcrito a mano) y comprueba que se unen
+  exactamente a 1 km; producto `turbulence/turbulence_msfc2008.bin`. Bajo 1 km, σ horizontal =
+  media energética de las columnas longitudinal y lateral y la ligera/moderada escalan la severa
+  por su razón a 1 km (derivado, declarado). `Environment/VonKarmanTurbulence`: campo espacial
+  congelado (hipótesis de Taylor) en el marco fijo al cuerpo, una realización por nivel de tabla
+  de 128 modos de Fourier aleatorios (Kraichnan) transversales a su vector de onda, con
+  amplitudes del espectro de energía de von Kármán (a = 1,339, escala integral longitudinal 1) en
+  coordenadas adimensionales (e/L_h, n/L_h, z/L_w), varianza unidad exacta por componente y
+  dimensionalizada con σ_h/σ_w como en la ec. 2.129 del manual; entre niveles mezcla cos/sin
+  (varianza conservada). Anclado en el plano tangente ortográfico del sitio, completo hasta
+  1000 km y desvanecido a 2000 km; semilla SplitMix64 (misma semilla, mismo aire bit a bit);
+  se suma al viento medio (`Universe.UseTurbulence`, apagado por defecto). Compuerta analítica E4
+  medida: con 800 semillas a 10 km (severa) las varianzas quedan a 0,7 % de la tabla y las
+  correlaciones longitudinal y transversal a 0,012 de las formas cerradas de von Kármán entre
+  0,1 y 4 L. Con 160 semillas el desfase a 4 L era 0,033 (ruido de muestreo de los modos de
+  número de onda bajo): se agrandó el conjunto, no la tolerancia.
 - *Analíticas:* viento uniforme ⇒ deriva con la constante de tiempo de arrastre; viento cero ⇒
   paridad exacta; NRLMSIS contra sus vectores de prueba; espectro de Dryden.
 - *Histórica (FER AS-506 tabla 11-2):* ángulo de ataque máximo 1,82° en cabeceo (T+117,1 s) y

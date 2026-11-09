@@ -6,3 +6,5 @@ numpy==2.4.6
 pyerfa==2.0.1.5
 mpmath==1.3.0
 pymsis==0.13.0
+# System tools, only to rebuild these products: gfortran (HWM14, winds/hwm_*.bin) and
+# poppler-utils pdftotext 24.x (turbulence tables parsed from NASA/TM-2008-215633).

@@ -134,6 +134,19 @@ public partial class Universe
     }
 
     /// <summary>
+    /// Adds von Kármán turbulence (environment plan E4.4, NASA/TM-2008-215633 Tables 2-70/2-71)
+    /// anchored at a site on Earth, on top of whatever mean wind Earth already has. The seed makes
+    /// the realisation reproducible. Off by default.
+    /// </summary>
+    public void UseTurbulence(string dataDirectory, TurbulenceIntensity intensity, ulong seed,
+        double anchorLatitudeDeg, double anchorLongitudeDeg)
+    {
+        var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");
+        earth.Wind = VonKarmanTurbulence.LoadFromDataDirectory(dataDirectory, intensity, seed,
+            anchorLatitudeDeg, anchorLongitudeDeg, earth.Wind);
+    }
+
+    /// <summary>
     /// Gives Earth a dated NRLMSIS 2.1 thermosphere above 80 km (envdata product
     /// <c>atmosphere/&lt;id&gt;.bin</c>, environment plan E4.3); it reads local time from the dated
     /// IERS longitude. Off by default.

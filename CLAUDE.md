@@ -116,7 +116,11 @@ Important implemented systems:
   one air-velocity point (`CelestialBody.GetAirVelocity`, `Vessel.GetAirRelativeVelocity`: aero,
   heating and air data read the air; contact, landing and navigation read the surface)
 - environment datasets enter through `tools/envdata` and `data/environment/manifest.json`
-  (offline SHA-256 + provenance contract in `contract_checks.sh`)
+  (offline SHA-256 + provenance contract in `contract_checks.sh`); the dated environment is
+  opt-in per `Universe.Use*` switch (IERS orientation, DE440, spherical-harmonic gravity,
+  measured wind + HWM14 via `CelestialBody.Wind`, seeded von Kármán turbulence, NRLMSIS via
+  `CelestialBody.AtmosphereField`; aero/engines read the atmosphere through
+  `AtmosphericDensityAt/TemperatureAt/PressureAt`). Plan: `docs/physics/environment_and_recalibration_plan.md`
 - Hohmann planetary transfers, Earth–Moon Lambert/B-plane planning, encounter prediction, and patched-conic SOI transitions in `ExosphereSimulation/Navigation` and `Universe`
 
 ## Game Layer Rules

@@ -170,6 +170,16 @@
       "variant": "HWM14 profile 20-150 km over LC-39A at 1969-07-16 13:32 UT with the GFZ 3-hour ap of 12-15 UT",
       "conditions": "Each build reproduces NRL's checkhwm14 profile to 1 mm/s before writing. Stacked above the IGRA sounding, blended over 5 km above its top.",
       "uncertainty": "HWM14 climatology: ~10-20 m/s in the mesosphere and lower thermosphere against measured winds (Drob et al. 2015); not the day's actual winds."
+    },
+    {
+      "dataId": "environment_turbulence",
+      "field": "turbulenceStatistics",
+      "status": "published",
+      "source": "von Karman multimission turbulence statistics, NASA/TM-2008-215633 sec. 2.3.13.5, Tables 2-70 and 2-71 (Justus et al., NASA TM-4168, 1990), parsed from the PDF with pdftotext; NASA Marshall Space Flight Center, via NASA Technical Reports Server 20090022159, Terrestrial Environment (Climatic) Criteria Guidelines for Use in Aerospace Vehicle Development, 2008 Revision (NASA/TM-2008-215633, D.L. Johnson ed.): https://ntrs.nasa.gov/api/citations/20090022159/downloads/20090022159.pdf (SHA-256 896d715558417b1f47fe5c1dd888203598cfce63bbcdfb189ca7e482d8e4927f). Built by tools/envdata/products/turbulence.py into data/environment/turbulence/turbulence_msfc2008.bin (SHA-256 bc650b670c94f3ec5224f6ab6b22578107f4dac148b95b4ffbab6527295c5ed8).",
+      "accessedDate": "2026-11-09",
+      "variant": "Light/moderate/severe horizontal and vertical standard deviations and length scales, 10 m-200 km",
+      "conditions": "Tables 2-70 (10-1000 m, severe) and 2-71 (1-200 km) join exactly at 1 km. Below 1 km derived: horizontal sigma = sqrt((s1^2+s2^2)/2) and horizontal scale = (L1+L2)/2 of the longitudinal and lateral columns; light and moderate scale the severe boundary-layer profile by their 1 km ratio.",
+      "uncertainty": "Climatological statistics from Jimsphere and smoke-trail profiles (Justus et al. 1990); a realization is one random sample, not a day's measured turbulence. The derived boundary-layer light/moderate profiles are not published."
     }
   ]
 }
