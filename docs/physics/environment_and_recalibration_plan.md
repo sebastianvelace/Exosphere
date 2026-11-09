@@ -361,6 +361,17 @@ los que fallen se investigan como hallazgos físicos. CI completa verde y Godot 
   fechado:** el AS-506 en su entorno del 1969-07-16 13:32 UTC, con las mismas bandas del FER que
   la compuerta sin fechar, inserta a T+687,4 s con 72,3 t en el S-IVB (sin fechar: T+690 s,
   71,8 t; FER: T+709 s, 75,7 t). El viento del día se acerca 0,5 t al dato histórico.
+- **E5.3 hecho (2026-11-09): compuerta histórica E2 de la ventana de lanzamiento.** En su fecha,
+  con IERS + DE440, la ventana lunar del Apollo 11 (plano por LC-39A y la Luna en el LOI,
+  075:49:50,37 GET, girando hasta el límite de 72°) abre 12,2 min antes del Range Zero histórico
+  13:32:00 GMT, en el que el Apollo 11 despegó en la apertura de su ventana (NASA SP-4029; KSC:
+  apertura 9:32 EDT); banda ±20 min fijada antes de correr. En J2000 la misma búsqueda daba una
+  hora arbitraria. **Residuo declarado:** en el Range Zero el modelo coplanar pide 73,81° y el
+  vuelo usó 72,058°; el plano real incluía el blanco híbrido de la TLI y la regresión nodal del
+  aparcamiento, que el modelo simple no lleva. La ventana del juego usa ya el LOI propio del
+  Apollo 11 (antes el del Apollo 8, 6,7 h antes). **Abierto:** volar TLI→LOI fechado como compuerta
+  necesita la guía de inyección iterativa (G1): la TLI prograda deja una primera corrección de
+  ~140 m/s contra ~6 m/s históricos.
 
 ## 4. Cierre de F6 (recalibración histórica)
 

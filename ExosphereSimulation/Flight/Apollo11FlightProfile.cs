@@ -50,6 +50,10 @@ public static class Apollo11FlightProfile
     private const double FootM = 0.3048;
     /// <summary>LOI velocity to be gained, 2917.4 ft/s (table 8-V).</summary>
     public const double LoiDeltaVMps = 2_917.4 * FootM;
+    /// <summary>LOI ignition 075:49:50.37 GET (SP-238 table 7-II; NASA SP-4029 Apollo 11 summary).</summary>
+    public const double LoiIgnitionSeconds = 75 * 3_600.0 + 49 * 60.0 + 50.37;
+    /// <summary>Flight azimuth 72.058° at the opening of the launch window (NASA SP-4029).</summary>
+    public const double FlightAzimuthDegrees = 72.058;
     /// <summary>Circularization velocity to be gained, 159.3 ft/s (table 8-V).</summary>
     public const double CircularizationDeltaVMps = 159.3 * FootM;
     /// <summary>LOI orbit achieved: 169.7 by 60.0 n mi.</summary>

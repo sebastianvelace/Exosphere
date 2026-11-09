@@ -155,11 +155,13 @@ public partial class HistoricalFlightProfileController : Node
         var earth = bridge.Universe.GetBody("earth");
         var moon = bridge.Universe.GetBody("moon");
         // The Moon's plane at the arrival sets the window (osculating there with a dated ephemeris).
-        var moonAtArrival = moon?.PlanningElementsAt(earliestLiftoffTime + Apollo8FlightProfile.LoiIgnitionSeconds);
+        double liftoffToArrival = bridge.ActiveFlightProfileId == Apollo11FlightProfile.Id
+            ? Apollo11FlightProfile.LoiIgnitionSeconds : Apollo8FlightProfile.LoiIgnitionSeconds;
+        var moonAtArrival = moon?.PlanningElementsAt(earliestLiftoffTime + liftoffToArrival);
         if (earth == null || moonAtArrival == null || bridge.LaunchSiteOrNull is not { } site)
             return null;
         _pendingApolloLaunchWindow = LunarLaunchWindow.FindNext(earth, moonAtArrival, site,
-            earliestLiftoffTime, Apollo8FlightProfile.LoiIgnitionSeconds,
+            earliestLiftoffTime, liftoffToArrival,
             Apollo8FlightProfile.MinimumLaunchAzimuthDegrees,
             Apollo8FlightProfile.MaximumLaunchAzimuthDegrees);
         if (_pendingApolloLaunchWindow is not { } window)
