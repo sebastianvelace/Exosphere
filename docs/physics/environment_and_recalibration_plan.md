@@ -273,6 +273,17 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
   programa de inclinación en lazo abierto. La compuerta α/Qα de la tabla 11-2 necesita ese
   programa histórico (trabajo de F6) antes de poder correr.
 - **E4.2 `Hwm14Wind`** por encima del perfil medido, con mezcla suave.
+  **E4.2 hecho (2026-11-09).** Los paquetes de PyPI no traen los ficheros de datos y
+  `numpy.distutils` ya no existe, así que envdata compila con gfortran el Fortran oficial
+  HWM14 (release 123114, archivado con sus tres ficheros de datos en Zenodo DOI
+  10.5281/zenodo.240890) y cada build reproduce antes a 1 mm/s el perfil de comprobación
+  publicado por el NRL (`checkhwm14`). Producto `winds/hwm_as506.bin`: 20–150 km sobre LC-39A
+  el 1969-07-16 a las 13:32 UT con el ap de 3 h del GFZ (6). `ProfileWind.WithUpper` lo apila
+  sobre el sondeo, con una mezcla lineal de 5 km sobre su techo
+  (`Universe.UseWindProfile(data, "wind_as506", "hwm_as506")`). Control cruzado independiente en
+  la costura: HWM14 da 29,8 m/s desde 92° a 35 km y el sondeo 32 m/s desde 95° a 34 km (los
+  vientos del este estratosféricos de verano). A 100 km sopla viento termosférico de decenas de
+  m/s, ausente antes.
 - **E4.3 `NrlMsis2`** con F10.7/Ap de CelesTrak `SW-All.txt` por fecha; presión de motores y
   densidad aerodinámica del mismo estado.
   **E4.3 hecho (2026-11-08).** Primero un único punto atmosférico, como en E0.1:

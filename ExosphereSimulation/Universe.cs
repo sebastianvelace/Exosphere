@@ -121,12 +121,16 @@ public partial class Universe
 
     /// <summary>
     /// Blows a measured wind profile (envdata product <c>winds/&lt;id&gt;.bin</c>) around its
-    /// station on Earth (environment plan E4.1). Off by default.
+    /// station on Earth (environment plan E4.1), optionally with an HWM14 profile stacked above
+    /// its top (E4.2). Off by default.
     /// </summary>
-    public void UseWindProfile(string dataDirectory, string productId)
+    public void UseWindProfile(string dataDirectory, string productId, string? upperProductId = null)
     {
         var earth = GetBody("earth") ?? throw new InvalidOperationException("No Earth in this universe.");
-        earth.Wind = ProfileWind.LoadFromDataDirectory(dataDirectory, productId);
+        var wind = ProfileWind.LoadFromDataDirectory(dataDirectory, productId);
+        if (upperProductId != null)
+            wind.WithUpper(ProfileWind.LoadFromDataDirectory(dataDirectory, upperProductId));
+        earth.Wind = wind;
     }
 
     /// <summary>

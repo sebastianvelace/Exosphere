@@ -62,6 +62,32 @@ public sealed class WindFieldTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Hwm14ContinuesTheSoundingAboveItsTop()
+    {
+        var sounding = ProfileWind.LoadFromDataDirectory(DataDirectory(), "wind_as506");
+        var hwm = ProfileWind.LoadFromDataDirectory(DataDirectory(), "hwm_as506");
+        sounding.WithUpper(hwm);
+        double top = 33_861.0 * 6356766.0 / (6356766.0 - 33_861.0);
+        // At the sounding top: the sounding; 5 km above: HWM14 alone; continuous in between.
+        var (e0, n0) = sounding.ProfileAt(top);
+        Assert.Equal(32.0, System.Math.Sqrt(e0 * e0 + n0 * n0), 9);
+        var (e1, n1) = sounding.ProfileAt(top + ProfileWind.TopFadeM + 1.0);
+        var (he, hn) = hwm.ProfileAt(top + ProfileWind.TopFadeM + 1.0);
+        Assert.Equal(he, e1, 12);
+        Assert.Equal(hn, n1, 12);
+        var (eMid, nMid) = sounding.ProfileAt(top + 1.0);
+        Assert.True(System.Math.Abs(eMid - e0) < 0.05 && System.Math.Abs(nMid - n0) < 0.05);
+        // The two independent sources agree at the seam: summer stratospheric easterlies.
+        var (hTopE, hTopN) = hwm.ProfileAt(top);
+        double hwmFrom = (System.Math.Atan2(-hTopE, -hTopN) * 180.0 / System.Math.PI + 360.0) % 360.0;
+        output.WriteLine($"seam {top / 1000:F1} km: sounding 32.0 m/s from 95°, HWM14 {System.Math.Sqrt(hTopE * hTopE + hTopN * hTopN):F1} m/s from {hwmFrom:F0}°");
+        Assert.InRange(hwmFrom, 75.0, 115.0);
+        // 100 km: lower-thermosphere winds of tens of m/s, absent before E4.2.
+        var (e100, n100) = sounding.ProfileAt(100_000.0);
+        Assert.True(System.Math.Sqrt(e100 * e100 + n100 * n100) > 10.0);
+    }
+
+    [Fact]
     public void WindIsLocalToItsStationAndAbsentByDefault()
     {
         var universe = Universe.LoadFromDataDirectory(DataDirectory());

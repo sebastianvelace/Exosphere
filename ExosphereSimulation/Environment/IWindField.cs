@@ -35,6 +35,7 @@ public sealed class ProfileWind : IWindField
     private readonly double[] _north;
     private readonly double _latitudeDeg;
     private readonly double _longitudeDeg;
+    private ProfileWind? _upper;
 
     public string Id { get; }
 
@@ -64,11 +65,28 @@ public sealed class ProfileWind : IWindField
     public static ProfileWind LoadFromDataDirectory(string dataDirectory, string productId) =>
         new(EnvironmentProductFile.Load(Path.Combine(dataDirectory, "environment", "winds", productId + ".bin")));
 
+    /// <summary>
+    /// Stacks a profile above this one (environment plan E4.2: HWM14 above a sounding). Above this
+    /// profile's top the two blend linearly over <see cref="TopFadeM"/>; higher up the upper one
+    /// answers. Returns this profile.
+    /// </summary>
+    public ProfileWind WithUpper(ProfileWind upper)
+    {
+        _upper = upper;
+        return this;
+    }
+
     /// <summary>East and north wind (m/s) at a geodetic altitude, before the horizontal taper.</summary>
     public (double East, double North) ProfileAt(double altitudeM)
     {
         int last = _altitude.Length - 1;
         if (altitudeM <= _altitude[0]) return (_east[0], _north[0]);
+        if (altitudeM >= _altitude[last] && _upper is { } upper)
+        {
+            var (ue, un) = upper.ProfileAt(altitudeM);
+            double w = System.Math.Min(1.0, (altitudeM - _altitude[last]) / TopFadeM);
+            return (_east[last] + (ue - _east[last]) * w, _north[last] + (un - _north[last]) * w);
+        }
         if (altitudeM >= _altitude[last])
         {
             double fade = System.Math.Max(0.0, 1.0 - (altitudeM - _altitude[last]) / TopFadeM);

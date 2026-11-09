@@ -122,6 +122,17 @@
       "accessed": "2026-11-08",
       "licence": "CC BY 4.0 (GFZ)",
       "sha256": "3cf54c9a27f408f6c877ffc8cf3fbf37c44e73586ed1897a3909b8fa421f2e31"
+    },
+    {
+      "id": "zenodo_pyhwm14",
+      "title": "HWM14 release 123114 (hwm14.f90, hwm123114.bin, dwm07b104i.dat, gd2qd.dat) as archived in pyHWM14 v1.0.0",
+      "publisher": "Zenodo, DOI 10.5281/zenodo.240890 (model: Drob et al. 2015, NRL)",
+      "url": "https://zenodo.org/api/records/240890/files/rilma/pyHWM14-v1.0.0.zip/content",
+      "file": "pyHWM14-v1.0.0.zip",
+      "accessed": "2026-11-09",
+      "licence": "MIT (wrapper); HWM14 public release by NRL",
+      "sha256": "707a61e1520e81ecadeda3e2facc47a6def69f9bbf0eafc42d0c9acfe0370a08",
+      "bytes": 1479013
     }
   ],
   "products": [
@@ -436,6 +447,28 @@
       },
       "sha256": "4248a2652500fba6b66f9c81a431e33512d9d45e919fdf131543ad8df5fcfa6f",
       "bytes": 3741376
+    },
+    {
+      "id": "hwm_as506",
+      "builder": "hwm14",
+      "series": "hwm_as506",
+      "inputs": [
+        "zenodo_pyhwm14",
+        "gfz_kp_ap_f107"
+      ],
+      "output": "winds/hwm_as506.bin",
+      "model": "HWM14 (Drob et al. 2015, Earth and Space Science 2:301), compiled with gfortran",
+      "accessed": "2026-11-09",
+      "provenance": {
+        "dataId": "environment_wind",
+        "field": "as506UpperWind",
+        "status": "published",
+        "variant": "HWM14 profile 20-150 km over LC-39A at 1969-07-16 13:32 UT with the GFZ 3-hour ap of 12-15 UT",
+        "conditions": "Each build reproduces NRL's checkhwm14 profile to 1 mm/s before writing. Stacked above the IGRA sounding, blended over 5 km above its top.",
+        "uncertainty": "HWM14 climatology: ~10-20 m/s in the mesosphere and lower thermosphere against measured winds (Drob et al. 2015); not the day's actual winds."
+      },
+      "sha256": "3b0258d241a631744b4529c94721402b318c69cb91e7bf50e93128718c959377",
+      "bytes": 7056
     }
   ]
 }
