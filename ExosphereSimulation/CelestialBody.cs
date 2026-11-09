@@ -66,6 +66,22 @@ public partial class CelestialBody
     /// </summary>
     public OrbitalElements? OrbitalElements { get; set; }
 
+    /// <summary>
+    /// Set by <see cref="Universe"/> when a dated ephemeris drives this body (environment plan
+    /// E5): the osculating conic of the body about its reference at a given instant.
+    /// </summary>
+    internal Func<double, OrbitalElements?>? PlanningElementsSource { get; set; }
+
+    /// <summary>
+    /// The conic a planner should use for this body around <paramref name="time"/>: with the
+    /// Kepler ephemeris, <see cref="OrbitalElements"/> itself (the body rides it exactly); with a
+    /// dated ephemeris, the elements osculating at <paramref name="time"/>, exact there and
+    /// drifting away from it (the Moon by ~100 km a day). Planners therefore osculate at the
+    /// instant that matters to them, usually the arrival.
+    /// </summary>
+    public OrbitalElements? PlanningElementsAt(double time) =>
+        PlanningElementsSource?.Invoke(time) ?? OrbitalElements;
+
     // ── Runtime state (updated by integrator) ─────────────────────────────
 
     /// <summary>Position in the inertial simulation frame (m).</summary>

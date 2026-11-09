@@ -597,7 +597,7 @@ public partial class MapViewController : Control
         ManeuverNode node)
     {
         var moon = universe.GetBody("moon");
-        var moonOrbit = moon?.OrbitalElements;
+        var moonOrbit = moon?.PlanningElementsAt(universe.CurrentTime);
         var transfer = TransferPlanner.Instance?.CurrentTransferOrbit;
         if (moon == null || moonOrbit == null || transfer == null)
         {

@@ -309,8 +309,9 @@ public sealed class ManeuverPlanner
     /// </summary>
     public bool PlanTransearth(OrbitalElements lunarOrbit, CelestialBody moon, CelestialBody earth, double now)
     {
-        if (!HasOrbit || moon.OrbitalElements == null) return false;
-        var plan = TransearthInjectionPlanner.Compute(earth.GM, moon.GM, moon.OrbitalElements, lunarOrbit,
+        var moonAtBurn = moon.PlanningElementsAt(now + 300.0);
+        if (!HasOrbit || moonAtBurn == null) return false;
+        var plan = TransearthInjectionPlanner.Compute(earth.GM, moon.GM, moonAtBurn, lunarOrbit,
             now + 300.0, Exosphere.Simulation.Flight.Apollo8FlightProfile.TransearthTimeOfFlightSeconds,
             earth.Radius + Exosphere.Simulation.Flight.Apollo8FlightProfile.EntryCorridorVacuumPerigeeAltitudeM,
             maximumTimeOfFlight: Exosphere.Simulation.Flight.Apollo8FlightProfile.MaximumTransearthTimeOfFlightSeconds);

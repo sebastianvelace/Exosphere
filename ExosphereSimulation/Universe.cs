@@ -94,6 +94,21 @@ public partial class Universe
         Environment.Ephemeris = ChebyshevEphemeris.LoadFromDataDirectory(dataDirectory);
         if (_bodies.Count > 0)
             Environment.Ephemeris.PropagateAll(_bodies, CurrentTime);
+        // Planners keep their conic interface but read the dated motion (environment plan E5):
+        // each body's elements osculate, about its reference, at the instant the planner asks.
+        foreach (var body in _bodies)
+        {
+            if (body.OrbitalElements is not { } elements || GetBody(elements.ReferenceBodyId) is not { } parent)
+                continue;
+            var self = body;
+            body.PlanningElementsSource = time =>
+            {
+                var (position, velocity) = BodyStateAt(self, time);
+                var (parentPosition, parentVelocity) = BodyStateAt(parent, time);
+                return OrbitalElements.FromStateVector(position - parentPosition, velocity - parentVelocity,
+                    parent.GM, parent.Id, time);
+            };
+        }
     }
 
     /// <summary>
@@ -3280,9 +3295,30 @@ public partial class Universe
     /// Earth's acceleration toward the Sun; omitting it left a ~6 mm/s² spurious force on
     /// every vessel integrated in lunar space.
     /// </summary>
+    /// <summary>
+    /// Inertial acceleration of a body used as an integration frame (m/s²): with a dated
+    /// ephemeris the point-mass pull of every other body, otherwise the chained Kepler rails.
+    /// </summary>
+    public Vector3d GetReferenceFrameAcceleration(CelestialBody reference) =>
+        GetReferenceBodyRailAcceleration(reference);
+
     private Vector3d GetReferenceBodyRailAcceleration(
         CelestialBody reference)
     {
+        // A dated ephemeris moves every body under every other (DE440: Earth circles the
+        // Earth–Moon barycentre, the Moon feels the Sun at its own place, the Sun the planets).
+        // The frame then accelerates with the pull of all other bodies at the reference,
+        // the same point-mass field the vessel feels, so only the true tides remain. The parent
+        // chain below omitted the Moon's pull on Earth: a vessel in LEO felt the full 3.3e-5 m/s²
+        // lunar pull instead of its ~1e-6 m/s² tide (≈120 km of drift a day).
+        if (Environment.Ephemeris is ChebyshevEphemeris dated && dated.Covers(CurrentTime))
+        {
+            var pull = Vector3d.Zero;
+            for (int i = 0; i < _bodies.Count; i++)
+                if (!ReferenceEquals(_bodies[i], reference))
+                    pull += _bodies[i].GetGravityAt(reference.Position);
+            return pull;
+        }
         if (reference.OrbitalElements is not { } orbit)
             return Vector3d.Zero;
         var parent = GetBody(orbit.ReferenceBodyId);

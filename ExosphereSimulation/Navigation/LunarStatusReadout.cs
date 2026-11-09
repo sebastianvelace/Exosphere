@@ -64,7 +64,13 @@ public static class LunarStatusReadout
             return new LunarStatus(distance, false, null, double.NaN, double.NaN, double.NaN, false);
 
         var analysis = LunarTransferPlanner.AnalyzeEncounter(earth.GM, moon.GM, moon.Radius,
-            moon.SphereOfInfluence, earthOrbit, moon.OrbitalElements, now, SearchWindowSeconds);
+            moon.SphereOfInfluence, earthOrbit, moon.PlanningElementsAt(now)!, now, SearchWindowSeconds);
+        // With a dated ephemeris, predict again with the Moon osculating at the encounter (E5).
+        double encounterTime = analysis.HasEncounter ? analysis.Encounter.TimeOfSoiEntry
+            : analysis.Encounter.TimeOfClosestApproach;
+        if (double.IsFinite(encounterTime) && !ReferenceEquals(moon.PlanningElementsAt(encounterTime), moon.OrbitalElements))
+            analysis = LunarTransferPlanner.AnalyzeEncounter(earth.GM, moon.GM, moon.Radius,
+                moon.SphereOfInfluence, earthOrbit, moon.PlanningElementsAt(encounterTime)!, now, SearchWindowSeconds);
         var encounter = analysis.Encounter;
         return analysis.HasEncounter
             ? new LunarStatus(distance, false, true, encounter.TimeOfSoiEntry - now, double.NaN,

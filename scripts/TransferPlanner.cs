@@ -122,7 +122,8 @@ public partial class TransferPlanner : Node
         CelestialBody moon,
         CelestialBody sun)
     {
-        var moonEphemeris = moon.OrbitalElements;
+        // The Moon osculating at the planned arrival (exact there with a dated ephemeris, E5).
+        var moonEphemeris = moon.PlanningElementsAt(universe.CurrentTime + LunarCoastSeconds);
         var earth = moonEphemeris is null
             ? null
             : universe.GetBody(moonEphemeris.ReferenceBodyId);
@@ -290,7 +291,7 @@ public partial class TransferPlanner : Node
         CelestialBody moon,
         CelestialBody sun)
     {
-        var moonEphemeris = moon.OrbitalElements;
+        var moonEphemeris = moon.PlanningElementsAt(node.BurnTime + node.TimeOfFlight);
         var earth = universe.GetBody(node.ReferenceBodyId);
         if (earth == null || moonEphemeris == null || earth.GM <= 0.0)
             return;

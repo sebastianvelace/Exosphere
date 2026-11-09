@@ -154,9 +154,11 @@ public partial class HistoricalFlightProfileController : Node
             return null;
         var earth = bridge.Universe.GetBody("earth");
         var moon = bridge.Universe.GetBody("moon");
-        if (earth == null || moon?.OrbitalElements == null || bridge.LaunchSiteOrNull is not { } site)
+        // The Moon's plane at the arrival sets the window (osculating there with a dated ephemeris).
+        var moonAtArrival = moon?.PlanningElementsAt(earliestLiftoffTime + Apollo8FlightProfile.LoiIgnitionSeconds);
+        if (earth == null || moonAtArrival == null || bridge.LaunchSiteOrNull is not { } site)
             return null;
-        _pendingApolloLaunchWindow = LunarLaunchWindow.FindNext(earth, moon.OrbitalElements, site,
+        _pendingApolloLaunchWindow = LunarLaunchWindow.FindNext(earth, moonAtArrival, site,
             earliestLiftoffTime, Apollo8FlightProfile.LoiIgnitionSeconds,
             Apollo8FlightProfile.MinimumLaunchAzimuthDegrees,
             Apollo8FlightProfile.MaximumLaunchAzimuthDegrees);
@@ -1220,16 +1222,15 @@ public partial class HistoricalFlightProfileController : Node
         double historicalTimeOfFlight =
             Apollo8FlightProfile.LoiIgnitionSeconds
             - Apollo8FlightProfile.TliIgnitionSeconds;
+        double departure = System.Math.Max(universe.CurrentTime + 60.0, historicalTliTime);
         LunarTransferPlan plan = LunarTransferPlanner.Compute(
             earth.GM,
             moon.GM,
             moon.Radius,
             moon.SphereOfInfluence,
             parking,
-            moon.OrbitalElements,
-            System.Math.Max(
-                universe.CurrentTime + 60.0,
-                historicalTliTime),
+            moon.PlanningElementsAt(departure + historicalTimeOfFlight)!,
+            departure,
             historicalTimeOfFlight,
             Apollo8FlightProfile.InitialLunarPeriluneAltitudeM,
             windowSamples: 60);
@@ -1308,7 +1309,7 @@ public partial class HistoricalFlightProfileController : Node
         {
             var lunarOrbit = OrbitalElements.FromStateVector(vessel.Position - moon.Position,
                 vessel.Velocity - moon.Velocity, moon.GM, moon.Id, universe.CurrentTime);
-            var plan = TransearthInjectionPlanner.Compute(earth.GM, moon.GM, moon.OrbitalElements!,
+            var plan = TransearthInjectionPlanner.Compute(earth.GM, moon.GM, moon.PlanningElementsAt(universe.CurrentTime + 600.0)!,
                 lunarOrbit, universe.CurrentTime + 600.0, Apollo8FlightProfile.TransearthTimeOfFlightSeconds,
                 earth.Radius + Apollo8FlightProfile.EntryCorridorVacuumPerigeeAltitudeM,
                 maximumTimeOfFlight: Apollo8FlightProfile.MaximumTransearthTimeOfFlightSeconds);

@@ -337,6 +337,23 @@ través de un solo punto por magnitud: `BodyStateAt`, `BodyOrientationAt`, `Grav
 Recalibrar los perfiles históricos con el entorno nuevo **sin aflojar ninguna tolerancia**;
 los que fallen se investigan como hallazgos físicos. CI completa verde y Godot verificado.
 
+- **E5.1 hecho (2026-11-09): planificación y marcos sobre la efeméride fechada.**
+  `CelestialBody.PlanningElementsAt(t)`: con Kepler son los propios `OrbitalElements` (el mismo
+  objeto, bit a bit); con DE440, los elementos osculadores alrededor del cuerpo de referencia en
+  el instante `t`. La cónica osculadora se separa de la Luna real ~100 km el primer día y
+  ~900 km a los tres (medido con DE440 desde la TLI del Apollo 11), así que cada planificador
+  oscula donde se decide su problema: la llegada para la TLI (`LunarTransferPlanner`), las
+  correcciones translunares y la ventana de lanzamiento; el encendido para la TEI; el lector de
+  estado lunar repite el encuentro con la Luna osculada en la entrada a la SOI.
+  **Hallazgo físico:** la aceleración del marco de integración salía de la cadena de padres
+  (Tierra = tirón del Sol en la Tierra). Con DE440 la Tierra gira alrededor del baricentro
+  Tierra–Luna, así que al marco le faltaba el tirón lunar sobre la Tierra (3,3e-5 m/s²): un
+  vehículo en LEO sentía el tirón lunar entero en lugar de su marea (~1e-6 m/s²), unos 120 km
+  de deriva al día. Con efeméride fechada el marco acelera con la suma de masas puntuales de los
+  demás cuerpos (el mismo campo que siente el vehículo); frente a la segunda derivada de DE440
+  en el lanzamiento del Apollo 11 la diferencia es 1,0e-9 m/s² para la Tierra y la Luna
+  (`DatedPlanningFrameTests`, compuerta analítica E2). Con Kepler sigue la cadena de raíles.
+
 ## 4. Cierre de F6 (recalibración histórica)
 
 Orden por impacto físico, cada uno con fuente primaria y compuerta:

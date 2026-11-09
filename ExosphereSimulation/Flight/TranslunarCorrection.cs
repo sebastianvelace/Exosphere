@@ -45,7 +45,8 @@ public static class TranslunarCorrection
         ArgumentNullException.ThrowIfNull(vessel);
         ArgumentNullException.ThrowIfNull(earth);
         ArgumentNullException.ThrowIfNull(moon);
-        var ephemeris = moon.OrbitalElements
+        // Osculating at the arrival: exact where the encounter is decided (E5).
+        var ephemeris = moon.PlanningElementsAt(arrivalTime)
             ?? throw new InvalidOperationException("The translunar correction needs the lunar ephemeris.");
         double timeOfFlight = arrivalTime - epoch;
         if (!(timeOfFlight > 0.0))
