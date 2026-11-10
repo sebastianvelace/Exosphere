@@ -840,7 +840,7 @@ public class Vessel
         if (includeBodyFlaps && _physicalBodyFlapsActive && Parts.GetBodyFlaps().Count > 0)
             torque += Physics.BodyFlapAerodynamics.Evaluate(Parts.GetBodyFlaps(), BodyFlapDeflectionsRad,
                 Orientation, Vector3d.Zero, CenterOfMassOffsetLocal, air, density, temperature,
-                body.Atmosphere.SoundSpeedConstant).TorqueBody;
+                body.Atmosphere.SoundSpeedConstant, body.Atmosphere.HeatCapacityRatio).TorqueBody;
         return torque;
     }
 
@@ -946,7 +946,8 @@ public class Vessel
 
         for (int i = 0; i < flaps.Count; i++) _bodyFlapProbe[i] = flaps[i].NeutralDeflectionRad;
         Vector3d Torque() => Physics.BodyFlapAerodynamics.Evaluate(flaps, _bodyFlapProbe, Orientation,
-            Vector3d.Zero, comLocal, air, density, temperature, body.Atmosphere!.SoundSpeedConstant).TorqueBody;
+            Vector3d.Zero, comLocal, air, density, temperature, body.Atmosphere!.SoundSpeedConstant,
+            body.Atmosphere.HeatCapacityRatio).TorqueBody;
 
         const double probe = 1.0 * MathUtils.DEG_TO_RAD;
         Span<Vector3d> effectiveness = flaps.Count <= 16 ? stackalloc Vector3d[flaps.Count] : new Vector3d[flaps.Count];
@@ -1052,7 +1053,8 @@ public class Vessel
         var probe = _flapAuthorityProbe;
         for (int i = 0; i < flaps.Count; i++) probe[i] = flaps[i].NeutralDeflectionRad;
         Vector3d Torque() => Physics.BodyFlapAerodynamics.Evaluate(flaps, probe, Orientation, Vector3d.Zero,
-            CenterOfMassOffsetLocal, air, density, temperature, body.Atmosphere.SoundSpeedConstant).TorqueBody;
+            CenterOfMassOffsetLocal, air, density, temperature, body.Atmosphere.SoundSpeedConstant,
+            body.Atmosphere.HeatCapacityRatio).TorqueBody;
         var neutral = Torque();
         var authority = Vector3d.Zero;
         const double step = 1.0 * MathUtils.DEG_TO_RAD;
