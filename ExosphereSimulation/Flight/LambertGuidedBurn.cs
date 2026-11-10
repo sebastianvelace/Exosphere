@@ -24,6 +24,7 @@ public sealed class LambertGuidedBurn
     private readonly double _cutoffDeltaVMps;
     private readonly double _maximumBurnSeconds;
     private readonly Vector3d _planeNormal;
+    private readonly Func<Vector3d, Vector3d, double, Vector3d?>? _requiredVelocity;
     private double _burnSeconds;
     private Vector3d? _terminalAim;
 
@@ -52,6 +53,30 @@ public sealed class LambertGuidedBurn
         _arrivalTime = arrivalTime;
         _ignitionTime = ignitionTime;
         _planeNormal = planeNormal.Normalized;
+        _cutoffDeltaVMps = cutoffDeltaVMps;
+        _maximumBurnSeconds = maximumBurnSeconds;
+    }
+
+    /// <summary>
+    /// The same velocity-to-be-gained guidance toward a required velocity that is not a
+    /// two-body Lambert arc (a departure hyperbola, for instance).
+    /// </summary>
+    /// <param name="requiredVelocity">Body-relative velocity needed now, from the body-relative
+    /// position, velocity and epoch; null blocks the burn.</param>
+    /// <param name="deadline">Epoch after which the burn is pointless and blocks.</param>
+    public LambertGuidedBurn(Func<Vector3d, Vector3d, double, Vector3d?> requiredVelocity, double deadline,
+        double ignitionTime, double cutoffDeltaVMps, double maximumBurnSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(requiredVelocity);
+        if (!double.IsFinite(deadline) || !double.IsFinite(ignitionTime) || deadline <= ignitionTime
+            || !double.IsFinite(cutoffDeltaVMps) || cutoffDeltaVMps <= 0.0
+            || !double.IsFinite(maximumBurnSeconds) || maximumBurnSeconds <= 0.0)
+            throw new ArgumentException("Invalid guided burn envelope.");
+        _requiredVelocity = requiredVelocity;
+        _arrivalTime = deadline;
+        _ignitionTime = ignitionTime;
+        _planeNormal = Vector3d.Up;
+        _aimPosition = Vector3d.Up;
         _cutoffDeltaVMps = cutoffDeltaVMps;
         _maximumBurnSeconds = maximumBurnSeconds;
     }
@@ -136,8 +161,18 @@ public sealed class LambertGuidedBurn
         Vector3d velocityToGain;
         try
         {
-            velocityToGain = RequiredVelocity(ConditionedAim(relative, velocity), _arrivalTime, _planeNormal,
-                relative, epoch, body.GM) - velocity;
+            if (_requiredVelocity != null)
+            {
+                if (_requiredVelocity(relative, velocity, epoch) is not { } required)
+                {
+                    Block(vessel, "no-required-velocity");
+                    return;
+                }
+                velocityToGain = required - velocity;
+            }
+            else
+                velocityToGain = RequiredVelocity(ConditionedAim(relative, velocity), _arrivalTime, _planeNormal,
+                    relative, epoch, body.GM) - velocity;
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {

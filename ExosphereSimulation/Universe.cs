@@ -3783,6 +3783,17 @@ public partial class Universe
         Environment.Ephemeris.StateAt(body, t, _resolveBody ??= GetBody);
 
     /// <summary>
+    /// Inertial position and velocity of <paramref name="body"/> at <paramref name="time"/> from
+    /// the ephemeris the simulation flies (Kepler rails or dated), without moving the body.
+    /// Planners that propagate a trajectory read the bodies through this.
+    /// </summary>
+    public (Vector3d Position, Vector3d Velocity) GetBodyStateAt(CelestialBody body, double time)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        return BodyStateAt(body, time);
+    }
+
+    /// <summary>
     /// Like <see cref="GetDominantBody"/> but evaluates each body's position at time
     /// <paramref name="t"/> (via <see cref="BodyStateAt"/>) instead of its frozen end-of-tick
     /// position — so an SOI boundary test during sub-stepping is decided in the right frame.

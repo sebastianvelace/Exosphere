@@ -28,19 +28,29 @@ public sealed class TransearthReturnScenarioTests(ITestOutputHelper output)
             universe.CurrentTime + 600.0, Apollo8FlightProfile.TransearthTimeOfFlightSeconds,
             earth.Radius + Apollo8FlightProfile.EntryCorridorVacuumPerigeeAltitudeM,
                 maximumTimeOfFlight: Apollo8FlightProfile.MaximumTransearthTimeOfFlightSeconds);
+        var conic = plan;
+        plan = TransearthInjectionPlanner.Refine(plan, lunarOrbit, earth.GM, moon.GM,
+            t => universe.GetBodyStateAt(moon, t), t => universe.GetBodyStateAt(earth, t),
+            t => universe.Bodies.Select(b =>
+            {
+                var (p, v) = universe.GetBodyStateAt(b, t);
+                return new PointMassAttractor(b.GM, p, v, b.SphereOfInfluence);
+            }).ToList(),
+            out double perigeeError);
+        output.WriteLine($"refined: vinf moved {(plan.HyperbolicExcessVelocity - conic.HyperbolicExcessVelocity).Magnitude:F1} m/s, "
+            + $"perigee error {perigeeError / 1000:F2} km");
         output.WriteLine($"plan: burn +{plan.BurnTime - universe.CurrentTime:F0}s dv={plan.ImpulsiveDeltaV:F0} m/s "
             + $"vinf={plan.HyperbolicExcessVelocity.Magnitude:F0} m/s asymptoteError="
             + $"{plan.AsymptoteErrorRad * MathUtils.RAD_TO_DEG:F1} deg");
 
-        // 1. TEI: finite prograde SPS burn centred on the impulse, cut on Moon-relative energy.
+        // 1. TEI: finite SPS burn centred on the impulse, steered to the planned asymptote.
         double halfBurn = 0.5 * csm.TotalMass * plan.ImpulsiveDeltaV / csm.GetMaximumThrust(moon);
-        var tei = new ProgradeEnergyBurn(plan.TargetSelenocentricEnergy, plan.BurnTime - halfBurn,
-            maximumBurnSeconds: 600.0);
+        var tei = TransearthInjection.Create(plan, moon.GM, plan.BurnTime - halfBurn);
         CoastUntil(universe, plan.BurnTime - halfBurn - 120.0, warp: 100.0);
         Fly(universe, csm, (dt, t) => tei.Advance(csm, moon, dt, t), () => tei.IsFinished, plan.BurnTime + 900.0);
         output.WriteLine($"TEI {tei.Status} burn={tei.BurnSeconds:F1}s mass left={csm.TotalMass:F0} kg "
             + $"coast={(plan.ArrivalTime - plan.BurnTime) / 3600:F1} h");
-        Assert.Equal(ProgradeEnergyBurnStatus.Completed, tei.Status);
+        Assert.Equal(LambertGuidedBurnStatus.Completed, tei.Status);
 
         // 2. Coast out of the Moon's sphere of influence, then the scheduled corrections to the
         //    corridor perigee: one after escape, trims 8 h and 2 h out (Apollo MCC-5/MCC-7).
