@@ -70,7 +70,7 @@ Lo no leído queda como trabajo de auditoría pendiente (sección 8).
 | A-06 | Asignación de gimbal con brazo respecto al CG propio cuando hay pila acoplada | Media-baja | Media | **Corregido** |
 | A-07 | Columnas de propelente siempre asentadas hacia popa (`Vector3d.Up`) | Media-baja | Alta | Activo |
 | A-08 | Inercia rígida del líquido en cabeceo no reducida (falta I₀ de SP-106) | Baja-media | Media | Activo |
-| A-09 | `OrbitalElements`: ángulos por `acos` y banda parabólica | Baja | Alta | Activo |
+| A-09 | `OrbitalElements`: ángulos por `acos` y banda parabólica | Baja | Alta | **Parcial** (ángulos corregidos) |
 | A-10…A-22 | Menores (sección 5) | Baja | Variable | — |
 
 Nota global dada antes: 7,5/10 (modelos 9, proceso 9, consistencia entre subsistemas 6,
@@ -219,6 +219,11 @@ Elementos osculantes en la llegada propagados hacia atrás con μ_T: error 44–
 esto explica parte de los ~140 m/s de la primera corrección de medio curso.
 *Corrección*: iterar el objetivo de Lambert contra una propagación numérica (shooting de
 1–2 iteraciones) en lugar de la cónica.
+
+> **(d) corregido.** `TranslunarCorrection.Create` tiene una sobrecarga que devuelve el
+> error de perilunio predicho (NaN sin encuentro); el director histórico lo registra y
+> `TranslunarInjectionScenarioTests` exige convergencia en el caso nominal y que un
+> objetivo inalcanzable no pase por resuelto.
 
 **(d) No convergencia sin señal (precisado).** `Flight/TranslunarCorrection.cs:76–91`: si
 la predicción deja de dar encuentro (error NaN) o se agotan las 12 iteraciones de la
@@ -370,6 +375,13 @@ límites h/R → ∞ (→ 1) y h/R → 0 (→ 0).
 ---
 
 ### A-09 — `OrbitalElements`: condicionamiento
+
+> **Estado: punto 1 corregido.** Inclinación, nodo, argumento del periapsis y anomalía
+> verdadera salen de `atan2` (seno y coseno) en vez de `acos`. Prueba:
+> `OrbitalElementsRoundTripTests.AnglesNearTheirSingularValuesRoundTripAtLunarDistance`.
+> Medido: 0,41 m por conversión cerca del apogeo translunar antes; < 0,2 mm ahora. Los
+> puntos 2–4 (banda parabólica, arranque hiperbólico, época de la anomalía media) siguen
+> abiertos.
 
 - **Severidad** baja · **Confianza** alta.
 

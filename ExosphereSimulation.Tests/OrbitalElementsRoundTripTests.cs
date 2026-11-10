@@ -272,6 +272,28 @@ public sealed class OrbitalElementsRoundTripTests
             "inclined_prograde.velocity");
     }
 
+    /// <summary>
+    /// IV&amp;V audit A-09. Close to an apsis or to the node an angle taken with acos keeps half
+    /// its digits; on a translunar ellipse near apogee that was decimetres per conversion.
+    /// </summary>
+    [Theory]
+    [InlineData(System.Math.PI - 1e-7, 0.5, 1.0, 2.0)]
+    [InlineData(1e-7, 0.5, 1.0, 2.0)]
+    [InlineData(2.0, 0.5, 1e-7, 2.0)]
+    [InlineData(2.0, 1e-6, 1.0, 2.0)]
+    [InlineData(2.0, System.Math.PI - 1e-6, 1.0, 2.0)]
+    public void AnglesNearTheirSingularValuesRoundTripAtLunarDistance(
+        double trueAnomaly, double inclination, double argumentOfPeriapsis, double node)
+    {
+        const double perigee = 6_563_000.0, apogee = 384_400_000.0;
+        double a = 0.5 * (perigee + apogee), e = (apogee - perigee) / (apogee + perigee);
+        var expected = StateFromClassicalElements(a, e, inclination, node, argumentOfPeriapsis, trueAnomaly);
+        var elements = OrbitalElements.FromStateVector(expected.position, expected.velocity, EarthGm, ReferenceBody, Epoch);
+        var actual = elements.GetStateAtTime(Epoch, EarthGm);
+        double error = (actual.position - expected.position).Magnitude;
+        Assert.True(error < 2e-4, $"round trip moved the state {error:E3} m at r = {expected.position.Magnitude:E3} m");
+    }
+
     private static (Vector3d position, Vector3d velocity) StateFromClassicalElements(
         double semiMajorAxis,
         double eccentricity,

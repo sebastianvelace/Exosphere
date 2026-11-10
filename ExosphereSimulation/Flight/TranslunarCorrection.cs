@@ -36,11 +36,24 @@ public static class TranslunarCorrection
         double targetPeriluneRadius) =>
         PeriapsisCorrection.Create(vessel, moon, epoch, targetPeriluneRadius, cutoffDeltaVMps: 0.02);
 
+    /// <summary>Perilune error (m) below which the aim is taken as solved.</summary>
+    public const double PeriluneToleranceM = 200.0;
+
     /// <param name="aimPosition">The current aim point (Earth-relative at <paramref name="arrivalTime"/>);
     /// it fixes which side of the Moon the trajectory passes and the starting offset.</param>
     public static LambertGuidedBurn Create(Vessel vessel, CelestialBody earth, CelestialBody moon,
         double epoch, double arrivalTime, Vector3d aimPosition, double targetPeriluneRadius,
-        double cutoffDeltaVMps = 0.1, double maximumBurnSeconds = 300.0)
+        double cutoffDeltaVMps = 0.1, double maximumBurnSeconds = 300.0) =>
+        Create(vessel, earth, moon, epoch, arrivalTime, aimPosition, targetPeriluneRadius,
+            out _, cutoffDeltaVMps, maximumBurnSeconds);
+
+    /// <param name="predictedPeriluneErrorM">Predicted perilune radius of the returned aim less
+    /// the target (m): inside <see cref="PeriluneToleranceM"/> when the iteration solved it, NaN
+    /// when the aim predicts no lunar encounter. The burn is returned either way, so a caller
+    /// that must not fly an unsolved aim reads this.</param>
+    public static LambertGuidedBurn Create(Vessel vessel, CelestialBody earth, CelestialBody moon,
+        double epoch, double arrivalTime, Vector3d aimPosition, double targetPeriluneRadius,
+        out double predictedPeriluneErrorM, double cutoffDeltaVMps = 0.1, double maximumBurnSeconds = 300.0)
     {
         ArgumentNullException.ThrowIfNull(vessel);
         ArgumentNullException.ThrowIfNull(earth);
@@ -74,10 +87,13 @@ public static class TranslunarCorrection
         }
 
         double previousOffset = double.NaN, previousError = double.NaN;
-        for (int iteration = 0; iteration < 12; iteration++)
+        predictedPeriluneErrorM = double.NaN;
+        for (int iteration = 0; iteration <= 12; iteration++)
         {
             double error = PredictedPerilune(offset) - targetPeriluneRadius;
-            if (!double.IsFinite(error) || System.Math.Abs(error) < 200.0) break;
+            predictedPeriluneErrorM = error;
+            // The last pass only evaluates the final aim, so the reported error is its own.
+            if (!double.IsFinite(error) || System.Math.Abs(error) < PeriluneToleranceM || iteration == 12) break;
             double next = double.IsNaN(previousError) || System.Math.Abs(error - previousError) < 1e-6
                 ? offset - System.Math.Sign(offset) * error
                 : offset - error * (offset - previousOffset) / (error - previousError);
