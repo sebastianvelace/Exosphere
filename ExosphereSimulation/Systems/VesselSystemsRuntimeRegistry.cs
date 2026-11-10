@@ -54,6 +54,50 @@ public sealed class VesselSystemsRuntimeRegistry
     public void Clear() => _runtimes.Clear();
 
     /// <summary>
+    /// Advances every materialized runtime except <paramref name="activeVesselId"/> from its
+    /// own epoch to <paramref name="committedEpoch"/>. A runtime materialized for a mission
+    /// callback owner (a staged booster, a previously active vessel) keeps consuming with
+    /// its own vessel's environment, so the next save is single-epoch instead of failing
+    /// on a runtime left behind at its materialization time.
+    ///
+    /// <paramref name="sample"/> receives the runtime and the interval to close and returns
+    /// that vessel's committed environment, or null when the vessel no longer exists; such
+    /// runtimes are removed (a save may not reference an unknown vessel). A runtime ahead of
+    /// the committed epoch fails closed. Returns the ids removed.
+    /// </summary>
+    public IReadOnlyList<string> AdvanceInactive(
+        double committedEpoch,
+        string? activeVesselId,
+        Func<VesselSystemsRuntime, double, VesselSystemsTickInput?> sample)
+    {
+        ValidateEpoch(committedEpoch);
+        ArgumentNullException.ThrowIfNull(sample);
+
+        List<string>? removed = null;
+        foreach (var (vesselId, runtime) in _runtimes.ToArray())
+        {
+            if (string.Equals(vesselId, activeVesselId, StringComparison.Ordinal))
+                continue;
+
+            double delta = committedEpoch - runtime.SimulationTime;
+            // Already at the epoch: dated (1969) epochs resolve only ~1e-7 s, so compare in ulps.
+            if (SimulationClock.SameEpoch(runtime.SimulationTime, committedEpoch, EpochToleranceSeconds))
+                continue;
+            if (!double.IsFinite(delta) || delta < 0.0)
+                EnsureEpoch(runtime.SimulationTime, committedEpoch, vesselId);
+
+            if (sample(runtime, delta) is not { } input)
+            {
+                _runtimes.Remove(vesselId);
+                (removed ??= new List<string>()).Add(vesselId);
+                continue;
+            }
+            runtime.Tick(input);
+        }
+        return removed is null ? Array.Empty<string>() : removed;
+    }
+
+    /// <summary>
     /// Captures every materialized runtime at one exact committed epoch. A stale runtime
     /// fails the whole operation instead of producing a mixed-epoch save.
     /// </summary>

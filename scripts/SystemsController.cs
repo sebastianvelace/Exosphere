@@ -13,9 +13,6 @@ public partial class SystemsController : Node
     // ordering are gameplay-relevant. SunController owns the 20 Hz solar-disc sample;
     // reusing its value here avoids a duplicate body loop and keeps power/thermal/HUD
     // lighting on the same eclipse sample.
-    private Universe? _cachedUniverse;
-    private CelestialBody? _cachedEarth;
-    private CelestialBody? _cachedSun;
     private const double RuntimeEpochToleranceSeconds = 1e-7;
     private readonly VesselSystemsRuntime _fallbackRuntime =
         new("__unbound_systems__", simulationTime: 0.0);
@@ -472,62 +469,82 @@ public partial class SystemsController : Node
         if (bridge == null || vessel == null || universe == null) return;
 
         double processedSimDelta = bridge.LastProcessedSimulationSeconds;
-        if (processedSimDelta <= 0.0) return;
-
-        if (!ReferenceEquals(_cachedUniverse, universe))
+        if (processedSimDelta > 0.0)
         {
-            _cachedUniverse = universe;
-            _cachedEarth = universe.GetBody("earth");
-            _cachedSun = universe.GetBody("sun");
+            int crewCount = bridge.IsFlight14Exploration ? vessel.Crew.Count
+                : vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
+            CurrentSystemsPhase = MapMissionPhase(
+                MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
+
+            // The active vessel reuses SunController's shared 20 Hz eclipse sample so
+            // power/thermal and the HUD lighting agree; everything else is read from the
+            // state the physics already integrated.
+            _activeRuntime.Tick(VesselSystemsEnvironmentSampler.Sample(
+                universe,
+                vessel,
+                processedSimDelta,
+                universe.CurrentTime,
+                crewCount,
+                CurrentSystemsPhase,
+                SunController.SolarVisibility));
         }
 
-        var refBody = universe.GetDominantBody(vessel.Position);
-        double alt  = vessel.GetAltitude(refBody);
+        AdvanceInactiveRuntimes(universe);
 
-        int crewCount = bridge?.IsFlight14Exploration == true ? vessel.Crew.Count
-            : vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
-        CurrentSystemsPhase = MapMissionPhase(MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);
-        var sysPhase = CurrentSystemsPhase;
+        if (processedSimDelta > 0.0)
+            ApplyGameplayConsequences(vessel);
+    }
 
-        var earthBody = _cachedEarth;
-        var sunBody   = _cachedSun;
-        double solarVisibility = SunController.SolarVisibility;
+    /// <summary>
+    /// Keeps every non-active materialized runtime (callback owners such as a staged
+    /// booster, or a vessel the player switched away from) at the committed epoch, each
+    /// with its own vessel's environment, its own crew and its last mapped phase. Without
+    /// this only the active runtime advanced and the next save failed the registry's
+    /// single-epoch guarantee. Runtimes whose vessel left the Universe are released.
+    /// </summary>
+    private void AdvanceInactiveRuntimes(Universe universe)
+    {
+        if (RuntimeRegistry.Count == 0
+            || (RuntimeRegistry.Count == 1 && RuntimeRegistry.Contains(_activeRuntime.VesselId)))
+            return;
 
-        Vector3d sunPos = sunBody?.Position ?? Vector3d.Zero;
-
-        bool inAtmo    = refBody.Atmosphere != null && alt < refBody.Atmosphere.MaxAltitude;
-        double atmoTemp = inAtmo ? refBody.AtmosphericTemperatureAt(vessel.Position, alt) : 3.0;
-        var surfaceVelocity = vessel.GetAirRelativeVelocity(refBody);
-        double airspeed = surfaceVelocity.Magnitude;
-        double airDensity = refBody.GetAtmosphericDensity(vessel.Position);
-        double heatFlux = vessel.ComputeStagnationHeatFlux(airDensity, surfaceVelocity);
-
-        Vector3d earthPos = earthBody?.Position ?? Vector3d.Zero;
-
-        // Feed comms the free-stream entry condition so it can model plasma blackout.
-        // These are read-only samples of state the physics already integrated.
-        var entryCondition = new PlasmaBlackoutInput
+        string? activeId = ReferenceEquals(_activeRuntime, _fallbackRuntime)
+            ? null
+            : _activeRuntime.VesselId;
+        try
         {
-            HeatFluxWm2 = heatFlux,
-            DensityKgM3 = airDensity,
-            AirspeedMs  = airspeed,
-        };
-        _activeRuntime.Tick(new VesselSystemsTickInput(
-            DeltaSeconds: processedSimDelta,
-            SimulationTime: universe.CurrentTime,
-            CrewCount: crewCount,
-            Phase: sysPhase,
-            VesselPosition: vessel.Position,
-            EarthPosition: earthPos,
-            SunPosition: sunPos,
-            Bodies: universe.Bodies,
-            SolarVisibility: solarVisibility,
-            InAtmosphere: inAtmo,
-            AtmosphericTemperatureK: atmoTemp,
-            AeroHeatFluxWm2: heatFlux,
-            EntryCondition: entryCondition));
+            RuntimeRegistry.AdvanceInactive(
+                universe.CurrentTime,
+                activeId,
+                (runtime, delta) =>
+                {
+                    var owner = FindVessel(universe, runtime.VesselId);
+                    return owner is null
+                        ? null
+                        : VesselSystemsEnvironmentSampler.Sample(
+                            universe,
+                            owner,
+                            delta,
+                            universe.CurrentTime,
+                            owner.Crew.Count,
+                            runtime.CurrentPhase);
+                });
+        }
+        catch (System.Exception ex)
+        {
+            // Fail closed: the stale runtime stays stale and the registry refuses the save.
+            GD.PushError($"[Systems] Inactive runtime advance failed: {ex.Message}");
+        }
+    }
 
-        ApplyGameplayConsequences(vessel);
+    private static Exosphere.Simulation.Vessel? FindVessel(Universe universe, string vesselId)
+    {
+        foreach (var candidate in universe.Vessels)
+        {
+            if (string.Equals(candidate.Id, vesselId, StringComparison.Ordinal))
+                return candidate;
+        }
+        return null;
     }
 
     /// <summary>
