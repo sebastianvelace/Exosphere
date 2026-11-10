@@ -72,8 +72,8 @@ public static class RigidBodyForceEvaluator
         var forceWorld = vessel.ComputeGravityAt(state.Position, context.Bodies)
             * massProperties.Mass;
 
-        double pressure = context.ReferenceBody?.Atmosphere?.GetPressure(
-            context.ReferenceBody.GetAltitude(state.Position)) ?? 0.0;
+        // Engine back-pressure reads the single atmosphere point, as aerodynamics does.
+        double pressure = context.ReferenceBody?.GetAtmosphericPressure(state.Position) ?? 0.0;
         var mainPropulsionBody = vessel.Parts.GetTotalThrust(pressure);
         var propulsionBody = mainPropulsionBody + vessel.RcsThrusterForceBody;
         forceWorld += state.Orientation.Rotate(propulsionBody);
@@ -112,7 +112,7 @@ public static class RigidBodyForceEvaluator
                     air,
                     body.AtmosphericDensityAt(state.Position, altitude),
                     System.Math.Max(1.0, body.AtmosphericTemperatureAt(state.Position, altitude)),
-                    body.Atmosphere.SoundSpeedConstant);
+                    body.Atmosphere.SoundSpeedConstant, body.Atmosphere.HeatCapacityRatio);
                 forceWorld += flapWrench.ForceWorld;
                 distributedTorqueBody += flapWrench.TorqueBody;
             }

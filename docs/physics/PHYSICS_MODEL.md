@@ -521,6 +521,10 @@ open boundary and labels landing gear values as simulator estimates in the part 
 
 ### Body-flap actuator contract
 
+The modified-Newtonian flap pressure coefficient uses the active atmosphere’s heat
+capacity ratio, consistently in force evaluation and control predictions. The existing
+Earth-air default remains available for callers without an atmospheric model.
+
 The four flaps are represented by three semantic channels (`pitch`, `yaw`, `roll`) because the
 current mission-scale force model computes their combined hinge authority rather than resolving
 each hinge and local panel flow independently. `FlapActuatorState` stores normalized deflection

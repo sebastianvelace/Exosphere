@@ -70,7 +70,7 @@ public static class BodyFlapAerodynamics
 
     public const double SubsonicMachLimit = 0.8;
     public const double NewtonianMachOnset = 1.5;
-    private const double HeatCapacityRatio = 1.4;
+    public const double EarthAirHeatCapacityRatio = 1.4;
 
     public static AeroWrench Evaluate(
         IReadOnlyList<BodyFlapGeometry> flaps,
@@ -81,7 +81,8 @@ public static class BodyFlapAerodynamics
         Vector3d airVelocityAtCenterOfMass,
         double density,
         double temperature,
-        double soundSpeedConstant = AerodynamicsModel.EarthAirSoundSpeedConstant)
+        double soundSpeedConstant = AerodynamicsModel.EarthAirSoundSpeedConstant,
+        double heatCapacityRatio = EarthAirHeatCapacityRatio)
     {
         if (flaps.Count == 0 || density <= 0.0) return default;
         var inverse = orientation.Inverse();
@@ -96,7 +97,7 @@ public static class BodyFlapAerodynamics
             double deflection = i < deflections.Count ? deflections[i] : flap.NeutralDeflectionRad;
             var arm = flap.CentroidLocal(deflection) - centerOfMassLocal;
             var force = PlateForce(flap, deflection, airBody + omegaBody.Cross(arm), density, temperature,
-                soundSpeedConstant);
+                soundSpeedConstant, heatCapacityRatio);
             forceBody += force;
             torqueBody += arm.Cross(force);
         }
@@ -105,7 +106,8 @@ public static class BodyFlapAerodynamics
 
     /// <summary>Force (body frame) on one plate moving at <paramref name="localVelocityBody"/> through still air.</summary>
     public static Vector3d PlateForce(BodyFlapGeometry flap, double deflection, Vector3d localVelocityBody,
-        double density, double temperature, double soundSpeedConstant = AerodynamicsModel.EarthAirSoundSpeedConstant)
+        double density, double temperature, double soundSpeedConstant = AerodynamicsModel.EarthAirSoundSpeedConstant,
+        double heatCapacityRatio = EarthAirHeatCapacityRatio)
     {
         double speedSquared = localVelocityBody.MagnitudeSquared;
         if (speedSquared < 1e-12) return Vector3d.Zero;
@@ -116,17 +118,18 @@ public static class BodyFlapAerodynamics
         if (sine < 1e-12) return Vector3d.Zero;
         double cosine = System.Math.Sqrt(System.Math.Max(0.0, 1.0 - sine * sine));
         double mach = AerodynamicsModel.ComputeMach(speed, temperature, soundSpeedConstant);
-        double coefficient = NormalForceCoefficient(sine, cosine, flap.AspectRatio, mach);
+        double coefficient = NormalForceCoefficient(sine, cosine, flap.AspectRatio, mach, heatCapacityRatio);
         // The plate moving into the air along +n is pushed back along −n.
         return normal * (-System.Math.Sign(normalSpeed) * 0.5 * density * speedSquared * flap.AreaM2 * coefficient);
     }
 
-    public static double NormalForceCoefficient(double sine, double cosine, double aspectRatio, double mach)
+    public static double NormalForceCoefficient(double sine, double cosine, double aspectRatio, double mach,
+        double heatCapacityRatio = EarthAirHeatCapacityRatio)
     {
         double subsonic = 0.5 * System.Math.PI * aspectRatio * sine * cosine
             + SubsonicBroadsideCoefficient * sine * sine;
         if (mach <= SubsonicMachLimit) return subsonic;
-        double newtonian = StagnationPressureCoefficient(System.Math.Max(mach, NewtonianMachOnset)) * sine * sine;
+        double newtonian = StagnationPressureCoefficient(System.Math.Max(mach, NewtonianMachOnset), heatCapacityRatio) * sine * sine;
         if (mach >= NewtonianMachOnset) return newtonian;
         double x = (mach - SubsonicMachLimit) / (NewtonianMachOnset - SubsonicMachLimit);
         double blend = x * x * (3.0 - 2.0 * x);
@@ -137,9 +140,9 @@ public static class BodyFlapAerodynamics
     /// Stagnation pressure coefficient behind a normal shock (Rayleigh pitot), the
     /// modified-Newtonian Cp,max; it tends to 1.839 for γ = 1.4 as M → ∞.
     /// </summary>
-    public static double StagnationPressureCoefficient(double mach)
+    public static double StagnationPressureCoefficient(double mach, double heatCapacityRatio = EarthAirHeatCapacityRatio)
     {
-        const double g = HeatCapacityRatio;
+        double g = heatCapacityRatio;
         double m2 = mach * mach;
         double ratio = System.Math.Pow((g + 1.0) * (g + 1.0) * m2 / (4.0 * g * m2 - 2.0 * (g - 1.0)), g / (g - 1.0))
             * (1.0 - g + 2.0 * g * m2) / (g + 1.0);

@@ -77,6 +77,38 @@ public sealed class NrlmsisAtmosphereTests(ITestOutputHelper output)
         Assert.True(dated > 0 && double.IsFinite(dated));
     }
 
+    /// <summary>
+    /// IV&amp;V audit A-17. Engine back-pressure is an atmosphere reading like any other and must
+    /// come through the body's single atmosphere point, so a dated field reaches the engines too.
+    /// </summary>
+    [Fact]
+    public void EngineBackPressureReadsTheAtmosphereField()
+    {
+        var universe = Universe.LoadFromDataDirectory(DataDirectory());
+        var earth = universe.GetBody("earth")!;
+        var vessel = new Vessel
+        {
+            ReferenceBodyId = earth.Id,
+            Position = earth.GetSurfacePosition(28.5, -80.6, 30_000.0),
+        };
+        double profile = earth.Atmosphere!.GetPressure(vessel.GetAltitude(earth));
+        Assert.Equal(profile, vessel.GetAmbientPressure(earth));
+
+        earth.AtmosphereField = new DoubledPressureField();
+        Assert.Equal(2.0 * profile, vessel.GetAmbientPressure(earth));
+    }
+
+    private sealed class DoubledPressureField : IAtmosphereField
+    {
+        public string Id => "doubled-pressure";
+        public double Density(CelestialBody body, Vector3d worldPosition, double altitude) =>
+            body.Atmosphere!.GetDensity(altitude);
+        public double Temperature(CelestialBody body, Vector3d worldPosition, double altitude) =>
+            body.Atmosphere!.GetTemperature(altitude);
+        public double Pressure(CelestialBody body, Vector3d worldPosition, double altitude) =>
+            2.0 * body.Atmosphere!.GetPressure(altitude);
+    }
+
     private static string Root()
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());

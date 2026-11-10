@@ -184,7 +184,7 @@ public sealed class Flight14DescentController : IPhysicsStepController
         if (ship.PhysicalBodyFlapsActive)
             force += BodyFlapAerodynamics.Evaluate(ship.Parts.GetBodyFlaps(), ship.BodyFlapDeflectionsRad,
                 ship.Orientation, Vector3d.Zero, com, air, density, temperature,
-                atmosphere.SoundSpeedConstant).ForceWorld;
+                atmosphere.SoundSpeedConstant, atmosphere.HeatCapacityRatio).ForceWorld;
         return force;
     }
 
@@ -227,9 +227,9 @@ public sealed class Flight14DescentController : IPhysicsStepController
                 surfaceVelocity, density, temperature, ship.MaximumDiameter, ship.Parts.AxialDragCoefficient,
                 atmosphere.SoundSpeedConstant, viscosity).TorqueBody.X;
             double a = BodyFlapAerodynamics.Evaluate(flaps, noseUp, orientation, Vector3d.Zero, com,
-                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant).TorqueBody.X;
+                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant, atmosphere.HeatCapacityRatio).TorqueBody.X;
             double b = BodyFlapAerodynamics.Evaluate(flaps, noseDown, orientation, Vector3d.Zero, com,
-                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant).TorqueBody.X;
+                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant, atmosphere.HeatCapacityRatio).TorqueBody.X;
             return (hull + a) * (hull + b) <= 0.0;
         }
         if (Feasible(scheduledDegrees)) return scheduledDegrees;
