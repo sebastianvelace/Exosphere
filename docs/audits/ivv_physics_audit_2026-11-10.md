@@ -63,7 +63,7 @@ Lo no leído queda como trabajo de auditoría pendiente (sección 8).
 | ID | Hallazgo | Severidad | Confianza | Por defecto |
 |---|---|---|---|---|
 | A-01 | La cuna de captura se evalúa en la época de fin de paso mientras las etapas RK4 están en épocas intermedias | Alta | Alta | **Corregido** |
-| A-02 | El marco N-cuerpos en mundo Kepler no es consistente con los raíles: salto de aceleración en el SOI | Media-alta | Alta | Activo (mundo no fechado) |
+| A-02 | Marco N-cuerpos en mundo Kepler frente a los raíles | — | Alta | **Retirado**: límite inherente de los raíles, no defecto |
 | A-03 | Ventana lunar y TLI: sin regresión nodal J2, Lambert cerca de 180°, Luna osculante con μ_T solo | Media | Media-alta | Activo |
 | A-04 | Turbulencia von Kármán: realizaciones independientes en filas duplicadas a 1 mm, campo no solenoidal | Media | Alta | Apagado |
 | A-05 | Líquido rígido en balanceo: sobre-amortiguamiento/giro por chorro en etapas con salida cerca del eje | Media-baja | Media | Activo |
@@ -145,50 +145,37 @@ despreciable). No hay hallazgo, pero conviene cubrirlo en la misma prueba.
 
 ---
 
-### A-02 — Marco N-cuerpos en mundo Kepler inconsistente con los raíles
+### A-02 — Marco N-cuerpos en mundo Kepler frente a los raíles (retirado como defecto)
 
-- **Severidad** media-alta · **Confianza** alta · **Activo** en partidas no fechadas
-  (sandbox, Starship, entrenamiento). El mundo fechado (DE440) es consistente a ~1e-9.
-- **Código**: `Universe.cs:3336–3351` (aceleración del marco = atracción de todos los
-  demás cuerpos sobre el de referencia), frente a `Environment/KeplerEphemeris.cs:34–36`
-  (cada cuerpo sobre una cónica alrededor de su padre con μ del padre solamente).
+> **Estado: retirado tras releer el código; no se cambia nada.** La primera lectura lo
+> planteó como un error del marco. No lo es: es el límite inherente de mover los cuerpos
+> sobre raíles Kepler, y la corrección que proponía habría empeorado la física.
 
-**Modelo correcto.** En un marco trasladante con el cuerpo B, la aceleración relativa de
-la nave es `a_rel = g_todos(nave) − a_B`, donde `a_B` es la aceleración *real del
-movimiento que el simulador le impone a B*. Con raíles Kepler:
+- **Código**: `Universe.cs:3356–3371` (`GetReferenceBodyRailAcceleration`: aceleración del
+  marco = atracción de todos los demás cuerpos sobre el de referencia), frente a
+  `Environment/KeplerEphemeris.cs:34–36` (cada cuerpo sobre una cónica con μ del padre).
 
-- Tierra alrededor del Sol: `a_T = g_S(T)` (la Luna no perturba a la Tierra en raíles).
-- Luna alrededor de la Tierra: `a_L = a_T + g_T(L)·(1 + μ_L/μ_T…)` según cómo esté
-  definida la cónica; en todo caso no contiene `g_S(L) − g_S(T)`.
+**Qué hace y por qué es correcto.** En el marco de un cuerpo B la nave integra
+`a_rel = g_todos(nave) − Σ_{j≠B} g_j(B)`: gravedad de B más las **mareas** de los demás.
+Eso es la dinámica relativa físicamente correcta tanto en el marco Tierra como en el marco
+Luna. La alternativa "coherente con el raíl" (restar solo la aceleración del raíl, la
+cadena de padres anterior a E5) deja a una nave en LEO la atracción lunar completa,
+3,3e-5 m/s², en vez de su marea de ~1e-6 m/s²: unos 120 km de deriva al día. El comentario
+del código lo documenta y es la razón del cambio.
 
-**Qué hace el código.** Usa `a_B = Σ_{j≠B} g_j(B)`, que es la aceleración newtoniana
-completa, no la del raíl. La aceleración absoluta efectiva de la nave resulta:
+**Lo que queda, y no es corregible con raíles.** La Luna del raíl no cae libremente: su
+aceleración relativa a la Tierra es `−μ_T r/r³`, sin el término `μ_L` ni la marea solar.
+Por eso la aceleración relativa nave–Luna calculada en el marco Tierra y en el marco Luna
+difiere en `g_L(T) + g_S(T) − g_S(L)` ≈ 2–6e-5 m/s² (3–5 % de la gravedad lunar en el
+borde del SOI). No hay discontinuidad de estado ni error de integración: es el error de
+efemérides del raíl Kepler visto desde la nave. Usar `μ_T + μ_L` en el raíl de la Luna
+quitaría el primer término pero no la marea solar, y rompería el comportamiento "bit a
+bit" del mundo Kepler y sus calibraciones.
 
-- marco Tierra: `g_todos(nave) − g_L(T)`;
-- marco Luna: `g_todos(nave) + g_S(T) − g_S(L)`.
-
-**Magnitud.** El salto al cruzar el SOI es `g_L(T) + g_S(T) − g_S(L)`.
-`|g_L(T)| = 4,9028e12 / (3,844e8)² ≈ 3,3e-5 m/s²`; la marea solar diferencial
-`2μ_S·d/r³ ≈ 2·1,327e20·3,844e8/(1,496e11)³ ≈ 3,0e-5 m/s²` como máximo. Total 2–6e-5
-m/s² según geometría. La gravedad lunar en el borde del SOI (66 100 km) es 1,1e-3 m/s²:
-el salto es un 3–5 % de ella. Integrado sobre 3,6e4 s de caída hasta el perilunio:
-½·4e-5·(3,6e4)² ≈ 26 km.
-
-**Escala.** Independiente de dt y de warp; crece con el cuadrado del tiempo en el SOI.
-
-**Corrección propuesta** (elegir una):
-1. En mundo Kepler, la aceleración del marco debe ser la segunda derivada del raíl:
-   para un cuerpo con padre P, `a_B = a_P + (−μ_P r_BP/|r_BP|³)`; recursivo hasta la raíz.
-   Es lo que hacía la cadena de padres anterior a E5 y era exactamente consistente.
-2. Mantener N-cuerpos y dejar que la gravedad de terceros cuerpos sobre la nave sea el
-   término de marea `g_j(nave) − g_j(B)` solo para los cuerpos que el raíl de B ignora.
-
-**Prueba de regresión.** Nave en reposo relativo coincidente con el centro de un cuerpo
-sin masa ficticio que sigue el raíl de la Luna: debe seguirlo 1 día con error < 1 m en
-mundo Kepler (hoy deriva ~½·3e-5·(86 400)² ≈ 112 km). Y una prueba de continuidad: la
-aceleración absoluta de una nave en el borde del SOI calculada en marco Tierra y en marco
-Luna debe coincidir a 1e-8 m/s². `DatedPlanningFrameTests.IntegrationFramesAccelerateAsTheEphemeris`
-cubre solo el mundo fechado.
+**Conclusión.** Las misiones que necesitan esta fidelidad ya vuelan el mundo fechado
+(DE440), donde marco y efemérides coinciden a ~1e-9
+(`DatedPlanningFrameTests.IntegrationFramesAccelerateAsTheEphemeris`). Para el mundo
+Kepler queda como límite conocido.
 
 ---
 
@@ -508,8 +495,6 @@ terminación de la pseudo-inversa redistribuida de flaps, contabilidad de pares 
 | Para | Prueba | Criterio |
 |---|---|---|
 | A-01 | Reposo sobre la cuna, dt ∈ {0,02; 1/60; 0,005} | Fuerza igual en las 4 etapas (1e-9 rel.); penetración independiente de dt |
-| A-02 | Continuidad de aceleración absoluta en el borde del SOI, mundo Kepler | < 1e-8 m/s² entre marcos |
-| A-02 | Partícula de prueba sobre el raíl de la Luna, 1 día | < 1 m |
 | A-03a | Plano de aparcamiento en TLI con J2 | < 0,05° del vector Luna-llegada |
 | A-03d | Secante sin encuentro | Estado `NoSolution` explícito, no retorno silencioso |
 | A-04 | Continuidad a través de 304,8 m y 762 m, 100 semillas | Salto < 1e-3·σ |
@@ -558,9 +543,7 @@ Por orden de riesgo estimado:
 1. **A-01** (cuna de captura). Corrección local, riesgo bajo, afecta a un hito visible.
    Recalibrar después `BoosterReturnController` y la captura de Ship si las pruebas de
    captura cambian.
-2. **A-02** (marco Kepler). Decide primero la opción (1 o 2); la 1 restaura la
-   consistencia exacta anterior a E5 sin tocar el mundo fechado. Revisar todas las
-   pruebas de transición de SOI no fechadas.
+2. ~~A-02~~ retirado (ver sección 3).
 3. **A-06** (gimbal con pila acoplada). Cambio de una referencia; después re-verificar
    LOI y correcciones translunares de Apollo 11 (pueden necesitar recalibración de
    ganancias, con procedencia `calibrated`).
