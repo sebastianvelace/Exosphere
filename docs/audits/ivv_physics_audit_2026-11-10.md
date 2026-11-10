@@ -183,16 +183,25 @@ Kepler queda como límite conocido.
 
 - **Severidad** media · **Confianza** media-alta.
 
-**(a) Sin regresión nodal J2 en la ventana de lanzamiento.**
-`Navigation/LunarLaunchWindow.cs:62–64` propaga el plano de la órbita de aparcamiento
-como inercialmente fijo hasta el TLI.
-`Ω̇ = −(3/2)·n·J2·(R/a)²·cos i`. Con a = 6 563 km, i = 32,5°, n = 1,187e-3 rad/s,
-J2 = 1,08263e-3: `Ω̇ ≈ −1,53e-6 rad/s`. En 9 856 s (aparcamiento Apollo 11 hasta TLI):
-ΔΩ = −0,87°, que proyectado da hasta `ΔΩ·sin i ≈ 0,47°` fuera de plano. Coincide con el
-0,44° que el propio plan documenta como residuo.
-*Corrección*: rotar el nodo objetivo con Ω̇·(t_TLI − t_inserción) al elegir azimut.
-*Prueba*: con J2 activo, el ángulo entre el plano de aparcamiento en TLI y el vector
-Luna-en-llegada debe ser < 0,05°.
+**(a) Regresión nodal J2: depende de cómo se vuele la órbita de aparcamiento (replanteado).**
+`Navigation/LunarLaunchWindow.cs:62–64` fija el plano con el pad y la Luna en la llegada,
+sin regresión nodal. `Ω̇ = −(3/2)·n·J2·(R/a)²·cos i ≈ −1,53e-6 rad/s` (a = 6 563 km,
+i = 32,5°), es decir −0,87° en los 9 856 s hasta el TLI y hasta 0,47° fuera de plano.
+
+> **Corrección a la primera lectura.** Atribuí a esto el 0,44° que cita
+> `PHYSICS_MODEL.md`. No es eso: ese 0,44° es el residuo de guiado entre el plano volado y
+> el de la ventana en la inserción (`LunarLaunchWindowTests`). La coincidencia numérica era
+> casual.
+
+El problema real es otro: **los raíles Kepler son de dos cuerpos** (`CelestialBody.J2`:
+"Kepler-on-rails remains two-body"), así que el nodo regresa 0,87° si el aparcamiento se
+vuela en tiempo real (RK4 con J2) y 0° si se vuela con warp. Compensar J2 en la ventana
+arreglaría un caso y estropearía el otro. La corrección de fondo es dar a los raíles las
+tasas seculares de J2 (Ω̇, ω̇, Ṁ) para que el resultado no dependa del warp; es un cambio
+de propagación con impacto en todas las órbitas bajas con warp y en los saves, y queda
+como trabajo propio, no como parche de la ventana.
+*Prueba (cuando se haga)*: misma órbita de aparcamiento 9 856 s en RK4 y en raíles; el
+nodo debe coincidir a 0,01°.
 
 **(b) Lambert cerca de 180°.** `Navigation/LambertSolver.cs:71–78`. Si la transferencia
 subtiende π − η y el objetivo está ε fuera del plano, la solución de dos puntos exige una
@@ -211,11 +220,13 @@ esto explica parte de los ~140 m/s de la primera corrección de medio curso.
 *Corrección*: iterar el objetivo de Lambert contra una propagación numérica (shooting de
 1–2 iteraciones) en lugar de la cónica.
 
-**(d) Fallos silenciosos.** `Flight/TranslunarCorrection.cs:78–90` retorna sin maniobra
-ni aviso cuando la secante no converge o no hay encuentro. La elección del lado del plano
-B es por mínimo Δv, sin restringir el sentido de la órbita lunar (prograda/retrógrada).
-*Corrección*: estado explícito `NoSolution` visible en telemetría y prueba que lo fuerce;
-restricción de signo de `B·T`.
+**(d) No convergencia sin señal (precisado).** `Flight/TranslunarCorrection.cs:76–91`: si
+la predicción deja de dar encuentro (error NaN) o se agotan las 12 iteraciones de la
+secante, el bucle sale y se devuelve igualmente un encendido apuntado al último
+desplazamiento, sin indicar que no convergió. El lado de paso sí se conserva (l. 86–88);
+lo que escribí sobre elegirlo por mínimo Δv no aplica a este archivo.
+*Corrección*: devolver el error de perilunio predicho (NaN sin encuentro) para que el
+llamador lo registre o repita, y prueba que fuerce el caso sin encuentro.
 
 ---
 
@@ -502,7 +513,7 @@ terminación de la pseudo-inversa redistribuida de flaps, contabilidad de pares 
 | Para | Prueba | Criterio |
 |---|---|---|
 | A-01 | Reposo sobre la cuna, dt ∈ {0,02; 1/60; 0,005} | Fuerza igual en las 4 etapas (1e-9 rel.); penetración independiente de dt |
-| A-03a | Plano de aparcamiento en TLI con J2 | < 0,05° del vector Luna-llegada |
+| A-03a | Nodo tras 9 856 s de aparcamiento, RK4 frente a raíles | Coinciden a 0,01° |
 | A-03d | Secante sin encuentro | Estado `NoSolution` explícito, no retorno silencioso |
 | A-04 | Continuidad a través de 304,8 m y 762 m, 100 semillas | Salto < 1e-3·σ |
 | A-05 | S-IVB en encendido con ω_x inicial 0,01 rad/s, sin control | ω_x constante ±1 % con participación 0 |
@@ -554,7 +565,7 @@ Por orden de riesgo estimado:
 3. **A-06** (gimbal con pila acoplada). Cambio de una referencia; después re-verificar
    LOI y correcciones translunares de Apollo 11 (pueden necesitar recalibración de
    ganancias, con procedencia `calibrated`).
-4. **A-03a** y **A-03d** (J2 en la ventana; fallo explícito). Luego **A-03b/c** (shooting
+4. **A-03d** (no convergencia visible). **A-03a** pasa a ser "J2 secular en raíles", trabajo propio. Luego **A-03b/c** (shooting
    numérico), que debería bajar la primera corrección de medio curso; medir el Δv antes
    y después.
 5. **A-09** y **A-14** (robustez numérica; baratos).
