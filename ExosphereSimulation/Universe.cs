@@ -3341,26 +3341,18 @@ public partial class Universe
     private Vector3d GetReferenceBodyRailAcceleration(
         CelestialBody reference)
     {
-        // A dated ephemeris moves every body under every other (DE440: Earth circles the
-        // Earth–Moon barycentre, the Moon feels the Sun at its own place, the Sun the planets).
-        // The frame then accelerates with the pull of all other bodies at the reference,
-        // the same point-mass field the vessel feels, so only the true tides remain. The parent
-        // chain below omitted the Moon's pull on Earth: a vessel in LEO felt the full 3.3e-5 m/s²
-        // lunar pull instead of its ~1e-6 m/s² tide (≈120 km of drift a day).
-        if (Environment.Ephemeris is ChebyshevEphemeris dated && dated.Covers(CurrentTime))
-        {
-            var pull = Vector3d.Zero;
-            for (int i = 0; i < _bodies.Count; i++)
-                if (!ReferenceEquals(_bodies[i], reference))
-                    pull += _bodies[i].GetGravityAt(reference.Position);
-            return pull;
-        }
-        if (reference.OrbitalElements is not { } orbit)
-            return Vector3d.Zero;
-        var parent = GetBody(orbit.ReferenceBodyId);
-        if (parent == null) return Vector3d.Zero;
-        return parent.GetGravityAt(reference.Position)
-            + GetReferenceBodyRailAcceleration(parent);
+        // The vessel is integrated relative to the reference body, so the frame accelerates
+        // with the pull of every other body at the reference: the same point-mass field the
+        // vessel feels, leaving only the true tides. A dated ephemeris moves the bodies that way
+        // (DE440: Earth circles the Earth–Moon barycentre). Kepler rails do not, but the
+        // relative motion must still see tides only: the former parent chain (Sun at Earth)
+        // left a LEO vessel the Moon's full 3.3e-5 m/s² pull instead of its ~1e-6 m/s² tide,
+        // ≈ 120 km of drift a day and ±0.25 J/kg/s of spurious work on an Earth-relative orbit.
+        var pull = Vector3d.Zero;
+        for (int i = 0; i < _bodies.Count; i++)
+            if (!ReferenceEquals(_bodies[i], reference))
+                pull += _bodies[i].GetGravityAt(reference.Position);
+        return pull;
     }
 
     private static Physics.ContactWrench? EvaluateLandingContact(

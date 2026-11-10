@@ -99,7 +99,11 @@ For a candidate state, the net force is assembled in world coordinates:
 
 The reference-body rail acceleration is removed from the relative off-rails state where the
 scheduler uses a moving body frame. The final absolute state is reconstructed from the body
-state at the evaluated epoch, not from a stale end-of-tick body position.
+state at the evaluated epoch, not from a stale end-of-tick body position. Every RK4 stage of the
+rigid, variable-mass and slosh paths rebuilds its absolute state on that same end-of-step body
+position the fields are sampled against; a stage-dated body position offsets the sampled field
+by `v_body·(dt − τ)` and costs an `O(dt)` energy error (the slosh path drained 48 kJ/kg from a
+warp-100 AS-506 parking-orbit coast before this was enforced, `SloshCoastEnergyConservationTests`).
 
 ### Rotation
 
@@ -206,9 +210,11 @@ the adapter does not reduce the scheduler's normal coast/warp step. The `[G]` as
 assist use the same clock, and an idle pilot stick does not overwrite an engaged autopilot's
 command between control epochs.
 
-Vessels integrated off rails work in their reference body's translating frame and subtract that
-body's full rail acceleration, summed along its parent chain (the Moon's frame includes Earth's
-acceleration toward the Sun). A 111 km lunar orbit integrated at real time holds within 241 m
+Vessels integrated off rails work in their reference body's translating frame and subtract the
+point-mass pull of every other body at the reference (the Moon's frame includes the Sun's and
+Earth's pull on the Moon; Earth's includes the Moon's), so only tides remain. This holds for the
+Kepler world too: the former parent chain left a LEO vessel the Moon's full 3.3e-5 m/s² pull,
+≈ 0.2 J/kg/s of spurious work on an Earth-relative orbit. A 111 km lunar orbit integrated at real time holds within 241 m
 over one revolution (`LunarFrameAccelerationTests`).
 
 ### Guided burns
