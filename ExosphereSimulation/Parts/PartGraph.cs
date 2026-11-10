@@ -1372,7 +1372,7 @@ public partial class PartGraph
         // axis) is singular and unsolvable. εI keeps the solve well-posed and damps the
         // allocation toward zero for axes the cluster genuinely cannot influence, instead of
         // failing outright.
-        double epsilon = 1e-6 * System.Math.Max(1.0, m00 + m11 + m22);
+        double epsilon = 1e-6 * (m00 + m11 + m22);
         var lambda = SolveSymmetric3x3(
             m00 + epsilon, m01, m02,
             m11 + epsilon, m12,
@@ -1398,6 +1398,12 @@ public partial class PartGraph
     private static Vector3d SolveSymmetric3x3(
         double a, double b, double c, double d, double e, double f, Vector3d rhs)
     {
+        // Normalize before testing the determinant: its units and magnitude depend on
+        // engine authority cubed, not on the conditioning of the allocation problem.
+        double scale = System.Math.Max(System.Math.Abs(a), System.Math.Max(System.Math.Abs(d), System.Math.Abs(f)));
+        if (!(scale > 0.0) || !double.IsFinite(scale)) return Vector3d.Zero;
+        a /= scale; b /= scale; c /= scale; d /= scale; e /= scale; f /= scale;
+        rhs /= scale;
         double det = a * (d * f - e * e) - b * (b * f - e * c) + c * (b * e - d * c);
         if (System.Math.Abs(det) < 1e-15) return Vector3d.Zero;
 

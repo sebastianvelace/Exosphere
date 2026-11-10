@@ -48,6 +48,7 @@ with `bash tools/fidelity_gate.sh F1`.
 | F1 | analytic | `DistributedAerodynamicsTests.PitchRateIsDampedByTheLocalFlow` | rate damping from v + ω×r |
 | F1 | analytic | `DistributedAerodynamicsTests.TailFirstFlightReversesTheNoseLiftContribution` | tail-first reversal |
 | F1 | analytic | `DistributedAerodynamicsControlTests.SingleEngineWithoutRuntimeIsAllocatedThroughItsPartGimbal` | gimbal allocation torque |
+| F1 | analytic | `DistributedAerodynamicsControlTests.SmallEngineRetainsGimbalAuthorityAtMillinewtonScale` | scale-independent gimbal allocation |
 | F1 | analytic | `DistributedAerodynamicsControlTests.BluntBodiesKeepTheBluntModel` | slender-body validity bound |
 | F1 | analytic | `CrossflowDragTests.SutherlandViscosityMatchesTheStandardAtmosphereTable` | USSA-1976 viscosity table |
 | F1 | analytic | `CrossflowDragTests.SubcriticalCylinderIsWieselsbergersValue` | Jorgensen fig. 2 subcritical C_dn |
