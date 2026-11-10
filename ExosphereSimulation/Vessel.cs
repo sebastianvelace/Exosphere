@@ -575,7 +575,7 @@ public class Vessel
     // equation. All are pressure-corrected for the vessel's current altitude.
 
     public double GetAmbientPressure(CelestialBody? body) =>
-        body?.Atmosphere?.GetPressure(GetAltitude(body)) ?? 0.0;
+        body?.GetAtmosphericPressure(Position) ?? 0.0;
 
     /// <summary>Engines of the current stage that are lit right now.</summary>
     public int ActiveEngineCount => Parts.ActiveEngineCount;
@@ -660,7 +660,7 @@ public class Vessel
     // Empuje total en world space (N), corregido por presión ambiente del cuerpo.
     public Vector3d ComputeThrust(CelestialBody? refBody)
     {
-        double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
+        double pressure = refBody?.GetAtmosphericPressure(Position) ?? 0.0;
         return Orientation.Rotate(Parts.GetTotalThrust(pressure) + RcsThrusterForceBody);
     }
 
@@ -1268,7 +1268,7 @@ public class Vessel
         // corregida por la presión a la altitud del estado evaluado.
         // ThrottleLevel ya fue avanzado por ApplyThrottle(dt) en Tick() antes de este subpaso,
         // así que aquí solo leemos el valor spooled sin modificarlo.
-        double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
+        double pressure = refBody?.GetAtmosphericPressure(pos) ?? 0.0;
         var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure) + RcsThrusterForceBody)
             / TranslationalMassKg;
 
@@ -1289,7 +1289,7 @@ public class Vessel
         var gravity = ComputeGravityAt(pos, bodies);
         if (TotalMass <= 0.0) return gravity;
 
-        double pressure = refBody?.Atmosphere?.GetPressure(refBody.GetAltitude(pos)) ?? 0.0;
+        double pressure = refBody?.GetAtmosphericPressure(pos) ?? 0.0;
         var thrust = Orientation.Rotate(Parts.GetTotalThrust(pressure) + RcsThrusterForceBody)
             / TranslationalMassKg;
         var drag = refBody != null
@@ -1505,7 +1505,7 @@ public class Vessel
     public Vector3d GetAttitudeAuthorityBody(CelestialBody body)
     {
         ArgumentNullException.ThrowIfNull(body);
-        double pressure = body.Atmosphere?.GetPressure(GetAltitude(body)) ?? 0.0;
+        double pressure = body.GetAtmosphericPressure(Position);
         return AttitudeAuthorityLocal(pressure, FlapAngularAuthorityLocal(body));
     }
 
@@ -1607,7 +1607,7 @@ public class Vessel
             ApplyThrottle(dt);
             Parts.InvalidateTickActiveEngineCache();
 
-            double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
+            double pressure = refBody?.GetAtmosphericPressure(Position) ?? 0.0;
             ConsumePropellants(dt, pressure);
             AdvanceHotStageOverlap(dt);
 
@@ -1797,7 +1797,7 @@ public class Vessel
         CelestialBody refBody,
         Vector3d externalContactTorqueWorld)
     {
-        double pressure = refBody?.Atmosphere?.GetPressure(GetAltitude(refBody)) ?? 0.0;
+        double pressure = refBody?.GetAtmosphericPressure(Position) ?? 0.0;
         Parts.ArmStagedReactionControl();
 
         // Avanzar el spool de motores UNA VEZ por tick (antes del consumo de propelante
