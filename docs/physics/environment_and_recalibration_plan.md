@@ -352,7 +352,10 @@ los que fallen se investigan como hallazgos físicos. CI completa verde y Godot 
   de deriva al día. Con efeméride fechada el marco acelera con la suma de masas puntuales de los
   demás cuerpos (el mismo campo que siente el vehículo); frente a la segunda derivada de DE440
   en el lanzamiento del Apollo 11 la diferencia es 1,0e-9 m/s² para la Tierra y la Luna
-  (`DatedPlanningFrameTests`, compuerta analítica E2). Con Kepler sigue la cadena de raíles.
+  (`DatedPlanningFrameTests`, compuerta analítica E2). Desde el 2026-11-10 el mundo Kepler usa el
+  mismo marco de N cuerpos (el tirón lunar sobre la Tierra faltaba también allí: ±0,25 J/kg/s de
+  trabajo espurio en una órbita terrestre), junto con la corrección del drenaje de energía de
+  la costa con chapoteo, que dependía de la aceleración temporal (`SloshCoastEnergyConservationTests`).
 - **E5.2 hecho (2026-11-09): `MissionEnvironment`.** Cada misión histórica declara
   `datedEnvironment` en su JSON; `Campaign/MissionEnvironment.Apply` enciende la orientación IERS
   y DE440, pone el reloj en la época de lanzamiento (TDB) y carga los productos del día que la
