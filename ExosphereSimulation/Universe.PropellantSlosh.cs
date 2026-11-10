@@ -110,7 +110,14 @@ public partial class Universe
             Slosh6DofStageLoads Loads(Slosh6DofStage stage, double epoch)
             {
                 var datum = stage.State.Datum;
-                var (refP, refV) = BodyStateAt(reference, epoch);
+                // The datum is integrated relative to the reference body's translating frame,
+                // and every force below (gravity, gradient, air, contact) is evaluated against
+                // the bodies' end-of-step positions the scheduler has already advanced. Rebuild
+                // the absolute stage state on that same frozen frame, as the rigid and
+                // variable-mass paths do (ToAbsoluteState): an epoch-dated body position here
+                // offsets the sampled field by v_body·(dt − τ) (≈ 30 km/s for Earth) and gives
+                // an O(dt) tidal error that drained a warped LEO coast.
+                var refP = reference.Position; var refV = reference.Velocity;
                 var offset = datum.Orientation.Rotate(stage.Mass.Properties.CenterOfMassBody);
                 var material = new RigidBody6DofState(refP + datum.Position + offset,
                     refV + datum.Velocity + datum.AngularVelocityWorld.Cross(offset), datum.Orientation, datum.AngularVelocityBody);

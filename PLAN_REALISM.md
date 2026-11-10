@@ -399,6 +399,28 @@ equivocada hace la órbita.
   banda durante el ascenso y llegó a `ASCENT_ORBIT_OK` en cada corrida. Ninguna aserción numérica
   de `OrbitalReentrySurvivalTests`/`AerodynamicLiftTests` necesitó cambiar.
 
+### R20. Pérdida de energía en LEO dependiente del warp (off-rails) ✅ HECHO
+- **Evidencia (2026-11-09, mundo Kepler):** AS-506 tras la inserción, sin empuje, 900 s de coast
+  off-rails: ΔE (J2 incluido, centro de masa relativo a la Tierra) +3.3 / −9.4 / −43.6 kJ/kg a
+  warp 1 / 10 / 100; perigeo 184 → 161 km. En Godot `--apollo11-mission` el perigeo de aparcamiento
+  caía de 182 a 147 km durante el coast con warp.
+- **Causa 1 (la dependiente del warp):** `IntegrateVesselSlosh` reconstruía cada etapa RK4 sobre la
+  posición del cuerpo de referencia *fechada en la etapa* (`BodyStateAt(reference, epoch)`), pero la
+  gravedad, el gradiente, el aire y el contacto se evalúan contra los cuerpos ya avanzados al final
+  del paso. El campo se muestreaba desplazado `v_Tierra·(dt − τ)` (≈ 30 km/s × el resto del paso):
+  error de marea O(dt), −2 / −20 / −180 J/kg/s con pasos de 1/60, 0.167 y 1.67 s. Las rutas rígida y
+  de masa variable ya usaban `ToAbsoluteState`; ahora la de slosh también.
+- **Causa 2 (independiente del warp):** en el mundo Kepler el marco de la Tierra se aceleraba solo
+  con la cadena de padres (el Sol), así que un vehículo en LEO sentía el tirón lunar completo
+  (3.3e-5 m/s²) en vez de su marea (~1e-6): ≈ −0.2 J/kg/s en este arco. E5.1 lo había corregido
+  solo para la efeméride fechada; `GetReferenceBodyRailAcceleration` ahora suma el tirón de todos
+  los demás cuerpos en ambos mundos.
+- **Lo que queda (físico):** +4.9 kJ/kg (+0.63 m/s) en el primer segundo es la cola de apagado del
+  J-2 (`shutdownTransient` del S-IVB, con proveniencia). Tras el fix: +4.97 / +4.90 / +4.90 kJ/kg.
+- **Test:** `SloshCoastEnergyConservationTests` — pila S-IVB/LM/CSM AS-506 con tanques de slosh en
+  órbita circular de 300 km, 900 s a warp 1/10/100, |ΔE| ≤ 100 J/kg (banda fijada antes de correr;
+  medido −6 J/kg). Sin el fix 1: −1.9 / −18.8 / −187 kJ/kg; sin el fix 2: −194 J/kg.
+
 ### Backlog abierto dejado por esta auditoría (Jul 2026)
 - **R18b.** Corrección broadside 1/√2 de Sutton-Graves — necesita su propio re-baseline medido de
   `PeakStructure`/`tail−belly` antes de aplicarse (ver R18).
