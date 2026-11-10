@@ -85,7 +85,7 @@ public partial class HistoricalFlightProfileController : Node
     private PeriapsisCaptureBurn? _apolloLunarBurn;
     private ApsidesTargetBurn? _apolloApsidesBurn;
     private double _apolloLunarBurnLastTime = double.NaN;
-    private ProgradeEnergyBurn? _apolloTliBurn;
+    private LambertGuidedBurn? _apolloTliBurn;
     // Planned at countdown request (before Engage resets the profile) and adopted at liftoff.
     private LunarLaunchWindowSolution? _pendingApolloLaunchWindow;
     private LunarLaunchWindowSolution? _apolloLaunchWindow;
@@ -884,8 +884,9 @@ public partial class HistoricalFlightProfileController : Node
                 earth,
                 moon,
                 _startTime + Apollo8FlightProfile.TliIgnitionSeconds);
-            // Finite S-IVB burn centred on the planned impulse and cut at the planned
-            // transfer energy; the mid-course correction removes the remaining aim error.
+            // Finite S-IVB burn centred on the planned impulse, steered in closed loop to the
+            // planned lunar arrival (TranslunarInjection); the mid-course correction trims
+            // the encounter.
             double halfBurn = 0.5 * vessel.TotalMass * _apolloLunarPlan.InjectionDeltaVMag
                 / System.Math.Max(1.0, vessel.GetMaximumThrust(earth));
             double ignitionTime = _apolloLunarPlan.BurnTime - halfBurn;
@@ -896,9 +897,7 @@ public partial class HistoricalFlightProfileController : Node
             }
             bridge.SetWarpIndex(0);
             vessel.ReferenceBodyId = earth.Id;
-            _apolloTliBurn = new ProgradeEnergyBurn(
-                -earth.GM / (2.0 * _apolloLunarPlan.EarthTransferOrbit.SemiMajorAxis),
-                ignitionTime, maximumBurnSeconds: 900.0);
+            _apolloTliBurn = TranslunarInjection.Create(_apolloLunarPlan, earth.GM, ignitionTime);
             _apolloGuidedBurnLastTime = universe.CurrentTime;
             _apolloTliStartTime = ignitionTime;
             _apolloTliStarted = true;
@@ -919,7 +918,7 @@ public partial class HistoricalFlightProfileController : Node
 
             vessel.Throttle = 0.0;
             vessel.PitchYawRoll = Vector3d.Zero;
-            if (_apolloTliBurn.Status == ProgradeEnergyBurnStatus.Blocked)
+            if (_apolloTliBurn.Status == LambertGuidedBurnStatus.Blocked)
                 GD.PrintErr($"[HISTORICAL] TLI stopped: {_apolloTliBurn.BlockReason}");
             _apolloTliComplete = true;
             bridge.SetWarpIndex(8);

@@ -203,6 +203,19 @@ como trabajo propio, no como parche de la ventana.
 *Prueba (cuando se haga)*: misma órbita de aparcamiento 9 856 s en RK4 y en raíles; el
 nodo debe coincidir a 0,01°.
 
+> **Ejecución de la TLI (hallado al trabajar A-03): corregido.** La primera corrección de
+> medio curso costaba 140,7 m/s. La causa no era el plano ni la marea solar: la TLI se volaba
+> prograda hasta la energía planificada, y en un encendido de ~570 s eso giraba la línea de
+> ápsides 3,3° (llegada a 23 654 km del objetivo, 324 m/s de Lambert justo tras el corte),
+> sumado a 115 km de deriva J2 del aparcamiento respecto a la cónica del plan.
+> `Flight/TranslunarInjection` la vuela como `LambertGuidedBurn` al punto de llegada; la
+> corrección de medio curso baja a 2,7 m/s. Prueba: `TranslunarInjectionScenarioTests`
+> (límite 10 m/s).
+
+> **(b) corregido dentro del guiado.** `LambertGuidedBurn.ConditionedAim` proyecta el punto
+> objetivo sobre el plano instantáneo de la nave dentro de 10° de media revolución, con peso
+> 1 − (sin η / sin 10°)². Antes, la TLI guiada pedía 4 km/s fuera de plano a 179,7°.
+
 **(b) Lambert cerca de 180°.** `Navigation/LambertSolver.cs:71–78`. Si la transferencia
 subtiende π − η y el objetivo está ε fuera del plano, la solución de dos puntos exige una
 componente normal `Δv⊥ ≈ v·sin ε / sin η`. Con v = 10,8 km/s, ε = 0,44°, η = 5°:

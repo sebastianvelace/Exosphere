@@ -28,17 +28,16 @@ public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
         output.WriteLine($"plan: burn at +{plan.BurnTime - universe.CurrentTime:F0}s dv={plan.InjectionDeltaVMag:F0} m/s "
             + $"predicted perilune={(plan.PredictedLunarPeriapsisRadius - moon.Radius) / 1000:F0} km");
 
-        // 1. TLI: finite prograde J-2 burn centred on the planned impulse, cut at the
-        //    planned transfer energy.
+        // 1. TLI: finite J-2 burn centred on the planned impulse, steered in closed loop to
+        //    the planned lunar arrival.
         double halfBurn = 0.5 * stack.TotalMass * plan.InjectionDeltaVMag / stack.GetMaximumThrust(earth);
-        double targetEnergy = -earth.GM / (2.0 * plan.EarthTransferOrbit.SemiMajorAxis);
-        var tli = new ProgradeEnergyBurn(targetEnergy, plan.BurnTime - halfBurn, maximumBurnSeconds: 900.0);
+        var tli = TranslunarInjection.Create(plan, earth.GM, plan.BurnTime - halfBurn);
         CoastUntil(universe, plan.BurnTime - halfBurn - 120.0, warp: 1_000.0);
         double wetMass = stack.TotalMass;
         Fly(universe, stack, earth, (dt, t) => tli.Advance(stack, earth, dt, t), () => tli.IsFinished,
             plan.BurnTime + 1_500.0);
         output.WriteLine($"TLI {tli.Status} burn={tli.BurnSeconds:F1}s propellant={(wetMass - stack.TotalMass) / 1000:F1} t");
-        Assert.Equal(ProgradeEnergyBurnStatus.Completed, tli.Status);
+        Assert.Equal(LambertGuidedBurnStatus.Completed, tli.Status);
 
         // 2. CSM separation, then an SPS correction aimed at the perilune altitude (Apollo MCC-2).
         var sivb = stack.Stage();
@@ -58,7 +57,10 @@ public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
             2.0 * moon.SphereOfInfluence, out double unreachable);
         Assert.False(System.Math.Abs(unreachable) < TranslunarCorrection.PeriluneToleranceM,
             $"an unreachable perilune reported {unreachable:F0} m of error");
-        FlyCorrection(universe, csm, earth, correction, "MCC");
+        double midcourse = FlyCorrection(universe, csm, earth, correction, "MCC");
+        // A closed-loop injection leaves the midcourse a trim, as on Apollo 8 (MCC-2 ~6 m/s).
+        // Prograde-to-energy TLI left a 140.7 m/s correction (audit A-03, TLI execution).
+        Assert.InRange(midcourse, 0.0, 10.0);
 
         // 3. Inside the Moon's sphere of influence, trim the hyperbola's perilune (MCC-4).
         csm.Throttle = 0.0;
@@ -102,7 +104,7 @@ public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
         Assert.InRange(loi.ApoapsisAltitudeM, 0.0, Apollo8FlightProfile.InitialLunarApoluneAltitudeM);
     }
 
-    private void FlyCorrection(Universe universe, Vessel vessel, CelestialBody body, LambertGuidedBurn burn,
+    private double FlyCorrection(Universe universe, Vessel vessel, CelestialBody body, LambertGuidedBurn burn,
         string label)
     {
         double initial = double.NaN;
@@ -114,6 +116,7 @@ public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
         output.WriteLine($"{label} {burn.Status} initial dv={initial:F2} m/s burn={burn.BurnSeconds:F1}s");
         Assert.Equal(LambertGuidedBurnStatus.Completed, burn.Status);
         vessel.PitchYawRoll = Vector3d.Zero;
+        return initial;
     }
 
     private static void CoastUntil(Universe universe, double time, double warp)

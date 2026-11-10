@@ -78,6 +78,36 @@ public sealed class LambertGuidedBurn
             planeNormal, longWay: angle > System.Math.PI).DepartureVelocity;
     }
 
+    /// <summary>
+    /// Half-width of the band about a 180° transfer angle in which the aim point is pulled into
+    /// the vessel's instantaneous orbital plane.
+    /// </summary>
+    public const double HalfRevolutionBandRad = 10.0 * MathUtils.DEG_TO_RAD;
+
+    /// <summary>
+    /// The aim point the Lambert arc is solved to this step. Two boundary points 180° apart do
+    /// not fix a plane: an aim ε out of the vessel's plane at a transfer angle π − η asks for
+    /// an out-of-plane Δv ≈ v·sin ε / sin η, which diverges as η → 0. A translunar injection
+    /// sweeps through that angle mid-burn (the TLI asked for 4 km/s of out-of-plane velocity
+    /// at 179.7°). Inside <see cref="HalfRevolutionBandRad"/> of a half revolution the aim's
+    /// out-of-plane component is removed with weight w = 1 − (sin η / sin η₀)², so the request
+    /// stays finite (∝ sin η) and the plane change resumes, well posed, once past the band.
+    /// </summary>
+    internal Vector3d ConditionedAim(Vector3d relativePosition, Vector3d relativeVelocity)
+    {
+        var plane = relativePosition.Cross(relativeVelocity);
+        if (plane.MagnitudeSquared < 1e-12) return _aimPosition;
+        double r = relativePosition.Magnitude, aim = _aimPosition.Magnitude;
+        if (relativePosition.Dot(_aimPosition) >= 0.0) return _aimPosition; // Not near a half revolution.
+        double sinEta = relativePosition.Cross(_aimPosition).Magnitude / (r * aim);
+        double sinBand = System.Math.Sin(HalfRevolutionBandRad);
+        if (sinEta >= sinBand) return _aimPosition;
+        double ratio = sinEta / sinBand;
+        double weight = 1.0 - ratio * ratio;
+        var normal = plane.Normalized;
+        return _aimPosition - normal * (weight * normal.Dot(_aimPosition));
+    }
+
     /// <summary>Call before each committed physics step.</summary>
     public void Advance(Vessel vessel, CelestialBody body, double deltaSeconds, double epoch)
     {
@@ -106,7 +136,8 @@ public sealed class LambertGuidedBurn
         Vector3d velocityToGain;
         try
         {
-            velocityToGain = RequiredVelocity(relative, epoch, body.GM) - velocity;
+            velocityToGain = RequiredVelocity(ConditionedAim(relative, velocity), _arrivalTime, _planeNormal,
+                relative, epoch, body.GM) - velocity;
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {

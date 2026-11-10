@@ -223,7 +223,16 @@ over one revolution (`LunarFrameAccelerationTests`).
 injections, course corrections and capture/circularization burns by writing only throttle and
 attitude. Apollo 8 and Apollo 11 use them for TLI, a mid-course correction, LOI and lunar
 circularization; `TranslunarInjectionScenarioTests` flies parking orbit to lunar orbit with no
-state assignment. Historical launches release their hold-downs under the shared
+state assignment. The TLI is a `LambertGuidedBurn` to the planned lunar arrival
+(`TranslunarInjection`): a ~400 s S-IVB burn covers ~20° of parking-orbit arc, and the
+parking orbit flown under J2 drifts ~115 km from the conic the plan started from. Burning
+prograde to the planned energy (`ProgradeEnergyBurn`, used before) matched the energy but
+rotated the line of apsides 3.3°, and the midcourse correction then cost 140.7 m/s; steered on
+the velocity to be gained it costs 2.7 m/s (Apollo 8's MCC-2 was about 6 m/s). The transfer
+angle sweeps through 180° mid-burn, where two boundary points do not fix a plane and an aim
+ε out of plane asks for v·sin ε / sin η of out-of-plane velocity (4 km/s at 179.7°); within
+10° of a half revolution the guidance pulls the aim into the vessel's instantaneous plane
+with weight 1 − (sin η / sin 10°)², and the plane change resumes once past the band. Historical launches release their hold-downs under the shared
 `HoldDownReleasePolicy`. The Saturn V S-IC flies a pitch-over and then a zero-angle-of-attack
 gravity turn (`GravityTurnGuidance`); the S-II/S-IVB fly time-to-go `ClosedLoopInsertionGuidance`
 and cut off on the flown periapsis (`SaturnVAscentScenarioTests`: 181 x 195 km at T+700 s with

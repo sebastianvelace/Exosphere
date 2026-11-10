@@ -176,8 +176,9 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
 - Interplanetary planning has tested Hohmann planetary transfers, an ephemeris-targeted
   geocentric Moon route, patched-conic SOI transitions, encounter/perilunium prediction
   and TLI/LOI readouts. Apollo 8/11 now fly finite TLI, mid-course correction, LOI and
-  circularization burns (`Flight/ProgradeEnergyBurn`, `LambertGuidedBurn`,
-  `PeriapsisCaptureBurn`); [L] holds on the pad for a lunar launch window
+  circularization burns (`Flight/TranslunarInjection` steers the TLI in closed loop to the
+  planned arrival, so the midcourse is a ~3 m/s trim; `LambertGuidedBurn` pulls its aim into
+  the vessel's plane within 10° of a half revolution; `PeriapsisCaptureBurn`); [L] holds on the pad for a lunar launch window
   (`Navigation/LunarLaunchWindow`, azimuth 72°–108°) and the S-II/S-IVB fly closed-loop,
   plane-steered insertion into the lunar plane (only a resumed ascent falls back to a
   scripted plane correction). TEI is a finite SPS burn (`Navigation/TransearthInjectionPlanner`),
