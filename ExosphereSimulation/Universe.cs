@@ -3326,14 +3326,9 @@ public partial class Universe
     }
 
     /// <summary>
-    /// Inertial acceleration of a body moving on chained Kepler rails: its parent's pull
-    /// plus the parent's own rail acceleration. The Moon's frame therefore also carries
-    /// Earth's acceleration toward the Sun; omitting it left a ~6 mm/s² spurious force on
-    /// every vessel integrated in lunar space.
-    /// </summary>
-    /// <summary>
-    /// Inertial acceleration of a body used as an integration frame (m/s²): with a dated
-    /// ephemeris the point-mass pull of every other body, otherwise the chained Kepler rails.
+    /// Acceleration of a body used as an integration frame (m/s²): the point-mass pull of
+    /// every other body at its centre, with a dated ephemeris and on Kepler rails alike, so
+    /// vessels integrated relative to it feel tides only.
     /// </summary>
     public Vector3d GetReferenceFrameAcceleration(CelestialBody reference) =>
         GetReferenceBodyRailAcceleration(reference);

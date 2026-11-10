@@ -107,6 +107,30 @@
       "requestUrl": "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/computeStatisticsHistograms?geometry=%7B%22xmin%22%3A+-159%2C+%22ymin%22%3A+22%2C+%22xmax%22%3A+-158%2C+%22ymax%22%3A+22.3%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&geometryType=esriGeometryEnvelope&pixelSize=%7B%22x%22%3A+0.004166666666666667%2C+%22y%22%3A+0.004166666666666667%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&mosaicRule=%7B%22mosaicMethod%22%3A+%22esriMosaicLockRaster%22%2C+%22lockRasterIds%22%3A+%5B2530%5D%7D&f=pjson",
       "retrievedAtUtc": "2026-11-06T23:51:47.077616+00:00",
       "rawResponseSha256": "965586f309713eb87fd1b1286f6de03a1a389b3ecb5f102a9cee205f5558387d"
+    },
+    {
+      "bounds": {
+        "minimumLatitudeDegrees": 22,
+        "maximumLatitudeDegrees": 22.3,
+        "minimumLongitudeDegrees": -158,
+        "maximumLongitudeDegrees": -157.5
+      },
+      "statistics": {
+        "min": -4936.95947265625,
+        "max": -3970.3203125,
+        "mean": -4724.497018319601,
+        "standardDeviation": 194.32065127476147,
+        "sum": -40819654.238281354,
+        "median": -4792.911284083946,
+        "mode": -4876.307603783701,
+        "skipX": 1,
+        "skipY": 1,
+        "count": 8640,
+        "covariances": "0.000000"
+      },
+      "requestUrl": "https://gis.ngdc.noaa.gov/arcgis/rest/services/DEM_mosaics/DEM_all/ImageServer/computeStatisticsHistograms?geometry=%7B%22xmin%22%3A+-158%2C+%22ymin%22%3A+22%2C+%22xmax%22%3A+-157.5%2C+%22ymax%22%3A+22.3%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&geometryType=esriGeometryEnvelope&pixelSize=%7B%22x%22%3A+0.004166666666666667%2C+%22y%22%3A+0.004166666666666667%2C+%22spatialReference%22%3A+%7B%22wkid%22%3A+4326%7D%7D&mosaicRule=%7B%22mosaicMethod%22%3A+%22esriMosaicLockRaster%22%2C+%22lockRasterIds%22%3A+%5B2530%5D%7D&f=pjson",
+      "retrievedAtUtc": "2026-11-10T01:09:27.249865+00:00",
+      "rawResponseSha256": "52886dd2e0deebfdeb1618444e9935477a5bf86543e09e8af2a9f0b595babc93"
     }
   ]
 }

@@ -66,6 +66,7 @@ public sealed class Flight14OceanCoverageTests
     [InlineData(21.504359, -163.085303, true)] // Original-profile F4 westward crossing.
     [InlineData(22.131289, -158.401513, true)] // Moving world after momentum-conserving split.
     [InlineData(22.176061, -158.100198, true)] // Isolated Earth after the same repair.
+    [InlineData(22.197864, -157.905703, true)] // Moving world once the Kepler frame carries the lunar pull.
     [InlineData(22.15, -161.5, false)] // Gap between verified rectangles is not implicitly water.
     [InlineData(22.2, -159.5, false)] // Kauai.
     [InlineData(23.06, -161.92, false)] // Nihoa.
