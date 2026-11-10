@@ -6,27 +6,41 @@ Private desktop test builds are portable ZIPs; extract the entire archive before
 
 ## Screenshots
 
-Captured on 2026-10-03, with the independent booster return updated on 2026-10-04. Prepared scenes and the water-motion bench are labelled below; this gallery is not evidence of a reconstructed full Flight 14 mission. [Capture provenance](docs/screenshots/README.md).
+<p align="center">
+  <img src="docs/screenshots/liftoff.png" width="100%" alt="Starship Flight 12 lifting off Starbase">
+</p>
 
-![Centered flight operations menu](docs/screenshots/menu.png)
+<p align="center"><em>Starship Flight 12 V3 lifting off Starbase on all 33 Raptors.</em></p>
 
-*Flight operations menu with direct access to Flight 14 exploration and free flight.*
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/apollo11-liftoff.png" alt="Saturn V lifting off for Apollo 11"></td>
+    <td width="50%"><img src="docs/screenshots/orbit.png" alt="Starship in low Earth orbit with its vacuum plume"></td>
+  </tr>
+  <tr>
+    <td><em>Apollo 11's Saturn V clears LC-39A, flown on the dated 1969 environment.</em></td>
+    <td><em>Starship in a prepared 197 km orbit, with its vacuum plume.</em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/entry.png" alt="Starship in aerodynamic descent at 32 km"></td>
+    <td width="50%"><img src="docs/screenshots/landing-burn.png" alt="Starship landing burn over the ocean"></td>
+  </tr>
+  <tr>
+    <td><em>Prepared entry: aerodynamic descent at 32 km, with heating and g-load.</em></td>
+    <td><em>The same descent, landing burn at 4.3 km.</em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/cockpit.png" alt="Simulator cockpit in low orbit"></td>
+    <td width="50%"><img src="docs/screenshots/pad.png" alt="Starship on the Starbase pad"></td>
+  </tr>
+  <tr>
+    <td><em>Simulator cockpit in a prepared low orbit.</em></td>
+    <td><em>Starship on the Starbase pad before launch.</em></td>
+  </tr>
+</table>
 
-![Starship on the Starbase pad before launch](docs/screenshots/pad.png)
-
-*Starship Flight 12 V3 on the Starbase pad, with the current broadcast telemetry.*
-
-![Starship over Earth's limb in a prepared orbital scene](docs/screenshots/orbit.png)
-
-*Prepared orbital Starship scene with the current Earth limb, vacuum plume and telemetry.*
-
-![Simulator cockpit in a prepared low-orbit scene](docs/screenshots/cockpit.png)
-
-*Simulator cockpit in a prepared low-orbit scene.*
-
-![Starship in the prepared atmospheric entry scenario](docs/screenshots/entry.png)
-
-*Starship descending in the prepared 70 km atmospheric-entry scenario.*
+<details>
+<summary>Engineering scenes: water motion and booster return</summary>
 
 ![Sealed-hull water-motion bench after ten seconds](docs/screenshots/water-motion.png)
 
@@ -35,6 +49,10 @@ Captured on 2026-10-03, with the independent booster return updated on 2026-10-0
 ![Super Heavy after continuous Gulf water contact](docs/screenshots/booster-return.png)
 
 *Original detached Super Heavy shortly after estimated Gulf water contact, following continuous launch and return. Guidance calibration improves height and timing; this is still an engineering estimate.*
+
+</details>
+
+Captured on 2026-11-10 from `main`; prepared scenes are labelled. [Capture provenance](docs/screenshots/README.md).
 
 ## Play
 

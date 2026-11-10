@@ -1,64 +1,65 @@
 # Screenshot provenance
 
-Gallery refreshed on 2026-10-03 against simulator source revision
-`0b6aab5065fc86891abc6aae1e3847a2f50936d6`. These are unedited Godot framebuffer
-captures. Each prepared scene is described below; they are not a continuous
-reconstruction of the actual Flight 14 mission. Research figures and source video
-frames elsewhere in `docs/` retain their historical meaning.
+Gallery refreshed on 2026-11-10 against simulator source revision
+`bd864f39b2ede58635aaafd22fac9d195f18c868` (`main`). These are unedited Godot framebuffer
+captures at 1920 × 1080 with the Quality profile, OpenGL3/Compatibility under Xvfb. The
+renderer is software; the images do not measure performance on a target GPU. Prepared scenes
+are labelled; none is a continuous reconstruction of a real flight. Research figures and
+source video frames elsewhere in `docs/` retain their historical meaning.
 
-| File | Scene and source | Resolution |
+| File | Scene | Harness |
 | --- | --- | --- |
-| `menu.png` | Current operations menu; `menu_quick_check.py --case home-1280` | 1280 × 720 |
-| `pad.png` | Flight 12 V3 at Starbase; `visual_playtest.sh --smoke --flight12 --camera-preset pad_side` | 1280 × 720 |
-| `orbit.png` | Flight 12 V3 prepared orbital-plume scene, using the production staging/jump and rendering paths | 1920 × 1080 |
-| `cockpit.png` | Simulator cockpit; prepared 118 km geocentric orbit (HUD around 114.9 km geodetic altitude) | 1280 × 720 |
-| `entry.png` | Default Starship IFT-7 prepared 70 km entry, captured during descent around 65.3 km | 1280 × 720 |
-| `water-motion.png` | Seeded Flight 14 terminal bench at contact +10.02 s; original working-tree implementation committed as the revision above | 1280 × 720 |
+| `liftoff.png` | Starship Flight 12 V3 lifting off Starbase, T+4 s | `--launch --flight12 --camera-preset liftoff_wide` |
+| `apollo11-liftoff.png` | Saturn V AS-506 lifting off LC-39A on the dated Apollo 11 environment, T+9 s | `--apollo11` |
+| `orbit.png` | Prepared Flight 12 V3 orbital vacuum-plume scene, 197 km | `--orbital-plume --flight12` |
+| `entry.png` | Prepared IFT-7 70 km entry, aerodynamic descent at 32.5 km | `--edl --camera-preset edl_side` |
+| `landing-burn.png` | Same entry, landing retro burn at 4.3 km | `--edl --camera-preset edl_side` |
+| `cockpit.png` | Simulator cockpit in a prepared 115 km orbit | `--cockpit --flight12` |
+| `pad.png` | Starship Flight 12 V3 on the Starbase pad before launch | `--smoke --flight12 --camera-preset pad_side` |
+| `water-motion.png` | Seeded Flight 14 terminal water bench (2026-10-03, revision `0b6aab50`) | see below |
+| `booster-return.png` | Super Heavy after Gulf water contact (2026-10-04) | see below |
 
-## Rendering and checks
+## Checks
 
-Fresh menu, pad, orbital, cockpit and entry captures use the Quality profile with
-OpenGL3/Compatibility under Xvfb. The water bench uses the same resolved Quality
-profile and renderer. The renderer here is software; these screenshots do not
-measure performance on the target integrated GPU.
+All images were decoded and inspected visually. The pad, launch and cockpit harnesses passed
+their gates. Three runs ended non-zero for reasons that do not affect the published frame:
 
-Pad, orbital-plume and cockpit harnesses passed their existing gates, and the
-menu check passed layout/focus verification. The orbital-plume gate requires
-1920 × 1080; an initial 1280 × 720 capture was rejected for its dimensions and
-was replaced by the accepted native-resolution run. No gate was weakened.
-The entry capture used the public `BeginReentryDemonstration(true)` scenario,
-advanced sixty rendered frames, paused with `SetTimeScale(0)`, and settled for
-eighteen frames before saving. Its completed log contains no script/shader errors.
-All six published images were decoded and inspected visually.
+- `orbit.png`: the harness logged `ORBITAL_PLUME_OK`, but its framebuffer gate requires more
+  tail-to-backdrop contrast than this frame's measured `plumeTailContrast=0.0988` against a
+  bright Earth. The plume, anchoring, HUD and silhouette checks passed.
+- `entry.png`, `landing-burn.png`: the EDL run captured entry, peak heating, retro burn and flip,
+  then hit the 1500 s wall-clock budget set for this refresh before touchdown.
+- `apollo11-liftoff.png`: the harness logged `LAUNCH_OK`; Godot then reported
+  `RenderingServer` null-singleton errors while shutting down, after the capture.
 
-The water bench was inspected and physically checked separately in
-[the water-motion audit](../audits/flight14_water_motion_2026-10-03.md).
-The hull is sealed and physical waves/flooding remain unmodelled. Its daylight,
-sea state and heeling timing are engineering presentation/model results, not
-source-backed Flight 14 weather or capsize timing.
+No gate was weakened. A night pad capture (`--sun-elevation -8`) was taken and not published:
+the sky renders flat black at that elevation.
 
-## Reproduce the standard captures
+## Reproduce
 
-Run each harness sequentially because its temporary autoload owns `project.godot`.
-Each invocation removes the helper and restores the project when it exits.
+Run each harness sequentially because its temporary autoload owns `project.godot`; each
+invocation removes the helper and restores the project when it exits. Set `GODOT_BIN` to the
+Godot 4.6.3 .NET binary.
 
 ```bash
-EXOSPHERE_GRAPHICS_PRESET=quality bash tools/visual_playtest.sh \
-  --smoke --flight12 --camera-preset pad_side --resolution 1280x720 \
-  --run-id gallery-pad-20261003
-EXOSPHERE_GRAPHICS_PRESET=quality bash tools/visual_playtest.sh \
-  --orbital-plume --flight12 --run-id gallery-orbit-native-20261003
-EXOSPHERE_GRAPHICS_PRESET=quality bash tools/visual_playtest.sh \
-  --cockpit --flight12 --resolution 1280x720 --run-id gallery-cockpit-20261003
-EXOSPHERE_GRAPHICS_PRESET=quality python3 tools/menu_quick_check.py \
-  --skip-build --case home-1280 --output exports/repository-gallery-20261003
+export EXOSPHERE_GRAPHICS_PRESET=quality
+bash tools/visual_playtest.sh --launch --flight12 --camera-preset liftoff_wide --resolution 1920x1080 --run-id g-launch
+bash tools/visual_playtest.sh --apollo11 --resolution 1920x1080 --run-id g-apollo11
+bash tools/visual_playtest.sh --orbital-plume --flight12 --run-id g-orbit
+bash tools/visual_playtest.sh --edl --camera-preset edl_side --resolution 1920x1080 --run-id g-edl
+bash tools/visual_playtest.sh --cockpit --flight12 --resolution 1920x1080 --run-id g-cockpit
+bash tools/visual_playtest.sh --smoke --flight12 --camera-preset pad_side --resolution 1920x1080 --run-id g-pad
 ```
 
-Capture logs, image copies and the temporary entry script are preserved locally in
-`exports/repository-gallery-20261003/`. The seeded terminal script and its logs are
-in `exports/flight14-water-motion-review/`. These ignored directories are review
-artifacts; temporary scripts/autoloads are not part of the shipped game.
-The published PNG checksums are in [manifest.json](manifest.json).
+Godot does not import this folder (`.gdignore`): the gallery is documentation, not a game
+resource. The published PNG checksums are in [manifest.json](manifest.json).
+
+## Flight 14 water-motion bench
+
+`water-motion.png` is unchanged from the 2026-10-03 gallery: the seeded Flight 14 terminal bench
+at contact +10.02 s, revision `0b6aab5065fc86891abc6aae1e3847a2f50936d6`. The hull is sealed and
+physical waves/flooding remain unmodelled; see
+[the water-motion audit](../audits/flight14_water_motion_2026-10-03.md).
 
 ## Independent Super Heavy return refresh
 

@@ -1,42 +1,82 @@
 {
-  "captured_date": "2026-10-03",
-  "source_revision": "0b6aab5065fc86891abc6aae1e3847a2f50936d6",
   "images": [
     {
-      "file": "menu.png",
-      "width": 1280,
-      "height": 720,
-      "sha256": "d0597caf602783e69987c0372dc55a642f483dbf3e1e85ef4646d2af32e0f6d7"
+      "file": "liftoff.png",
+      "width": 1920,
+      "height": 1080,
+      "sha256": "1c7f4b3616087288a496a6ce244b5bf62d266b72f8c34fc3f9fc5138a56a32c5",
+      "scene": "Starship Flight 12 V3 lifting off Starbase",
+      "harness": "visual_playtest.sh --launch --flight12 --camera-preset liftoff_wide",
+      "captured_date": "2026-11-10",
+      "source_revision": "bd864f39b2ede58635aaafd22fac9d195f18c868"
     },
     {
-      "file": "pad.png",
-      "width": 1280,
-      "height": 720,
-      "sha256": "a7036bdaf605b9e753dcc15563e1cfa9b1025a359208482638743437bedf8d17"
+      "file": "apollo11-liftoff.png",
+      "width": 1920,
+      "height": 1080,
+      "sha256": "8c9624e839773151a25cc14d7be3ee211fb56456d31d48da405c45fc60ed72ea",
+      "scene": "Saturn V AS-506 / Apollo 11 lifting off LC-39A",
+      "harness": "visual_playtest.sh --apollo11",
+      "captured_date": "2026-11-10",
+      "source_revision": "bd864f39b2ede58635aaafd22fac9d195f18c868"
     },
     {
       "file": "orbit.png",
       "width": 1920,
       "height": 1080,
-      "sha256": "224476582e09bb596b5b3099369584739e2413818269352d0edc4c1961c66fe5"
-    },
-    {
-      "file": "cockpit.png",
-      "width": 1280,
-      "height": 720,
-      "sha256": "eb98e85afc45fa8be36283a3dcf1cab7ed692d2183f1b7d497a43a9174649b1a"
+      "sha256": "e6e5d06af1d8a98a5599c8757319971adfa98283ec288f683bc4e4ca42bef52a",
+      "scene": "Starship Flight 12 V3 prepared orbital vacuum-plume scene",
+      "harness": "visual_playtest.sh --orbital-plume --flight12",
+      "captured_date": "2026-11-10",
+      "source_revision": "bd864f39b2ede58635aaafd22fac9d195f18c868"
     },
     {
       "file": "entry.png",
-      "width": 1280,
-      "height": 720,
-      "sha256": "6ee677c69d6c37876faefbf199874ef05d934ebdf9b4f63bf9109d995f76f0fc"
+      "width": 1920,
+      "height": 1080,
+      "sha256": "6b4912b9142c49de7994a5802afa81a3f647d1104d1eefc038fe188ac503a4bb",
+      "scene": "Starship IFT-7 prepared 70 km entry, aerodynamic descent at 32.5 km",
+      "harness": "visual_playtest.sh --edl --camera-preset edl_side",
+      "captured_date": "2026-11-10",
+      "source_revision": "bd864f39b2ede58635aaafd22fac9d195f18c868"
+    },
+    {
+      "file": "landing-burn.png",
+      "width": 1920,
+      "height": 1080,
+      "sha256": "10e4aea47b83b2ca630ae3a248aeea277434f576eb0164d8f6f1bcdadce82060",
+      "scene": "Starship IFT-7 prepared entry, landing retro burn at 4.3 km",
+      "harness": "visual_playtest.sh --edl --camera-preset edl_side",
+      "captured_date": "2026-11-10",
+      "source_revision": "bd864f39b2ede58635aaafd22fac9d195f18c868"
+    },
+    {
+      "file": "cockpit.png",
+      "width": 1920,
+      "height": 1080,
+      "sha256": "8123cf47c76f599b7177a99c8451f34030874bed5ff18b592c009d88a85f2b50",
+      "scene": "Simulator cockpit in a prepared low orbit",
+      "harness": "visual_playtest.sh --cockpit --flight12",
+      "captured_date": "2026-11-10",
+      "source_revision": "bd864f39b2ede58635aaafd22fac9d195f18c868"
+    },
+    {
+      "file": "pad.png",
+      "width": 1920,
+      "height": 1080,
+      "sha256": "d8486a66c598cd27d97a97cbb1192e1b1ce5fb41ad3fc784b22503dc1c0d0211",
+      "scene": "Starship Flight 12 V3 on the Starbase pad before launch",
+      "harness": "visual_playtest.sh --smoke --flight12 --camera-preset pad_side",
+      "captured_date": "2026-11-10",
+      "source_revision": "bd864f39b2ede58635aaafd22fac9d195f18c868"
     },
     {
       "file": "water-motion.png",
       "width": 1280,
       "height": 720,
-      "sha256": "e69f1ba1decb9da77d61f573a83a52078889f0f4f6b673f4d658b690e74c082f"
+      "sha256": "e69f1ba1decb9da77d61f573a83a52078889f0f4f6b673f4d658b690e74c082f",
+      "source_revision": "0b6aab5065fc86891abc6aae1e3847a2f50936d6",
+      "captured_date": "2026-10-03"
     },
     {
       "file": "booster-return.png",
@@ -46,9 +86,10 @@
       "source_base_revision": "d5cc7bd5e07039a8613c5f6ff14570c4e4f11810",
       "source_working_tree": "Resource-driven boostback coast calibration and retired-booster presentation correction included in this gallery commit.",
       "mode": "Continuous production exploration; IntegratedGpu profile; software OpenGL Compatibility; water observation after propagated contact.",
-      "captured_date": "2026-10-04",
-      "mission_elapsed_seconds": 414.77999999991016
+      "captured_date": "2026-10-03",
+      "mission_elapsed_seconds": 414.77999999991016,
+      "source_revision": "0b6aab5065fc86891abc6aae1e3847a2f50936d6"
     }
   ],
-  "source_revision_scope": "Default for the original six images; later additions declare their own source base and working-tree scope."
+  "notes": "Each image declares its own capture date and source revision."
 }
