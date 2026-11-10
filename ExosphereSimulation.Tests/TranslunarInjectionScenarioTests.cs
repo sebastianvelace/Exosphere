@@ -48,8 +48,17 @@ public sealed class TranslunarInjectionScenarioTests(ITestOutputHelper output)
         var aim = plan.EarthTransferOrbit.GetStateAtTime(plan.ArrivalTime, earth.GM).position;
         double targetPerilune = moon.Radius + Apollo8FlightProfile.InitialLunarPeriluneAltitudeM;
         CoastUntil(universe, plan.BurnTime + 6.0 * 3_600.0, warp: 1_000.0);
-        FlyCorrection(universe, csm, earth, TranslunarCorrection.Create(csm, earth, moon, universe.CurrentTime,
-            plan.ArrivalTime, aim, targetPerilune), "MCC");
+        var correction = TranslunarCorrection.Create(csm, earth, moon, universe.CurrentTime,
+            plan.ArrivalTime, aim, targetPerilune, out double periluneError);
+        output.WriteLine($"MCC aim predicts perilune error {periluneError:F0} m");
+        Assert.InRange(System.Math.Abs(periluneError), 0.0, TranslunarCorrection.PeriluneToleranceM);
+        // An aim that cannot be met says so instead of passing for a solved one (audit A-03d):
+        // a perilune outside the sphere of influence has no encounter to predict.
+        TranslunarCorrection.Create(csm, earth, moon, universe.CurrentTime, plan.ArrivalTime, aim,
+            2.0 * moon.SphereOfInfluence, out double unreachable);
+        Assert.False(System.Math.Abs(unreachable) < TranslunarCorrection.PeriluneToleranceM,
+            $"an unreachable perilune reported {unreachable:F0} m of error");
+        FlyCorrection(universe, csm, earth, correction, "MCC");
 
         // 3. Inside the Moon's sphere of influence, trim the hyperbola's perilune (MCC-4).
         csm.Throttle = 0.0;

@@ -109,6 +109,43 @@ public sealed class Apollo11SpsBurnScenarioTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// IV&amp;V audit A-06. A pitch command asks the SPS gimbal for a fraction of Columbia's own
+    /// authority, a moment. Docked, that same moment turns the whole stack, so the rate gained
+    /// must fall by the inertia ratio and by nothing else. The allocator took its lever arm
+    /// about Columbia's own centre, well aft of the stack's (CSM 934 in, CSM+LM 1038 in), and
+    /// delivered the longer arm's moment instead.
+    /// </summary>
+    [Fact]
+    public void SpsGimbalMomentIsTakenAboutTheDockedStackCentre()
+    {
+        Vector3d RateAfterCommand(bool dock, out double ownInertia, out double stackInertia)
+        {
+            var (universe, _, csm, _) = CreateDockedArrival(3_000.0, dock: dock);
+            var sm = csm.Parts.Parts.Single(p => p.Definition.HasVehicleRole("service_module"));
+            sm.Monopropellant = 0.0; // The engine alone turns the vehicle.
+            csm.SASEnabled = false;
+            csm.Throttle = 1.0;
+            for (int i = 0; i < 100; i++)
+            {
+                csm.PitchYawRoll = new Vector3d(0.1, 0.0, 0.0);
+                universe.Tick(StepSeconds);
+            }
+            Assert.True(csm.GetMaximumThrust(universe.GetBody("moon")!) > 0.0);
+            ownInertia = csm.Parts.TransverseMomentOfInertia;
+            stackInertia = dock ? csm.DockedStackTransverseInertiaKgM2 : ownInertia;
+            return csm.Orientation.Inverse().Rotate(csm.AngularVelocity);
+        }
+
+        var alone = RateAfterCommand(false, out double ownAlone, out _);
+        var docked = RateAfterCommand(true, out double own, out double stack);
+        output.WriteLine($"alone {alone.X:E4} docked {docked.X:E4} rad/s; inertia own {own:E4} stack {stack:E4}");
+        Assert.True(alone.X > 1e-3, $"the SPS gimbal turned Columbia at only {alone.X:E3} rad/s");
+        Assert.InRange(stack / own, 1.5, 100.0);
+        double expected = alone.X * ownAlone / stack;
+        Assert.InRange(docked.X, expected * 0.9, expected * 1.1);
+    }
+
+    /// <summary>
     /// SP-238: circularization two revolutions after LOI took the 60.0 x 169.7 n mi orbit to
     /// the deliberately non-circular 53.7 x 65.7 n mi target (achieved 53.8 x 65.7) in a
     /// 16.7 s firing that gained 159.3 ft/s (table 7-II, table 8-V). The docked stack here
@@ -173,7 +210,7 @@ public sealed class Apollo11SpsBurnScenarioTests(ITestOutputHelper output)
     }
 
     private static (Universe Universe, CelestialBody Moon, Vessel Csm, Vessel Lm)
-        CreateDockedArrival(double timeToPeriapsisSeconds, double? periluneSpeedMps = null)
+        CreateDockedArrival(double timeToPeriapsisSeconds, double? periluneSpeedMps = null, bool dock = true)
     {
         string data = SaturnVAscentFlight.DataDirectory();
         var catalog = PartCatalog.LoadFromDirectory(Path.Combine(data, "parts"));
@@ -208,6 +245,11 @@ public sealed class Apollo11SpsBurnScenarioTests(ITestOutputHelper output)
         Assert.True(Universe.TryGetDockingFrame(csm, csmPort, out var probe, out _, out _));
         Assert.True(Universe.TryGetDockingFrame(lm, lmPort, out var drogue, out _, out _));
         lm.Position += probe - drogue;
+        if (!dock)
+        {
+            lm.Position += csm.Orientation.Rotate(Vector3d.Up) * 500.0;
+            return (universe, moon, csm, lm);
+        }
         var docking = universe.TryDock(csm.Id, csmPort.InstanceId, lm.Id, lmPort.InstanceId, "capture-fixture");
         Assert.True(docking.Succeeded, $"Fixture docking failed: {docking.Failure}");
         return (universe, moon, csm, lm);

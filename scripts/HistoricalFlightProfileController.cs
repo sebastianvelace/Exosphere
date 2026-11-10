@@ -1424,7 +1424,11 @@ public partial class HistoricalFlightProfileController : Node
             var aim = plan.EarthTransferOrbit.GetStateAtTime(plan.ArrivalTime, earth.GM).position;
             var moon = universe.GetBody("moon")!;
             _apolloMidcourseBurn = TranslunarCorrection.Create(vessel, earth, moon, universe.CurrentTime,
-                plan.ArrivalTime, aim, moon.Radius + Apollo8FlightProfile.InitialLunarPeriluneAltitudeM);
+                plan.ArrivalTime, aim, moon.Radius + Apollo8FlightProfile.InitialLunarPeriluneAltitudeM,
+                out double periluneError);
+            if (!(System.Math.Abs(periluneError) < TranslunarCorrection.PeriluneToleranceM))
+                GD.PrintErr($"[HISTORICAL] Midcourse aim did not converge (perilune error {periluneError:F0} m); "
+                    + "the inside-SOI trim will carry the remainder.");
             _apolloGuidedBurnLastTime = universe.CurrentTime;
         }
         bridge.SetWarpIndex(BurnWarpIndex);

@@ -303,8 +303,10 @@ public class OrbitalElements
         double rp = isRadial ? 0.0 : p / (1.0 + e);
 
         // ── Inclination ──────────────────────────────────────────────────────
+        // Angles come from atan2 of a sine and a cosine, not from acos: near 0 and π acos
+        // keeps only half the digits (√ε ≈ 1.5e-8 rad, metres at lunar distance).
         double i = hMag > 1e-12
-            ? System.Math.Acos(System.Math.Clamp(h.Z / hMag, -1.0, 1.0))
+            ? System.Math.Atan2(System.Math.Sqrt(h.X * h.X + h.Y * h.Y), h.Z)
             : 0.0;
 
         // ── Longitude of ascending node ──────────────────────────────────────
@@ -316,8 +318,8 @@ public class OrbitalElements
         }
         else
         {
-            lan = System.Math.Acos(System.Math.Clamp(nVec.X / nMag, -1.0, 1.0));
-            if (nVec.Y < 0.0) lan = 2.0 * System.Math.PI - lan;
+            lan = System.Math.Atan2(nVec.Y, nVec.X);
+            if (lan < 0.0) lan += 2.0 * System.Math.PI;
         }
 
         // ── Argument of periapsis ─────────────────────────────────────────────
@@ -344,9 +346,9 @@ public class OrbitalElements
         }
         else
         {
-            double nDotE = nVec.Dot(eVec);
-            aop = System.Math.Acos(System.Math.Clamp(nDotE / (nMag * e), -1.0, 1.0));
-            if (eVec.Z < 0.0) aop = 2.0 * System.Math.PI - aop;
+            // Signed angle from the node to the periapsis about the angular momentum.
+            aop = System.Math.Atan2(h.Dot(nVec.Cross(eVec)) / hMag, nVec.Dot(eVec));
+            if (aop < 0.0) aop += 2.0 * System.Math.PI;
         }
 
         // ── True anomaly ──────────────────────────────────────────────────────
@@ -380,9 +382,18 @@ public class OrbitalElements
         }
         else
         {
-            double eDotR = eVec.Dot(pos);
-            nu = System.Math.Acos(System.Math.Clamp(eDotR / (e * r), -1.0, 1.0));
-            if (rDotV < 0.0) nu = 2.0 * System.Math.PI - nu;
+            // Signed angle from the periapsis to the position about the angular momentum; a
+            // radial trajectory has no such axis and keeps the sign of the radial velocity.
+            if (hMag > 0.0 && !isRadial)
+            {
+                nu = System.Math.Atan2(h.Dot(eVec.Cross(pos)) / hMag, eVec.Dot(pos));
+                if (nu < 0.0) nu += 2.0 * System.Math.PI;
+            }
+            else
+            {
+                nu = System.Math.Acos(System.Math.Clamp(eVec.Dot(pos) / (e * r), -1.0, 1.0));
+                if (rDotV < 0.0) nu = 2.0 * System.Math.PI - nu;
+            }
         }
 
         // ── Mean anomaly at epoch (per conic type) ───────────────────────────

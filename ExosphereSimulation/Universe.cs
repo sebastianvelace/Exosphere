@@ -2609,7 +2609,7 @@ public partial class Universe
         var contactBefore = EvaluateLandingContact(
             vessel, refBody, framedPosition, framedVelocity);
         var catchContactBefore = EvaluateCatchContact(
-            vessel, framedPosition, framedVelocity, evaluationTime);
+            vessel, refBody, framedPosition, framedVelocity, evaluationTime, CurrentTime);
         vessel.LastContactForceWorld =
             (contactBefore?.ForceWorld ?? Vector3d.Zero) + (catchContactBefore?.ForceWorld ?? Vector3d.Zero)
                 + (waterBefore?.ForceWorld ?? Vector3d.Zero);
@@ -2652,7 +2652,7 @@ public partial class Universe
             state.relativeComVelocity,
             CurrentTime + offset,
             interval,
-            (relativeCom, relativeComVel, _) =>
+            (relativeCom, relativeComVel, stageEpoch) =>
             {
                 Vector3d position = refBody.Position + relativeCom - comOffsetWorld;
                 Vector3d comVelocity = refBody.Velocity + relativeComVel;
@@ -2661,7 +2661,7 @@ public partial class Universe
                 var stageContact = EvaluateLandingContact(
                     vessel, refBody, position, velocity);
                 var stageCatchContact = EvaluateCatchContact(
-                    vessel, position, velocity, evaluationTime);
+                    vessel, refBody, position, velocity, evaluationTime, stageEpoch);
                 var contactAcceleration = vessel.TotalMass > 0.0
                     ? ((stageContact?.ForceWorld ?? Vector3d.Zero)
                         + (stageCatchContact?.ForceWorld ?? Vector3d.Zero)
@@ -2681,7 +2681,7 @@ public partial class Universe
         var contactAfter = EvaluateLandingContact(vessel, refBody, vessel.Position, vessel.Velocity);
         UpdateLandingContactState(vessel, refBody, contactAfter, dt);
         var catchContactAfter = EvaluateCatchContact(
-            vessel, vessel.Position, vessel.Velocity, evaluationTime);
+            vessel, refBody, vessel.Position, vessel.Velocity, evaluationTime, evaluationTime);
         UpdateCatchContactState(vessel, catchContactAfter, dt);
         vessel.LastWaterContact = EvaluateWaterContact(vessel, refBody, vessel.Position, vessel.Velocity, evaluationTime);
         if (vessel.LastWaterContact is { } waterAfter)
@@ -2868,14 +2868,14 @@ public partial class Universe
                     CurrentTime + offset,
                     interval,
                     massProperties,
-                    (candidate, _) =>
+                    (candidate, stageEpoch) =>
                     {
                         var absolute = ToAbsoluteState(refBody, candidate);
                         var own = ShiftCenterOfMass(absolute, ownCenterShiftBody);
                         var landingContact = EvaluateLandingContact(
                             vessel, refBody, own);
                         var catchContact = EvaluateCatchContact(
-                            vessel, own, evaluationTime);
+                            vessel, refBody, own, evaluationTime, stageEpoch);
                         var waterContact = EvaluateCoupledWaterContact(vessel, refBody, own, evaluationTime);
                         var contactForce = (landingContact?.ForceWorld ?? Vector3d.Zero)
                             + (catchContact?.ForceWorld ?? Vector3d.Zero)
@@ -2924,7 +2924,7 @@ public partial class Universe
             vessel.LastContactForceWorld = contactAfter?.ForceWorld ?? Vector3d.Zero;
             vessel.LastContactTorqueWorld = contactAfter?.TorqueWorld ?? Vector3d.Zero;
             var catchContactAfter = EvaluateCatchContact(
-                vessel, ownFinal, evaluationTime);
+                vessel, refBody, ownFinal, evaluationTime, evaluationTime);
             vessel.LastCatchContact = catchContactAfter;
             UpdateLandingContactState(vessel, refBody, contactAfter, dt);
             UpdateCatchContactState(vessel, catchContactAfter, dt);
@@ -3054,7 +3054,7 @@ public partial class Universe
                 var material = MaterialState(absolute, stage);
                 var own = ShiftCenterOfMass(material, OwnShift(stage));
                 var landingContact = EvaluateLandingContact(vessel, refBody, own);
-                var catchContact = EvaluateCatchContact(vessel, own, evaluationTime);
+                var catchContact = EvaluateCatchContact(vessel, refBody, own, evaluationTime, CurrentTime + stageTime);
                 var waterContact = EvaluateCoupledWaterContact(vessel, refBody, own, evaluationTime);
                 var contactForce = (landingContact?.ForceWorld ?? Vector3d.Zero)
                     + (catchContact?.ForceWorld ?? Vector3d.Zero)
@@ -3141,7 +3141,7 @@ public partial class Universe
             vessel.LastSurfaceContact = contactAfter;
             vessel.LastContactForceWorld = contactAfter?.ForceWorld ?? Vector3d.Zero;
             vessel.LastContactTorqueWorld = contactAfter?.TorqueWorld ?? Vector3d.Zero;
-            var catchContactAfter = EvaluateCatchContact(vessel, ownFinal, evaluationTime);
+            var catchContactAfter = EvaluateCatchContact(vessel, refBody, ownFinal, evaluationTime, evaluationTime);
             vessel.LastCatchContact = catchContactAfter;
             UpdateLandingContactState(vessel, refBody, contactAfter, dt);
             UpdateCatchContactState(vessel, catchContactAfter, dt);
@@ -3241,10 +3241,28 @@ public partial class Universe
     private const double CatchRangeGateM = 500.0;
     private const double CatchCaptureRadiusM = 5.0;
 
-    private static Physics.ContactWrench? EvaluateCatchContact(
-        Vessel vessel, Vector3d position, Vector3d velocity, double evaluationTime)
+    /// <summary>
+    /// Cradle position for an integrator stage. Stage candidates live in the reference body's
+    /// translating frame at the stage epoch but are rebuilt on the body frozen at the step's
+    /// end, so a surface-fixed point must be carried back by its body-relative velocity over
+    /// the time the stage precedes the end: evaluating it at the end epoch for every stage
+    /// puts it v_rot·(dt − τ) east of the candidate (8.4 m at Starbase for a 0.02 s step,
+    /// outside the 5 m capture envelope).
+    /// </summary>
+    private static Vector3d CatchCradleAtStage(
+        Vessel vessel, CelestialBody refBody, double evaluationTime, double stageTime)
     {
-        Vector3d cradlePosition = vessel.GetCatchTargetPositionAt(evaluationTime);
+        Vector3d cradle = vessel.GetCatchTargetPositionAt(evaluationTime);
+        double remaining = evaluationTime - stageTime;
+        if (!(remaining > 0.0) || !double.IsFinite(remaining)) return cradle;
+        return cradle - (vessel.CatchTargetVelocityWorld - refBody.Velocity) * remaining;
+    }
+
+    private static Physics.ContactWrench? EvaluateCatchContact(
+        Vessel vessel, CelestialBody refBody, Vector3d position, Vector3d velocity,
+        double evaluationTime, double stageTime)
+    {
+        Vector3d cradlePosition = CatchCradleAtStage(vessel, refBody, evaluationTime, stageTime);
         vessel.LastCatchEvaluationRangeM =
             (position - cradlePosition).Magnitude;
         vessel.LastCatchEvaluationPassedGate = false;
@@ -3267,12 +3285,14 @@ public partial class Universe
 
     private static Physics.ContactWrench? EvaluateCatchContact(
         Vessel vessel,
+        CelestialBody refBody,
         in Physics.RigidBody6DofState state,
-        double evaluationTime)
+        double evaluationTime,
+        double stageTime)
     {
         Vector3d datumPosition = state.Position
             - state.Orientation.Rotate(vessel.Parts.CenterOfMass);
-        Vector3d cradlePosition = vessel.GetCatchTargetPositionAt(evaluationTime);
+        Vector3d cradlePosition = CatchCradleAtStage(vessel, refBody, evaluationTime, stageTime);
         if (!vessel.IsAttemptingTowerCatch || !vessel.HasCatchPins)
             return null;
         if ((datumPosition - cradlePosition).MagnitudeSquared
