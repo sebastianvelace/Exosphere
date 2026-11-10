@@ -130,6 +130,94 @@ public sealed class CatchContactTests
         Assert.InRange((legacy.vessel.Position - coupled.vessel.Position).Magnitude, 0.0, 0.25);
     }
 
+    /// <summary>
+    /// IV&amp;V audit A-01. On a rotating body the cradle is carried east at ω·R (465 m/s on this
+    /// equator). Integrator stages live at their own epochs in the body's translating frame, so
+    /// the cradle must be read at the stage epoch: read at the step's end it sat 9.3 m from
+    /// the first stage of a 0.02 s step, outside the 5 m envelope, and the pins were held by a
+    /// fraction of their stiffness that depended on the step. The resting compression is a
+    /// property of the spring, not of the step.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RotatingCradleSupportIsIndependentOfTheStep(bool coupled)
+    {
+        double coarse = RestingCompressionOnRotatingCradle(0.02, coupled);
+        double fine = RestingCompressionOnRotatingCradle(0.005, coupled);
+
+        // Two pins of 1.2e6 N/m under 38 t at ~9.8 m/s² (less the centrifugal relief).
+        Assert.InRange(fine, 0.14, 0.17);
+        Assert.InRange(System.Math.Abs(coarse - fine), 0.0, 0.005);
+    }
+
+    private static double RestingCompressionOnRotatingCradle(double dt, bool coupled)
+    {
+        var body = new CelestialBody
+        {
+            Id = "rotating-catch-body",
+            Mass = 5.972e24,
+            GM = 3.986004418e14,
+            Radius = 6.371e6,
+            RotationalPeriod = 86_164.1,
+        };
+        var vessel = new Vessel { ReferenceBodyId = body.Id, SASEnabled = false };
+        var nose = new Part(new PartDefinition
+        {
+            Id = "catch-test-nose",
+            CategoryStr = "command",
+            MassDry = 38_000.0,
+            LengthM = 19.0,
+            DiameterM = 9.0,
+            CatchPinLateralOffsetM = 4.4,
+            CatchPinOffsetYM = 0.0,
+            CatchPinRadiusM = 0.4,
+        });
+        vessel.Parts.SetRoot(nose);
+        vessel.Parts.AddPart(nose);
+        vessel.ConfigureCatchContactsFromParts();
+
+        var universe = new Universe { TimeScale = 1.0, ActiveVessel = vessel };
+        universe.Coupled6DofIntegrationEnabled = coupled;
+        universe.AddBody(body);
+        universe.AddVessel(vessel);
+
+        var spin = body.RotationAxis * body.AngularSpeed;
+        var cradle0 = Vector3d.Up * (body.Radius + 500.0);
+        (Vector3d position, Vector3d velocity, Vector3d up) Cradle(double time)
+        {
+            var p = Quaterniond.FromAxisAngle(body.RotationAxis, body.AngularSpeed * time).Rotate(cradle0);
+            return (body.Position + p, body.Velocity + spin.Cross(p), p.Normalized);
+        }
+        void Refresh()
+        {
+            var (p, v, up) = Cradle(universe.CurrentTime);
+            vessel.CatchTargetPositionWorld = p;
+            vessel.CatchTargetVelocityWorld = v;
+            vessel.CatchTargetUpWorld = up;
+            vessel.CatchTargetEpochSeconds = universe.CurrentTime;
+        }
+
+        var start = Cradle(0.0);
+        // The pins sit at the part's mid-height, 9.5 m above the datum: start them 1 m above the cradle.
+        vessel.Position = start.position + start.up * (1.0 - 9.5);
+        vessel.Velocity = start.velocity - start.up * 0.5;
+        vessel.Orientation = Quaterniond.Identity;
+        vessel.IsAttemptingTowerCatch = true;
+
+        int steps = (int)System.Math.Round(20.0 / dt);
+        for (int i = 0; i < steps && !vessel.IsDestroyed; i++)
+        {
+            Refresh();
+            universe.Tick(dt);
+        }
+
+        Assert.False(vessel.IsDestroyed);
+        Assert.NotNull(vessel.LastCatchContact);
+        Assert.Equal(2, vessel.LastCatchContact!.ContactCount);
+        return vessel.LastCatchContact.Points.Max(p => p.PenetrationM);
+    }
+
     private static (Universe universe, Vessel vessel) CreateCatchCase(
         double verticalSpeed, double lateralOffset)
     {

@@ -62,7 +62,7 @@ Lo no leído queda como trabajo de auditoría pendiente (sección 8).
 
 | ID | Hallazgo | Severidad | Confianza | Por defecto |
 |---|---|---|---|---|
-| A-01 | La cuna de captura se evalúa en la época de fin de paso mientras las etapas RK4 están en épocas intermedias | Alta | Alta | Activo |
+| A-01 | La cuna de captura se evalúa en la época de fin de paso mientras las etapas RK4 están en épocas intermedias | Alta | Alta | **Corregido** |
 | A-02 | El marco N-cuerpos en mundo Kepler no es consistente con los raíles: salto de aceleración en el SOI | Media-alta | Alta | Activo (mundo no fechado) |
 | A-03 | Ventana lunar y TLI: sin regresión nodal J2, Lambert cerca de 180°, Luna osculante con μ_T solo | Media | Media-alta | Activo |
 | A-04 | Turbulencia von Kármán: realizaciones independientes en filas duplicadas a 1 mm, campo no solenoidal | Media | Alta | Apagado |
@@ -84,6 +84,14 @@ subsistemas**, no de ecuaciones mal escritas.
 ## 3. Hallazgos principales
 
 ### A-01 — Cuna de captura evaluada en la época equivocada dentro del RK4
+
+> **Estado: corregido.** `Universe.CatchCradleAtStage` lleva la cuna a la época de la etapa
+> con su velocidad relativa al cuerpo, en los cuatro caminos de integración. Prueba:
+> `CatchContactTests.RotatingCradleSupportIsIndependentOfTheStep`. La medida confirmó y
+> agravó la estimación: los pines están a ±4,4 m del centro de la cuna, así que con
+> dt = 0,02 s solo la etapa final caía dentro de la envolvente y el vehículo atravesaba la
+> cuna (2,67 m de diferencia de compresión frente a dt = 0,005 s; ahora 0,155 m en ambos,
+> el valor analítico m·g/2k).
 
 - **Severidad** alta · **Confianza** alta · **Activo** en toda captura Mechazilla.
 - **Código**: `Universe.cs:3247` y `3275` (`GetCatchTargetPositionAt(evaluationTime)`),

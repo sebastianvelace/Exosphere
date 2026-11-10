@@ -127,9 +127,9 @@ public partial class Universe
                 var contactState = new RigidBody6DofState(refP + datum.Position + contactOffset,
                     refV + datum.Velocity + datum.AngularVelocityWorld.Cross(contactOffset), datum.Orientation, datum.AngularVelocityBody);
                 var landing = EvaluateLandingContact(vessel, reference, contactState);
-                // On that frozen frame the cradle and the water region are read at the step's
-                // end epoch too, as on the rigid path (the cradle moves ~30 km/s inertially).
-                var catchContact = EvaluateCatchContact(vessel, contactState, evaluationTime);
+                // On that frozen frame the water region is read at the step's end epoch; the
+                // cradle is carried back to the stage epoch by its body-relative velocity.
+                var catchContact = EvaluateCatchContact(vessel, reference, contactState, evaluationTime, CurrentTime + localTime);
                 var water = EvaluateCoupledWaterContact(vessel, reference, contactState, evaluationTime);
                 var force = (landing?.ForceWorld ?? default) + (catchContact?.ForceWorld ?? default) + (water?.ForceWorld ?? default);
                 var torque = (landing?.TorqueWorld ?? default) + (catchContact?.TorqueWorld ?? default)
@@ -231,7 +231,7 @@ public partial class Universe
             vessel.LastSurfaceContact = contact;
             vessel.LastContactForceWorld = contact?.ForceWorld ?? default;
             vessel.LastContactTorqueWorld = contact?.TorqueWorld ?? default;
-            var catchFinal = EvaluateCatchContact(vessel, contactFinal, evaluationTime);
+            var catchFinal = EvaluateCatchContact(vessel, reference, contactFinal, evaluationTime, evaluationTime);
             vessel.LastCatchContact = catchFinal;
             UpdateLandingContactState(vessel, reference, contact, dt); UpdateCatchContactState(vessel, catchFinal, dt);
             vessel.LastWaterContact = EvaluateCoupledWaterContact(vessel, reference, contactFinal, evaluationTime);
