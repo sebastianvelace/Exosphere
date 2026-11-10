@@ -107,7 +107,7 @@ public partial class Universe
                 localTime = local;
                 return model.Sample(local, side);
             }
-            Slosh6DofStageLoads Loads(Slosh6DofStage stage, double epoch)
+            Slosh6DofStageLoads Loads(Slosh6DofStage stage)
             {
                 var datum = stage.State.Datum;
                 // The datum is integrated relative to the reference body's translating frame,
@@ -127,8 +127,10 @@ public partial class Universe
                 var contactState = new RigidBody6DofState(refP + datum.Position + contactOffset,
                     refV + datum.Velocity + datum.AngularVelocityWorld.Cross(contactOffset), datum.Orientation, datum.AngularVelocityBody);
                 var landing = EvaluateLandingContact(vessel, reference, contactState);
-                var catchContact = EvaluateCatchContact(vessel, contactState, epoch);
-                var water = EvaluateCoupledWaterContact(vessel, reference, contactState, epoch);
+                // On that frozen frame the cradle and the water region are read at the step's
+                // end epoch too, as on the rigid path (the cradle moves ~30 km/s inertially).
+                var catchContact = EvaluateCatchContact(vessel, contactState, evaluationTime);
+                var water = EvaluateCoupledWaterContact(vessel, reference, contactState, evaluationTime);
                 var force = (landing?.ForceWorld ?? default) + (catchContact?.ForceWorld ?? default) + (water?.ForceWorld ?? default);
                 var torque = (landing?.TorqueWorld ?? default) + (catchContact?.TorqueWorld ?? default)
                     + (water?.TorqueWorld ?? default) + (contactState.Position - material.Position).Cross(force);
@@ -179,7 +181,7 @@ public partial class Universe
                 double intervalEnd = subEnd;
                 localTime = offset; side = MassBoundarySide.Right;
                 var beforePolicy = Slosh6DofIntegrator.Sample(state, model.Sample(offset, MassBoundarySide.Right));
-                Loads(beforePolicy, CurrentTime + offset); // Pure opening force at this selected engine interval.
+                Loads(beforePolicy); // Pure opening force at this selected engine interval.
                 model.ConfigureContinuations(offset, intervalEnd, lastProperBody);
                 var afterPolicy = Slosh6DofIntegrator.Sample(state, model.Sample(offset, MassBoundarySide.Right));
                 if (!beforePolicy.Profile.Tanks.Select(t => t.Parameters).SequenceEqual(afterPolicy.Profile.Tanks.Select(t => t.Parameters)))
@@ -196,7 +198,7 @@ public partial class Universe
                 {
                     subStart = cursor; subEnd = cut;
                     state = Slosh6DofIntegrator.Step(state, cursor, cut - cursor, Profile,
-                        (stage, local) => Loads(stage, CurrentTime + local));
+                        (stage, _) => Loads(stage));
                     if (cut < intervalEnd) state = CrossCut(state, cut);
                     cursor = cut;
                 }
