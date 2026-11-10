@@ -163,6 +163,26 @@ public sealed class DistributedAerodynamicsControlTests
     }
 
     [Fact]
+    public void SmallEngineRetainsGimbalAuthorityAtMillinewtonScale()
+    {
+        var tank = new Part(new PartDefinition
+        {
+            Id = "small-tank", CategoryStr = "structure", MassDry = 1.0, LengthM = 2.0, DiameterM = 1.0,
+            AttachmentNodes = [new AttachmentNodeDef { Id = "bottom", Position = [0.0, -1.0, 0.0] }],
+        }, "small-tank");
+        var engine = Engine(0.001, 5.0);
+        var graph = new PartGraph();
+        graph.SetRoot(tank);
+        graph.AddJoint(new Joint(tank, engine, "bottom", "top"));
+        engine.IsStagingActive = true;
+        engine.ThrottleLevel = 1.0;
+        // Give the allocator an explicit metre lever, independent of the fixture masses.
+        var reference = new Vector3d(0.0, graph.ComputePartLocalPositions()[engine].Y + 1.0, 0.0);
+        graph.SolveDifferentialGimbal(new Vector3d(-0.00004, 0.0, 0.0), 0.0, reference);
+        Assert.InRange(System.Math.Abs(engine.GimbalOffset.Z), 0.4, 0.6);
+    }
+
+    [Fact]
     public void BluntBodiesKeepTheBluntModel()
     {
         static PartGraph Body(double length, double diameter)

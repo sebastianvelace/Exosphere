@@ -112,7 +112,7 @@ public static class RigidBodyForceEvaluator
                     air,
                     body.AtmosphericDensityAt(state.Position, altitude),
                     System.Math.Max(1.0, body.AtmosphericTemperatureAt(state.Position, altitude)),
-                    body.Atmosphere.SoundSpeedConstant);
+                    body.Atmosphere.SoundSpeedConstant, body.Atmosphere.HeatCapacityRatio);
                 forceWorld += flapWrench.ForceWorld;
                 distributedTorqueBody += flapWrench.TorqueBody;
             }

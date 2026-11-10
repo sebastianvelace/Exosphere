@@ -33,6 +33,21 @@ public sealed class BodyFlapAerodynamicsTests
     }
 
     [Fact]
+    public void HypersonicFlapForceUsesAtmosphericHeatCapacityRatio()
+    {
+        var flap = Flap(Hull(), 0.0, side: 1);
+        // Hold Mach and dynamic pressure fixed to isolate gamma in the Rayleigh-pitot law.
+        const double soundSpeedConstant = 400.0;
+        double speed = 5.0 * System.Math.Sqrt(soundSpeedConstant * Temperature);
+        var flow = new Vector3d(-speed, 0.0, 0.0);
+        var force = BodyFlapAerodynamics.Evaluate([flap], [HalfPi], Quaterniond.Identity,
+            Vector3d.Zero, Vector3d.Zero, flow, Density, Temperature, soundSpeedConstant, 1.29).ForceWorld;
+        double coefficient = force.X / (0.5 * Density * speed * speed * flap.AreaM2);
+        Assert.Equal(1.8443468538239867, coefficient, 10);
+        Assert.True(coefficient > BodyFlapAerodynamics.StagnationPressureCoefficient(5.0));
+    }
+
+    [Fact]
     public void ExtendedFlapBroadsideToABellyFirstFlowIsAFlatPlate()
     {
         var flap = Flap(Hull(), 0.0, side: 1);
