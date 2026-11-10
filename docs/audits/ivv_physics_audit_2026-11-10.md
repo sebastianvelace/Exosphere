@@ -71,6 +71,7 @@ Lo no leído queda como trabajo de auditoría pendiente (sección 8).
 | A-07 | Columnas de propelente siempre asentadas hacia popa (`Vector3d.Up`) | Media-baja | Alta | Activo |
 | A-08 | Inercia rígida del líquido en cabeceo no reducida (falta I₀ de SP-106) | Baja-media | Media | Activo |
 | A-09 | `OrbitalElements`: ángulos por `acos` y banda parabólica | Baja | Alta | **Parcial** (ángulos corregidos) |
+| A-30 | Las costas con warp (raíles) ignoran la gravedad de terceros cuerpos: ~1 000 km en una salida de la esfera lunar | Alta | Alta (medido) | Activo |
 | A-10…A-22 | Menores (sección 5) | Baja | Variable | — |
 
 Nota global dada antes: 7,5/10 (modelos 9, proceso 9, consistencia entre subsistemas 6,
@@ -417,6 +418,40 @@ límites h/R → ∞ (→ 1) y h/R → 0 (→ 0).
    la anomalía media se forma como n·(t − t₀) con t₀ lejano) pierde ~1e-10 rad ≈ 0,7 mm
    en LEO: irrelevante, pero conviene confirmar que `t₀` es la época del elemento y no
    cero.
+
+---
+
+### A-30 — Las costas con warp ignoran la gravedad de terceros cuerpos (hallado al corregir)
+
+- **Severidad** alta · **Confianza** alta (medido) · **Activo** en toda costa cislunar con warp.
+- **Código**: `Universe.cs` (rama `VesselPhysicsWorkload.OnRails`): con warp, la nave se
+  propaga analíticamente sobre la cónica de dos cuerpos de su cuerpo dominante, con cambio de
+  cuerpo en la esfera de influencia. La integración sin raíles sí aplica las mareas de todos
+  los cuerpos.
+
+**Modelo correcto.** Dentro de la esfera de influencia lunar, la marea terrestre a una
+distancia d de la Luna vale `2μ_T·d/D³`: a d = 60 000 km, ≈ 8·10⁻⁴ m/s². Durante las
+~14 h de salida eso son ~40 m/s y ~1 000 km.
+
+**Medido** en `TransearthReturnScenarioTests`, desde el mismo estado tras la TEI:
+- con el campo real (Tierra + Luna + Sol, `PointMassPropagator`), perigeo de vacío a 18 km
+  (objetivo 38 km);
+- tras la costa del simulador con warp hasta salir de la esfera lunar, el mismo predictor da
+  −1 731 km.
+
+En la ida, tras la TLI guiada, el campo real pasa a 42 km de la Luna y 2 h antes; los raíles,
+a 108 km.
+
+**Consecuencia.** La trayectoria de una misión lunar depende del warp con que se vuele.
+Todos los planificadores lunares (TLI, encuentro, TEI, correcciones) son de cónicas
+encadenadas y por eso cuadran con los raíles, no con la física sin raíles. Es el mismo tipo
+de defecto que A-03a (J2 fuera de los raíles), con un efecto unas 1 000 veces mayor.
+
+**Corrección propuesta.** Propagar las costas con warp en regiones de varios cuerpos con
+integración numérica de paso adaptativo (el `PointMassPropagator` de la rama
+`wip/tei-numerical-refine` ya integra en el marco del cuerpo dominante, como el simulador),
+y refinar numéricamente los planes de TLI y TEI contra ese mismo modelo. Es un cambio de
+arquitectura: toca el rendimiento con warp, los saves y las pruebas calibradas sobre raíles.
 
 ---
 
