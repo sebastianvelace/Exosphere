@@ -67,7 +67,7 @@ Lo no leído queda como trabajo de auditoría pendiente (sección 8).
 | A-03 | Ventana lunar y TLI: sin regresión nodal J2, Lambert cerca de 180°, Luna osculante con μ_T solo | Media | Media-alta | Activo |
 | A-04 | Turbulencia von Kármán: realizaciones independientes en filas duplicadas a 1 mm, campo no solenoidal | Media | Alta | Apagado |
 | A-05 | Líquido rígido en balanceo: sobre-amortiguamiento/giro por chorro en etapas con salida cerca del eje | Media-baja | Media | Activo |
-| A-06 | Asignación de gimbal con brazo respecto al CG propio cuando hay pila acoplada | Media-baja | Media | Activo (CSM+LM) |
+| A-06 | Asignación de gimbal con brazo respecto al CG propio cuando hay pila acoplada | Media-baja | Media | **Corregido** |
 | A-07 | Columnas de propelente siempre asentadas hacia popa (`Vector3d.Up`) | Media-baja | Alta | Activo |
 | A-08 | Inercia rígida del líquido en cabeceo no reducida (falta I₀ de SP-106) | Baja-media | Media | Activo |
 | A-09 | `OrbitalElements`: ángulos por `acos` y banda parabólica | Baja | Alta | Activo |
@@ -267,6 +267,13 @@ no debe cambiar en cabeceo/guiñada.
 ---
 
 ### A-06 — Gimbal asignado respecto al CG propio con pila acoplada
+
+> **Estado: corregido.** `SolveDifferentialGimbal` y `GetZeroGimbalEngineTorque` aceptan el
+> punto de referencia del par y `Vessel.ApplyAttitudeActuators` les pasa el centro de la
+> pila acoplada, igual que al RCS. Prueba:
+> `Apollo11SpsBurnScenarioTests.SpsGimbalMomentIsTakenAboutTheDockedStackCentre`. Medido en
+> CSM+LM con el SPS: la pila giraba a 5,06e-3 rad/s cuando el par pedido correspondía a
+> 2,26e-3 (×2,24); ahora 2,36e-3.
 
 - **Severidad** media-baja · **Confianza** media.
 - **Código**: `Parts/PartGraph.cs:1315` (`SolveDifferentialGimbal` usa brazos respecto a

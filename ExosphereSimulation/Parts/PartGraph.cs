@@ -1251,10 +1251,12 @@ public partial class PartGraph
     /// cancel before solving for the commanded control torque. It intentionally does not
     /// mutate servo state or command overrides.
     /// </summary>
-    public Vector3d GetZeroGimbalEngineTorque(double ambientPressure)
+    /// <param name="torqueReference">Point the moment is taken about (part frame); this
+    /// graph's own centre of mass when null. A docked primary passes its stack's centre.</param>
+    public Vector3d GetZeroGimbalEngineTorque(double ambientPressure, Vector3d? torqueReference = null)
     {
         var positions = GetCachedPartLocalPositions();
-        var com = CenterOfMass;
+        var com = torqueReference ?? CenterOfMass;
         var torque = Vector3d.Zero;
         foreach (var engine in ActiveEngineList)
         {
@@ -1309,10 +1311,15 @@ public partial class PartGraph
     /// cluster's geometry is degenerate (e.g. a single engine, or two engines coincident on an
     /// axis) instead of producing NaN/exploding commands.
     /// </summary>
-    public void SolveDifferentialGimbal(Vector3d desiredTorque, double ambientPressure)
+    /// <param name="torqueReference">Point <paramref name="desiredTorque"/> is taken about (part
+    /// frame); this graph's own centre of mass when null. The body the engines turn is the
+    /// docked stack when there is one, and its centre can sit metres from the primary's own:
+    /// lever arms about the wrong point scale the delivered moment by their ratio.</param>
+    public void SolveDifferentialGimbal(Vector3d desiredTorque, double ambientPressure,
+        Vector3d? torqueReference = null)
     {
         var positions = GetCachedPartLocalPositions();
-        var com = CenterOfMass;
+        var com = torqueReference ?? CenterOfMass;
 
         var contributions = _physicsTickActive
             ? _gimbalContributions

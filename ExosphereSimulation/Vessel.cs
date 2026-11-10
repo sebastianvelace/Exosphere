@@ -1678,8 +1678,13 @@ public class Vessel
         // thrust lets TVC own the aerodynamic trim; otherwise the flaps already own it.
         bool enginesLit = Parts.GetCurrentThrust(pressure) > 0.0;
         if (controlling && enginesLit)
+        {
+            // The engines turn the docked stack about its centre, as the jets do.
+            var reference = DockedStackCenterOfMassLocal;
             Parts.SolveDifferentialGimbal(
-                desiredTorque - Parts.GetZeroGimbalEngineTorque(pressure) - aeroTorque, pressure);
+                desiredTorque - Parts.GetZeroGimbalEngineTorque(pressure, reference) - aeroTorque,
+                pressure, reference);
+        }
 
         if (Parts.GetRcsThrusters().Count == 0) return;
         var desiredForce = DesiredRcsTranslationForceBody();
