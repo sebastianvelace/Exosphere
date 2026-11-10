@@ -496,8 +496,13 @@ en `earth.json`; Kepler on-rails sigue dos-cuerpos. No activar física diferida.
      `docs/audits/PERF_DEFERRED_CANDIDATE_PHASE51_REPORT.md`; G confirma que el scheduler es
      <1% del frame bajo llvmpipe, pero la matriz completa no alcanzó órbita dentro de 1200 s.
      H confirma el mismo cuello en smoke y deja pendiente corregir el wrapper de medición.
-     Falta catch-up temporal de consumibles por vessel y perfilado render/UI con GPU real antes
-     de promover cualquier hibernación.
+     Cada tick comprometido avanza ahora todo runtime materializado no activo (owners de
+     callbacks como una etapa separada, o la nave que el jugador dejó) con el entorno de su
+     propia nave (`VesselSystemsRuntimeRegistry.AdvanceInactive`,
+     `VesselSystemsEnvironmentSampler`) y libera los de naves que salieron del Universe; antes
+     sólo avanzaba el activo y el checkpoint de hito fallaba por mapa de epochs mixto (Apollo 11,
+     ORBIT, 2026-11-09). Falta catch-up diferido/hibernación de consumibles por vessel y
+     perfilado render/UI con GPU real antes de promover cualquier hibernación.
    - **Fase 52:** `SystemsHUD` redibuja a 10 Hz y `AttitudeNavball`/`AttitudeDataStrip` a
      30 Hz, manteniendo redraw inmediato al aparecer y sin tocar la física. Builds, suite
      `696/696`, startup y contratos pasan. El A/B framebuffer queda pendiente porque Xvfb
