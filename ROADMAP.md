@@ -32,9 +32,10 @@ Base tecnica cerrada en `main`:
   plus a separate experimental entry and tower approach from a modeled 70 km state.
   The V3 vehicle and controls use engineering estimates. The nominal entry chapter
   now settles on both tower pins within the modeled travel and load limits.
-  A continuous return probe from the loaded ascent and deployment validates a finite
-  deorbit burn and descending entry through 70 km. Targeted descent into the catch
-  corridor and booster diversion reconstruction remain open.
+  A continuous probe validates the finite deorbit and actuator-controlled descent
+  through 2.5 km from the original deployment state. The full-world trial reaches
+  the Starbase area with stable attitude. The powered handoff into the catch
+  corridor, in-game continuous mission, and booster diversion remain open.
   See the [Flight 15 verification](docs/audits/flight15_capture_and_gpu_2026-11-19.md).
   Flight 14 remains available from the Flight 15 briefing and exposes an automatic
   engineering exploration: loaded ascent, insertion, 26 payload releases and estimated

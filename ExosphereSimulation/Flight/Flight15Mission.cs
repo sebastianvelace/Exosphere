@@ -17,6 +17,10 @@ public static class Flight15Mission
         Flight14ReturnDefinition.LoadFromJson(Path.Combine(dataDirectory, "flight_profiles",
             "starship_flight15_return_estimate.json"));
 
+    public static Flight14DescentDefinition LoadDescentEstimate(string dataDirectory) =>
+        Flight14DescentDefinition.LoadFromJson(Path.Combine(dataDirectory, "flight_profiles",
+            "starship_flight15_descent_estimate.json"));
+
     public static EntryApproach LoadEntryApproach(string dataDirectory)
     {
         string path = Path.Combine(dataDirectory, "flight_profiles/starship_flight15_entry_estimate.json");

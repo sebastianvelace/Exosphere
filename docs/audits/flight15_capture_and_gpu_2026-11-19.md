@@ -104,6 +104,58 @@ aerodynamic descent controller on the Flight 15 trajectory. For a repeat,
 set `diagnosticEndAltitudeM` to `2500` in a
 copy of the estimate and run the same diagnostic against that data directory.
 
+### Actuator-controlled descent
+
+The same continuous trial can hand the original ship to the descent controller
+at the 70 km witness. The controller schedules angle of attack, limits the
+attitude reference by available flap trim, and constrains vertical lift from
+the current descent rate. The Flight 15 estimate adds a nominal bank to this
+control law. Every setting is an estimate calibrated against EXOSPHERE.
+
+```sh
+dotnet run --project tools/Flight14TrajectoryProbe -c Release -- \
+  data /tmp/exo-flight15-descent --flight15-descent
+dotnet run --project tools/Flight14TrajectoryProbe -c Release -- \
+  data /tmp/exo-flight15-world --flight15-descent-world
+```
+
+| Trial | Ground range to Starbase at 2.5 km | Peak angular rate after handoff |
+| --- | ---: | ---: |
+| Inherited descent controller | 1,150 km | 0.629 rad/s |
+| Generic footprint steering experiment | 119 km | 1.139 rad/s |
+| Initial calibration, isolated Earth | 2.43 km | 0.021 rad/s |
+| Initial calibration, all eight bodies | 38.43 km | 0.031 rad/s |
+| Recalibration, all eight bodies | 6.25 km | 0.018 rad/s |
+| Retained estimate, all eight bodies | 0.68 km | 0.018 rad/s |
+
+The generic footprint experiment produced a large angular excursion and was
+discarded. The calibrated profile reached 2.5 km at about 121 m/s, with
+the heat shield facing the airflow and with stable actuator control. Its
+geographic result is sensitive to the world model. The 2.5 km witness is a
+descent diagnostic; the existing powered flip may start above that gate.
+The retained estimate is calibrated against the full-world setup. The
+continuous flight passed 429 m from Starbase at 5.39 km altitude, then
+crossed the 2.5 km witness at 120.64 m/s with a final angular rate of
+0.0004 rad/s.
+
+An isolated-atmosphere replay preserved a sampled flight state at 8 km and
+entered the existing powered game guidance at the same body-relative state.
+The range closed from 1.60 km to about 0.78 km before the flare. It grew past
+2 km during the flip. The game diverted at 3.08 km altitude and the vehicle
+was destroyed during the fallback. The final capture sequence still requires
+a powered handoff that controls this lateral excursion.
+An upright-biased flip also diverted. The Flight 14 powered descent law
+reached 100 m about 980 m from Starbase at 56.2 m/s, exceeding its terminal
+speed gate. Starting that law at 1.8 km or 6.5 km also exceeded the speed
+gate. These trials provide no capture acceptance.
+
+A Godot replay from the retained full-world profile started at 8 km with
+about 142 m of ground range. The game started the flip at 4.50 km. The
+powered approach again exceeded its 2 km horizontal limit and diverted
+at 2.51 km altitude. The vehicle was destroyed during the fallback. That
+replay exercised the game controller from a saved physical state.
+Continuous capture from the menu remains unverified.
+
 ## Integrated GPU
 
 Native X11, AMD Radeon Graphics (RADV RENOIR), Vulkan Forward+, Integrated GPU preset

@@ -16,6 +16,18 @@ public sealed class Flight15MissionTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void DescentEstimateHasAValidBankAndFollowsTheReturnWitness()
+    {
+        var data = SaturnVAscentFlight.DataDirectory();
+        var descent = Flight15Mission.LoadDescentEstimate(data);
+        var returning = Flight15Mission.LoadReturnEstimate(data);
+        Assert.True(descent.DiagnosticEndAltitudeM < returning.DiagnosticEndAltitudeM);
+        Assert.InRange(descent.NominalBankDegrees, -180, 180);
+        descent.NominalBankDegrees = 181;
+        Assert.Throws<InvalidDataException>(descent.Validate);
+    }
+
+    [Fact]
     public void GuidedFlightFromPadTwoDeploysTheFullManifest()
     {
         var run = Flight15Mission.CreateAscent(SaturnVAscentFlight.DataDirectory());

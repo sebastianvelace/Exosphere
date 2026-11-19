@@ -8,7 +8,7 @@ public enum Flight14DescentPhase { WaitingForEntry, HypersonicEntry, Aerodynamic
 /// <summary>
 /// Continues the same ship below the entry diagnostic's 90 km endpoint. Only controls
 /// are written; no force, kinematic, thermal or resource state is imposed.
-/// Does not provide geographic landing guidance or powered/water-return acceptance.
+/// Powered approach and landing acceptance belong to the following phase.
 /// </summary>
 public sealed class Flight14DescentController : IPhysicsStepController
 {
@@ -128,8 +128,16 @@ public sealed class Flight14DescentController : IPhysicsStepController
             double radius = (ship.CenterOfMass - body.Position).Magnitude;
             double ballistic = -body.GM/(radius*radius) + tangential.MagnitudeSquared/radius
                 + drag.Dot(up)/ship.TotalMass;
+            var requestedLift = liftUp;
             var side = EntryCorridorGuidance.ComputeBankSide(flow, up, priorLift);
-            var limited = EntryCorridorGuidance.LimitLiftForDescent(liftUp, liftUp, side,
+            if (definition.NominalBankDegrees != 0)
+            {
+                double bank = definition.NominalBankDegrees * MathUtils.DEG_TO_RAD;
+                requestedLift = liftUp.Normalized * System.Math.Cos(bank)
+                    + up.Cross(flow).Normalized * System.Math.Sin(bank);
+                side = EntryCorridorGuidance.ComputeBankSide(flow, up, requestedLift);
+            }
+            var limited = EntryCorridorGuidance.LimitLiftForDescent(requestedLift, liftUp, side,
                 verticalSpeed, speed, ballistic, lift.Magnitude/ship.TotalMass*liftUp.Magnitude,
                 definition.MinimumDownwardSpeedMps, definition.DownwardSpeedFraction,
                 definition.VerticalResponseSeconds, definition.DownwardSpeedDeadbandMps);

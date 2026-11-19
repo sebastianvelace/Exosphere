@@ -16,6 +16,8 @@ public sealed class Flight14DescentDefinition
     public double AngleOfAttackTransitionSpeedMps { get; set; }
     public double TerminalAngleOfAttackSpeedMps { get; set; }
     public double EntryAngleOfAttackDegrees { get; set; }
+    /// <summary>Signed nominal lift bank from up toward the local up-cross-track axis.</summary>
+    public double NominalBankDegrees { get; set; }
     public double TerminalAngleOfAttackDegrees { get; set; }
     public double ReferenceSlewRateRadPerSecond { get; set; }
     /// <summary>
@@ -52,6 +54,7 @@ public sealed class Flight14DescentDefinition
             MinimumDownwardSpeedMps, DownwardSpeedFraction, VerticalResponseSeconds, DownwardSpeedDeadbandMps];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"
             || string.IsNullOrWhiteSpace(Assumptions) || values.Any(v => !double.IsFinite(v) || v <= 0)
+            || !double.IsFinite(NominalBankDegrees) || System.Math.Abs(NominalBankDegrees) > 180
             || EntryAngleOfAttackDegrees > TerminalAngleOfAttackDegrees || TerminalAngleOfAttackDegrees > 90
             || MaximumEndSpeedMps >= TerminalAngleOfAttackSpeedMps
             || TerminalAngleOfAttackSpeedMps >= AngleOfAttackTransitionSpeedMps
