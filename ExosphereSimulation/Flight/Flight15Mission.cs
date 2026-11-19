@@ -13,6 +13,10 @@ public static class Flight15Mission
 
     public sealed record EntryApproach(double UpstreamDistanceM, double NorthOffsetM);
 
+    public static Flight14ReturnDefinition LoadReturnEstimate(string dataDirectory) =>
+        Flight14ReturnDefinition.LoadFromJson(Path.Combine(dataDirectory, "flight_profiles",
+            "starship_flight15_return_estimate.json"));
+
     public static EntryApproach LoadEntryApproach(string dataDirectory)
     {
         string path = Path.Combine(dataDirectory, "flight_profiles/starship_flight15_entry_estimate.json");

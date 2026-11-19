@@ -64,8 +64,45 @@ from the active ship.
 
 This study assumes a Keplerian coast, an instantaneous burn, constant bank,
 and a spherical projection onto the rotating Earth. It estimates a search
-window for a continuous return. Powered terminal approach, heating, control
-authority, and the finite burn still need verification in the flight integrator.
+window for a continuous return.
+
+### Finite-burn trial
+
+Run the pad-to-entry diagnostic from the repository root.
+
+```sh
+dotnet run --project tools/Flight14TrajectoryProbe -c Release -- \
+  data /tmp/exo-flight15-return --flight15-return
+```
+
+The diagnostic keeps the original ship and 26 released satellites in the
+isolated-Earth universe. It coasts with the ordinary ×100 warp scheduler after
+deployment, then uses the 20 ms control cadence for alignment, deorbit, and
+entry. The return estimate keeps the main-tank reserve and uses a signed lift
+bank about the air-relative velocity.
+
+The ignition command at T+78,549.00 s reached the osculating periapsis target
+at T+78,554.10 s. Thrust then took 0.24 s to fall below the shutdown threshold.
+The one-engine burn used 4,040.28 kg and left a 48.30 km radial periapsis after
+shutdown, below the 53.33 km command. The physical 120 km geodetic interface
+was reached at T+79,862.48 s at 7.42 km/s and −125.6 m/s vertical speed.
+At the descending 70 km geodetic witness the ship still had 7.02 km/s airspeed
+and was 1,127 km from Starbase along the surface. The independent catch chapter
+begins at about 1.80 km/s. The full approach needs
+a guided hypersonic descent, geographic targeting, and validation of heating
+and control authority before handing off to terminal guidance.
+
+A separate trial with the same commands and a 2.5 km diagnostic altitude
+repeated the burn and 120 km entry. At T+80,740.20 s it reached 2.5 km at
+26.6965° N, 94.9326° W, about 235 km from Starbase by spherical great-circle
+distance. Airspeed was 120.6 m/s, vertical speed was −120.1 m/s, and the
+angular rate in the adjacent integration sample was 0.51 rad/s. This is an
+altitude crossing with substantial geographic and attitude errors. Between
+44.7 and 30.7 km, the sampled angular rate climbed from 0.003 to 0.269 rad/s.
+That interval gives a starting point for validating the authority-aware
+aerodynamic descent controller on the Flight 15 trajectory. For a repeat,
+set `diagnosticEndAltitudeM` to `2500` in a
+copy of the estimate and run the same diagnostic against that data directory.
 
 ## Integrated GPU
 

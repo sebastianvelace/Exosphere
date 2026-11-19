@@ -7,6 +7,15 @@ using Xunit.Abstractions;
 public sealed class Flight15MissionTests(ITestOutputHelper output)
 {
     [Fact]
+    public void ReturnEstimateAcceptsSignedBankWithinOneHalfTurn()
+    {
+        var definition = Flight15Mission.LoadReturnEstimate(SaturnVAscentFlight.DataDirectory());
+        Assert.InRange(definition.EntryBankDegrees, -180, -1);
+        definition.EntryBankDegrees = -181;
+        Assert.Throws<InvalidDataException>(definition.Validate);
+    }
+
+    [Fact]
     public void GuidedFlightFromPadTwoDeploysTheFullManifest()
     {
         var run = Flight15Mission.CreateAscent(SaturnVAscentFlight.DataDirectory());
