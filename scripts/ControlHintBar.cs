@@ -54,6 +54,12 @@ public partial class ControlHintBar : Control
             && bridge.ActiveFlightProfileId != "manual";
         var hints = new List<string>();
 
+        if (bridge.IsGuidedStarshipExploration)
+        {
+            hints.Add(T(", .  TIME ACCELERATION", ", .  ACELERAR TIEMPO"));
+            hints.Add(T("DRAG / SCROLL  CAMERA", "ARRASTRAR / RUEDA  CÁMARA"));
+            return hints;
+        }
         if (HistoricalFlightProfileController.Instance?.IsEngaged == true)
         {
             hints.Add(T("K  TAKE CONTROL", "K  TOMAR EL CONTROL"));

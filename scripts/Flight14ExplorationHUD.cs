@@ -15,8 +15,12 @@ public partial class Flight14ExplorationHUD : Control
     private Control? _phaseBanner;
     private Viewport? _shortcutViewport;
     private bool _previousDisable3D;
+    private PanelContainer _statusPanel = null!;
+    private ProgressBar _payloadProgress = null!;
+    private double _sampleSeconds;
     private int _payloadFocusIndex = -1;
     private EntryAdvancePresentation _advancePresentation = null!;
+    private bool IsFlight15 => SimulationBridge.Instance?.ActiveFlightProfileId == Flight15Mission.AscentProfileId;
 
     public override void _Ready()
     {
@@ -26,10 +30,19 @@ public partial class Flight14ExplorationHUD : Control
         _advancePresentation = new EntryAdvancePresentation { Name = "EntryAdvancePresentation" };
         AddChild(_advancePresentation);
         _controls = new VBoxContainer { Name = "ExplorationControls" };
-        _controls.SetAnchorsPreset(LayoutPreset.CenterTop);
-        _controls.GrowHorizontal = GrowDirection.Both;
-        _controls.OffsetLeft = -340;
-        _controls.OffsetRight = 340;
+        if (IsFlight15)
+        {
+            _controls.SetAnchorsPreset(LayoutPreset.TopLeft);
+            _controls.OffsetLeft = 20;
+            _controls.OffsetRight = 436;
+        }
+        else
+        {
+            _controls.SetAnchorsPreset(LayoutPreset.CenterTop);
+            _controls.GrowHorizontal = GrowDirection.Both;
+            _controls.OffsetLeft = -340;
+            _controls.OffsetRight = 340;
+        }
         _controls.OffsetTop = 96;
         _controls.AddThemeConstantOverride("separation", 8);
         AddChild(_controls);
@@ -43,7 +56,25 @@ public partial class Flight14ExplorationHUD : Control
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         InterfaceTheme.ApplyLabel(_status, 12);
-        _controls.AddChild(_status);
+        _statusPanel = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
+        var panel = InterfaceTheme.FieldPanel(paddingX: 14, paddingY: 10);
+        panel.BgColor = new Color(0.025f, 0.045f, 0.067f, 0.94f);
+        panel.BorderColor = new Color(0.30f, 0.54f, 0.68f, 0.6f);
+        _statusPanel.AddThemeStyleboxOverride("panel", panel);
+        var readout = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        readout.AddThemeConstantOverride("separation", 6);
+        _statusPanel.AddChild(readout);
+        readout.AddChild(_status);
+        _payloadProgress = new ProgressBar
+        {
+            ShowPercentage = false,
+            CustomMinimumSize = new Vector2(0, 3),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        _payloadProgress.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0.13f, 0.21f, 0.29f) });
+        _payloadProgress.AddThemeStyleboxOverride("fill", new StyleBoxFlat { BgColor = new Color(0.47f, 0.78f, 0.96f) });
+        readout.AddChild(_payloadProgress);
+        _controls.AddChild(_statusPanel);
         _controls.AddChild(row);
         _pause = AddButton(row, "PAUSE", () =>
         {
@@ -77,9 +108,11 @@ public partial class Flight14ExplorationHUD : Control
         });
         AddButton(row, "RESTART", () =>
         {
+            var preview = SimulationBridge.Instance?.Flight14Preview;
+            if (preview == null) return;
             CraftLaunchRequest.Set(new LaunchIntent
             {
-                Mode = "exploration", FlightProfileId = Flight14Exploration.ProfileId,
+                Mode = "exploration", FlightProfileId = preview.ActiveProfileId,
                 LaunchSiteId = "starbase_pad2",
             });
             GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
@@ -137,13 +170,20 @@ public partial class Flight14ExplorationHUD : Control
             _previousDisable3D = _shortcutViewport.Disable3D;
             _shortcutViewport.Disable3D = true;
         }
-        else if (!preview.IsAdvancingToEntry) RestoreWorldView();
+        else if (!preview.IsAdvancingToEntry && _shortcutViewport != null) RestoreWorldView();
+        _sampleSeconds -= delta;
+        if (_sampleSeconds > 0.0) return;
+        _sampleSeconds = 0.1;
+        bool flight15 = preview.ActiveProfileId == Flight15Mission.AscentProfileId;
+        if (_entry.Visible == flight15) _entry.Visible = !flight15;
+        if (_observe.Visible == flight15) _observe.Visible = !flight15;
         _phaseBanner ??= GetTree().Root.FindChild("FlightPhaseBanner", true, false) as Control;
         // Work in this canvas's coordinates: global pixels are not local offsets at UI scale.
         var inverse = GetGlobalTransform().AffineInverse();
         float bannerBottom = _phaseBanner is { Visible: true }
             ? (inverse * _phaseBanner.GetGlobalRect().End).Y : 86;
-        _controls.OffsetTop = Mathf.Max(96, bannerBottom + 10);
+        float controlsTop = Mathf.Max(96, bannerBottom + 10);
+        if (!Mathf.IsEqualApprox(_controls.OffsetTop, controlsTop)) _controls.OffsetTop = controlsTop;
         if (preview.IsAdvancingToEntry)
             _advancePresentation.ShowProgress(preview, inverse * _controls.GetGlobalRect().End);
         _pause.Text = preview.IsAdvancingToEntry ? "CANCEL SKIP" : preview.IsPaused ? "RESUME" : "PAUSE";
@@ -165,15 +205,18 @@ public partial class Flight14ExplorationHUD : Control
                 ? $"PAYLOAD {_payloadFocusIndex + 1:00}/{releasedPayloads:00}"
                 : "PAYLOAD VIEW";
         if (_payloadFocusIndex >= releasedPayloads) _payloadFocusIndex = -1;
-        string state = preview.IsTerminal ? preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null
+        _payloadProgress.MaxValue = preview.Run.PayloadDefinition.Count;
+        _payloadProgress.Value = releasedPayloads;
+        string state = flight15 && preview.IsTerminal ? UiText.Get("flight15_deployment_complete")
+            : preview.IsTerminal ? preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null
                 ? "WATER RESPONSE OBSERVED · SEALED-HULL ESTIMATE · "
                     + (preview.Run.BoosterReturnController?.FlightTerminationTriggered == true
                         ? "BOOSTER FTS RECORDED" : "BOOSTER RETURN UNRESOLVED")
                 : "100 M DIAGNOSTIC COMPLETE · WATER CONTACT PENDING"
             : preview.BlockReason != null ? "PREVIEW STOPPED · " + preview.BlockReason
             : preview.Run.Ship.IsDestroyed ? "VEHICLE LOST · RESTART TO EXPLORE AGAIN"
-            : $"{preview.Phase.ToUpperInvariant()} · PAYLOADS {preview.Run.PayloadController.Releases.Count}/26"
-                + (preview.IsPaused ? " · PAUSED" : " · [, .] TIME · DRAG / SCROLL CAMERA");
+            : $"{UiText.Get("flight15_payloads")} {releasedPayloads}/{preview.Run.PayloadDefinition.Count}"
+                + (preview.IsPaused ? " · " + UiText.Get("flight15_paused") : "");
         if (preview.IsObservingBooster && preview.Run.BoosterReturnController is { } booster)
             state = "SUPER HEAVY · " + (booster.BlockReason ?? booster.Phase.ToString()).ToUpperInvariant()
                 + (booster.FlightTerminationTriggered ? " · FTS RECORDED" : "")
@@ -183,6 +226,8 @@ public partial class Flight14ExplorationHUD : Control
             var elapsed = TimeSpan.FromSeconds(preview.MissionElapsedSeconds);
             state = $"ADVANCING TO ENTRY · T+ {elapsed:hh\\:mm\\:ss} · CANCEL SKIP TO PAUSE";
         }
-        _status.Text = "FLIGHT 14 / ENGINEERING EXPLORATION\n" + state;
+        string status = (flight15 ? UiText.Get("flight15_ascent_hud") : "FLIGHT 14 / ENGINEERING EXPLORATION")
+            + "\n" + state;
+        if (_status.Text != status) _status.Text = status;
     }
 }

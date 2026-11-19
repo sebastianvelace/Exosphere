@@ -124,7 +124,19 @@ public static class UiText
 {
     private static readonly Dictionary<string, (string en, string es)> Strings = new()
     {
-        ["flight14_home"] = ("From Starbase to orbit. Explore the mission, or take command of your own flight.", "De Starbase a la órbita. Explora la misión o toma el mando de tu propio vuelo."),
+        ["flight15_label"] = ("FEATURED MISSION  /  13–14 NOV 2026", "MISIÓN DESTACADA  /  13–14 NOV 2026"),
+        ["flight15_home"] = ("Launch from Starbase, deploy 26 satellites, and fly Ship’s tower approach.", "Despega de Starbase, despliega 26 satélites y vuela la aproximación de Ship a la torre."),
+        ["flight15_details"] = ("EXPLORE FLIGHT 15  →", "EXPLORAR VUELO 15  →"),
+        ["flight15_orbit"] = ("MISSION ORBIT", "ÓRBITA DE MISIÓN"),
+        ["flight15_result"] = ("Flight 15 deployed 26 Starlink satellites and ended with Ship’s first tower catch. Super Heavy diverted offshore.", "El Vuelo 15 desplegó 26 satélites Starlink y terminó con la primera captura de Ship. Super Heavy se desvió mar adentro."),
+        ["flight15_launch"] = ("START ASCENT & DEPLOYMENT  →", "INICIAR ASCENSO Y DESPLIEGUE  →"),
+        ["flight15_catch"] = ("FLY THE ENTRY & TOWER APPROACH  →", "VOLAR EL CAPÍTULO DE REENTRADA Y APROXIMACIÓN  →"),
+        ["flight15_automatic"] = ("AUTOMATIC FLIGHT · ESTIMATED GUIDANCE", "VUELO AUTOMÁTICO · GUIADO ESTIMADO"),
+        ["flight15_payloads"] = ("SATELLITES DEPLOYED", "SATÉLITES DESPLEGADOS"),
+        ["flight15_paused"] = ("PAUSED", "EN PAUSA"),
+        ["flight15_ascent_hud"] = ("FLIGHT 15 / ASCENT & DEPLOYMENT", "VUELO 15 / ASCENSO Y DESPLIEGUE"),
+        ["flight15_deployment_complete"] = ("DEPLOYMENT COMPLETE · 26 SATELLITES IN ORBIT", "DESPLIEGUE COMPLETO · 26 SATÉLITES EN ÓRBITA"),
+        ["flight15_scope"] = ("Two simulation chapters use estimated V3 hardware. The guided ascent ends at deployment. The experimental tower approach starts at a modeled 70 km entry state and can divert to a landing.", "Dos capítulos usan un vehículo V3 estimado. El ascenso guiado termina con el despliegue. La aproximación experimental a la torre comienza en un estado modelado a 70 km y puede desviarse a un aterrizaje."),
         ["flight14_details"] = ("EXPLORE FLIGHT 14  →", "EXPLORAR VUELO 14  →"),
         ["flight14_label"] = ("FEATURED MISSION", "MISIÓN DESTACADA"),
         ["flight14_card_title"] = ("THE ORBITAL MISSION", "LA MISIÓN ORBITAL"),

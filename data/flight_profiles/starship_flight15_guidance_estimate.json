@@ -1,0 +1,73 @@
+{
+  "id": "starship-flight15-ascent-engineering-estimate",
+  "status": "engineering-estimate",
+  "baselineVehicleFile": "starship_flight12_v3_2026.json",
+  "seaLevelEngineModelId": "raptor3-starship-sl-flight12",
+  "assumptions": "Flight 15 engineering approximation using the existing estimated V3 hardware and inherited staged insertion guidance. Target apoapsis follows the published approximate orbit. Commands, masses and engine performance are simulation estimates. No synthetic Flight 14 ascent failures are injected.",
+  "ignitionRampSeconds": 3,
+  "nominalMecoSeconds": 140,
+  "minimumStagingAltitudeM": 35000,
+  "hotStageSeconds": 2,
+  "nominalShipCutoffSeconds": 510,
+  "targetApoapsisAltitudeM": 275000,
+  "targetSuborbitalPeriapsisAltitudeM": 60000,
+  "targetInsertionPeriapsisAltitudeM": 250000,
+  "nominalCoastSeconds": 952,
+  "minimumCoastSeconds": 600,
+  "minimumInsertionAltitudeM": 260000,
+  "insertionLeadSeconds": 14,
+  "minimumShipReserveKg": 15000,
+  "maximumAscentSeconds": 650,
+  "maximumInsertionSeconds": 120,
+  "boosterFaultSeconds": 100,
+  "vacuumFaultSeconds": 200,
+  "shipThrottle": 0.83,
+  "boosterProgram": [
+    {
+      "elapsedSeconds": 0,
+      "elevationDeg": 90,
+      "throttle": 1
+    },
+    {
+      "elapsedSeconds": 2,
+      "elevationDeg": 90,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 10,
+      "elevationDeg": 89,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 44,
+      "elevationDeg": 70,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 80,
+      "elevationDeg": 43,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 124,
+      "elevationDeg": 22,
+      "throttle": 0.76
+    },
+    {
+      "elapsedSeconds": 140,
+      "elevationDeg": 20,
+      "throttle": 0.76
+    }
+  ],
+  "cutoffApoapsisToleranceM": 15000,
+  "terminalRadialGainPerSecond": 0.3,
+  "terminalEnergyFraction": 0.8,
+  "poweredPointingGain": 4,
+  "poweredPointingDamping": 8,
+  "maximumIgnitionSeconds": 15,
+  "maximumMissionSeconds": 2200,
+  "terminalBlendWidth": 0.12,
+  "terminalShipThrottle": 0.83,
+  "maximumInitialTurnReferenceRateRadPerSecond": 0.02,
+  "injectAscentFaults": false
+}

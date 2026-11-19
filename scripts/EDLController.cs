@@ -398,13 +398,12 @@ public partial class EDLController : Control
         // metres). Computed once here so both the attitude cant and the throttle's braking
         // term below read the same error instead of two independently-derived vectors.
         Vector3d catchLateralVelocityError = Vector3d.Zero;
-        Vector3d catchTargetPosition = vessel.CatchTargetPositionWorld;
+        // The bridge samples the rotating cradle on presentation frames. The force
+        // integrator and guidance must evaluate that sample at their own epochs.
+        Vector3d catchTargetPosition = vessel.GetCatchTargetPositionAt(universe.CurrentTime);
         if (_phase is Edl.Retro or Edl.Catch)
         {
-            // The bridge refreshes this sample at the simulation cadence immediately before
-            // the guidance pass. Keep the controller on that synchronized sample: predicting
-            // from a moving target here would apply the cradle velocity twice when the bridge
-            // has already advanced the target for the current frame.
+            // The target above is already at the current physics epoch.
             Vector3d offsetFromTarget = vessel.Position - catchTargetPosition;
             Vector3d horizontalOffset = offsetFromTarget - up * offsetFromTarget.Dot(up);
             double missDistance = horizontalOffset.Magnitude;
@@ -446,8 +445,11 @@ public partial class EDLController : Control
         {
             _towerCatchAborted = true;
             vessel.IsAttemptingTowerCatch = false;
+            var east = body.RotationAxis.Cross(up).Normalized;
+            var north = up.Cross(east);
             GD.Print($"[EDL] early tower catch divert at {_alt:F0} m " +
-                $"(miss={currentCatchMiss:F1} m) — continuing with leg landing");
+                $"(miss={currentCatchMiss:F1} m east={currentCatchOffset.Dot(east):F1} m "
+                    + $"north={currentCatchOffset.Dot(north):F1} m); continuing with leg landing");
         }
 
         switch (_phase)

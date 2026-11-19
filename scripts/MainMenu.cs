@@ -20,7 +20,7 @@ public partial class MainMenu : Control
     private ScrollContainer _bodyScroll = null!;
     private PanelContainer? _modalPanel;
     private ScrollContainer? _modalScroll;
-    private Button? _flight14Button;
+    private Button? _featuredMissionButton;
 
     public override void _Ready()
     {
@@ -207,7 +207,7 @@ public partial class MainMenu : Control
         _primaryColumn.AddThemeConstantOverride("separation", 12);
         center.AddChild(_primaryColumn);
 
-        var classification = new Label { Text = UiText.Get("flight14_label") + "  /  " + UiText.Get("in_development") };
+        var classification = new Label { Text = UiText.Get("flight15_label") };
         classification.HorizontalAlignment = HorizontalAlignment.Center;
         InterfaceTheme.ApplyLabel(classification, 13);
         classification.AddThemeColorOverride("font_color", InterfaceTheme.TextMuted);
@@ -215,7 +215,7 @@ public partial class MainMenu : Control
 
         var rule = new ColorRect
         {
-            Color = InterfaceTheme.EdgeStrong,
+            Color = new Color(0.47f, 0.78f, 0.96f),
             CustomMinimumSize = new Vector2(64, 1),
             SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
             MouseFilter = MouseFilterEnum.Ignore,
@@ -224,7 +224,7 @@ public partial class MainMenu : Control
 
         _bodyTitle = new Label
         {
-            Text = "STARSHIP\nFLIGHT 14",
+            Text = "STARSHIP\nFLIGHT 15",
             HorizontalAlignment = HorizontalAlignment.Center,
             AutowrapMode = TextServer.AutowrapMode.Off,
         };
@@ -235,7 +235,7 @@ public partial class MainMenu : Control
 
         _bodySubtitle = new Label
         {
-            Text = UiText.Get("flight14_home"),
+            Text = UiText.Get("flight15_home"),
             HorizontalAlignment = HorizontalAlignment.Center,
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             CustomMinimumSize = new Vector2(390, 54),
@@ -254,12 +254,12 @@ public partial class MainMenu : Control
         _navigation.AddThemeConstantOverride("v_separation", 10);
         _primaryColumn.AddChild(_navigation);
 
-        _flight14Button = ModalButton(UiText.Get("flight14_details"), ShowFlight14, true);
-        _flight14Button.Name = "Flight14";
-        _flight14Button.Alignment = HorizontalAlignment.Center;
-        _flight14Button.CustomMinimumSize = new Vector2(0, 54);
-        _primaryColumn.AddChild(_flight14Button);
-        _firstButton = _flight14Button;
+        _featuredMissionButton = ModalButton(UiText.Get("flight15_details"), ShowFlight15, true);
+        _featuredMissionButton.Name = "Flight15";
+        _featuredMissionButton.Alignment = HorizontalAlignment.Center;
+        _featuredMissionButton.CustomMinimumSize = new Vector2(0, 54);
+        _primaryColumn.AddChild(_featuredMissionButton);
+        _firstButton = _featuredMissionButton;
         _primaryColumn.MoveChild(_navigation, _primaryColumn.GetChildCount() - 1);
 
         AddNavButton(UiText.Get("free_flight"), ShowVehicles, primary: true);
@@ -407,6 +407,27 @@ public partial class MainMenu : Control
         });
         OpenFlight();
     }
+
+    private void ShowFlight15() => ShowModal("STARSHIP FLIGHT 15", body =>
+    {
+        body.AddChild(Metric(UiText.Get("site"), "STARBASE / PAD 2"));
+        body.AddChild(Metric(UiText.Get("flight15_orbit"), "≈275 km"));
+        body.AddChild(Description(UiText.Get("flight15_result")));
+        body.AddChild(ModalButton(UiText.Get("flight15_launch"), () =>
+        {
+            CraftLaunchRequest.Set(new LaunchIntent
+            {
+                Mode = "exploration",
+                FlightProfileId = Flight15Mission.AscentProfileId,
+                LaunchSiteId = Flight15Mission.LaunchSiteId,
+            });
+            OpenFlight();
+        }, primary: true));
+        body.AddChild(ModalButton(UiText.Get("flight15_catch"), () => LaunchVehicleScenario(
+            Flight15Mission.VehicleFile, Flight15Mission.LaunchSiteId, Flight15Mission.CatchProfileId)));
+        body.AddChild(Description(UiText.Get("flight15_scope")));
+        body.AddChild(ModalButton(UiText.Get("flight14_details"), ShowFlight14));
+    });
 
     private void ShowFlight14() => ShowModal("STARSHIP FLIGHT 14", body =>
     {
@@ -960,8 +981,8 @@ public partial class MainMenu : Control
         _primaryColumn.AddThemeConstantOverride("separation", shortWindow ? 4 : compact ? 8 : 12);
         _navigation.Columns = effectiveWidth < 560 ? 1 : 2;
         _bodyTitle.AddThemeFontSizeOverride("font_size", shortWindow ? 32 : compact ? 52 : 80);
-        if (_flight14Button != null)
-            _flight14Button.CustomMinimumSize = new Vector2(0, compact ? 46 : 54);
+        if (_featuredMissionButton != null)
+            _featuredMissionButton.CustomMinimumSize = new Vector2(0, compact ? 46 : 54);
         _bodySubtitle.CustomMinimumSize = new Vector2(0, shortWindow ? 0 : compact ? 40 : 44);
         _navigation.AddThemeConstantOverride("v_separation", shortWindow ? 4 : 10);
         foreach (Node child in _navigation.GetChildren())

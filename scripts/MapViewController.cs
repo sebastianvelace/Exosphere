@@ -140,7 +140,7 @@ public partial class MapViewController : Control
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (SimulationBridge.Instance?.IsFlight14Exploration == true
+        if (SimulationBridge.Instance?.IsGuidedStarshipExploration == true
             && @event is InputEventKey previewKey
             && previewKey.Keycode is Key.Enter or Key.KpEnter or Key.J or Key.B)
             return;

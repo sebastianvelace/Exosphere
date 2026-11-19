@@ -20,7 +20,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// <summary>Presentation focus in exploration; Universe retains the mission's physics owner.</summary>
     public Vessel?  ActiveVessel => Flight14Preview?.ObservedVessel ?? Universe.ActiveVessel;
     /// <summary>Camera observation never hands the automatic mission's systems authority to a detached stage.</summary>
-    public Vessel? ControlledVessel => IsFlight14Exploration ? Universe.ActiveVessel : ActiveVessel;
+    public Vessel? ControlledVessel => IsGuidedStarshipExploration ? Universe.ActiveVessel : ActiveVessel;
 
     /// <summary>
     /// Observes interest for one vessel and overlays authoritative active-mission/system
@@ -78,7 +78,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             : 0.0;
     public string ActiveFlightProfileId { get; private set; } = "manual";
     public Flight14Exploration? Flight14Preview { get; private set; }
-    public bool IsFlight14Exploration => ActiveFlightProfileId == Flight14Exploration.ProfileId;
+    public bool IsGuidedStarshipExploration => ActiveFlightProfileId is Flight14Exploration.ProfileId or Flight15Mission.AscentProfileId;
     private double _previewProcessedSeconds;
     private readonly HashSet<string> _previewRenderedVessels = new(StringComparer.Ordinal);
     private int _previewPartCount;
@@ -252,7 +252,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             var map = new MapViewController { Name = "MapViewController" };
             uiLayer.CallDeferred("add_child", map);
 
-            if (!IsFlight14Exploration)
+            if (!IsGuidedStarshipExploration)
             {
                 var edl = new EDLController { Name = "EDLController" };
                 uiLayer.CallDeferred("add_child", edl);
@@ -293,7 +293,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             // features for motion at low altitude; fades into the scaled-space backdrop.
             var earthGround = new EarthGroundController { Name = "EarthGroundController" };
             worldNode.CallDeferred("add_child", earthGround);
-            if (IsFlight14Exploration)
+            if (ActiveFlightProfileId == Flight14Exploration.ProfileId)
                 worldNode.CallDeferred("add_child", new Flight14LandingVisualController { Name = "Flight14LandingVisuals" });
 
             // Liftoff steam/dust deluge cloud at the pad.
@@ -312,11 +312,14 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         bool needsDefaultStack = pendingIntent == null
             || pendingIntent.Craft == null
                 && string.IsNullOrWhiteSpace(pendingIntent.SaveSlot);
-        if (IsFlight14Exploration)
+        if (IsGuidedStarshipExploration)
         {
             Universe.PhysicsStepController = null;
-            Flight14Preview = new Flight14Exploration(Flight14LaunchDiagnostic.CreateWithBoosterReturn(dataPath, Universe));
-            Flight14Preview.Run.Ship.Name = "Starship Flight 14 / Engineering preview";
+            bool flight15 = ActiveFlightProfileId == Flight15Mission.AscentProfileId;
+            var run = flight15 ? Flight15Mission.CreateAscent(dataPath, Universe)
+                : Flight14LaunchDiagnostic.CreateWithBoosterReturn(dataPath, Universe);
+            Flight14Preview = new Flight14Exploration(run, ActiveFlightProfileId);
+            if (!flight15) run.Ship.Name = "Starship Flight 14 / Engineering preview";
             EnsureActiveVesselPresentation(Flight14Preview.Run.Ship);
             _previewRenderedVessels.Add(Flight14Preview.Run.Ship.Id);
             _previewPartCount = Flight14Preview.Run.Ship.Parts.Parts.Count;
@@ -325,7 +328,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         else if (needsDefaultStack)
             SpawnStarshipStack(dataPath);
         GD.Print($"PERF_STARTUP phase=starship_spawned ms={startup.Elapsed.TotalMilliseconds:F1} vessels={Universe.Vessels.Count}");
-        if (!IsFlight14Exploration) SpawnPendingConstructedVessel(dataPath, pendingIntent);
+        if (!IsGuidedStarshipExploration) SpawnPendingConstructedVessel(dataPath, pendingIntent);
         if (pendingIntent is { Mode: "training", TrainingId: { } trainingId }) ApplyTraining(dataPath, trainingId);
         var campaignRuntime = new CampaignRuntime
         {
@@ -415,7 +418,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
         // ── Recalculate MaxAllowedWarpIndex ──────────────────────────────
         var av = ActiveVessel;
-        if (av != null && !IsFlight14Exploration)
+        if (av != null && !IsGuidedStarshipExploration)
         {
             var refB = Universe.GetDominantBody(av.Position);
             var warpRequirements = Universe.GetWarpPhysicsRequirements(av);
@@ -525,7 +528,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         SyncStructuralDebrisRenderers();
 
         // Hot-stage overlap finished in sim time → mechanical separation this frame.
-        if (!IsFlight14Exploration && av != null && av.HotStageOverlapCompletedPending)
+        if (!IsGuidedStarshipExploration && av != null && av.HotStageOverlapCompletedPending)
         {
             av.HotStageOverlapCompletedPending = false;
             TriggerStaging();
@@ -712,7 +715,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// </summary>
     public bool ArmTowerCatchApproach(Vessel? vessel)
     {
-        if (IsFlight14Exploration || vessel == null || !vessel.HasCatchPins
+        if (IsGuidedStarshipExploration || vessel == null || !vessel.HasCatchPins
             || !LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase))
             return false;
         var body = Universe.GetDominantBody(vessel.Position);
@@ -745,7 +748,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// </summary>
     public bool TryArmStarbaseCatchForReentry(Vessel? vessel, CelestialBody? body)
     {
-        if (IsFlight14Exploration || vessel == null || body == null || body.Id != "earth") return false;
+        if (IsGuidedStarshipExploration || vessel == null || body == null || body.Id != "earth") return false;
         if (!LaunchSiteId.StartsWith("starbase", StringComparison.OrdinalIgnoreCase))
             return false;
         bool isStarshipShip = HasStarshipRole(vessel, "command")
@@ -807,7 +810,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         var craft = intent.Craft;
         if (craft == null)
         {
-            if (intent.FlightProfileId == "starship-reentry-70km")
+            if (intent.FlightProfileId is "starship-reentry-70km" or Flight15Mission.CatchProfileId)
                 BeginReentryDemonstration();
             return;
         }
@@ -823,7 +826,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         GD.Print(
             $"[VAB] Placed {craft.Name} at {intent.LaunchSiteId}; " +
             $"profile={intent.FlightProfileId}, mission={intent.MissionId ?? "sandbox"}");
-        if (intent.FlightProfileId == "starship-reentry-70km")
+        if (intent.FlightProfileId is "starship-reentry-70km" or Flight15Mission.CatchProfileId)
             BeginReentryDemonstration();
     }
 
@@ -1064,7 +1067,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
     // ── Public API ────────────────────────────────────────────────────────
 
-    public void SetThrottle(double t) { if (!IsFlight14Exploration && ActiveVessel != null) ActiveVessel.Throttle = t; }
+    public void SetThrottle(double t) { if (!IsGuidedStarshipExploration && ActiveVessel != null) ActiveVessel.Throttle = t; }
     public void SetSAS(bool on)       { if (ActiveVessel != null) ActiveVessel.SASEnabled = on; }
     public void ReleaseGroundHold()   { ActiveVessel?.ReleaseGroundHold(); }
 
@@ -1265,7 +1268,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
     /// </summary>
     public void Ignite()
     {
-        if (IsFlight14Exploration) return;
+        if (IsGuidedStarshipExploration) return;
         var v = ActiveVessel;
         if (v == null) return;
 
@@ -1319,7 +1322,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
     public void TriggerStaging()
     {
-        if (IsFlight14Exploration) return;
+        if (IsGuidedStarshipExploration) return;
         if (ActiveVessel == null) return;
         // Instant stage (manual / post-overlap) cancels any remaining overlap cleanly.
         ActiveVessel.HotStageOverlapCompletedPending = false;
@@ -1530,6 +1533,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         return new()
         {
             ["phase"] = preview.Phase,
+            ["profile_id"] = preview.ActiveProfileId,
             ["observed_vessel_id"] = preview.ObservedVessel.Id,
             ["observing_booster"] = preview.IsObservingBooster,
             ["booster_phase"] = preview.Run.BoosterReturnController?.Phase.ToString() ?? "",
@@ -1706,7 +1710,10 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             // corridor with a residual downrange error that the physical retro burn could
             // not remove before the catch gate. Keep the seed upstream by a measured
             // trajectory correction rather than widening the catch gates.
-            const double EntryDownrangeLeadM = 143_900.0;
+            const double defaultUpstreamDistanceM = 143_900.0;
+            var flight15Approach = ActiveFlightProfileId == Flight15Mission.CatchProfileId
+                ? Flight15Mission.LoadEntryApproach(GameDataPath.Resolve(DataDirectory))
+                : null;
             var targetCradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
                 _launchSite, earth, Universe.CurrentTime);
             var targetUp = (targetCradle - earth.Position).Normalized;
@@ -1716,7 +1723,9 @@ public partial class SimulationBridge : Node, IPhysicsStepController
 
             // Move the entry point upstream along the local ground track, then recompute the
             // geodetic up vector so the 70 km shell remains normal to the ellipsoid.
-            var entryGround = targetCradle - targetEast * EntryDownrangeLeadM;
+            var entryGround = targetCradle - targetEast * (flight15Approach?.UpstreamDistanceM ?? defaultUpstreamDistanceM);
+            if (flight15Approach != null)
+                entryGround += targetUp.Cross(targetEast) * flight15Approach.NorthOffsetM;
             up = (entryGround - earth.Position).Normalized;
             east = earth.RotationAxis.Cross(up).Normalized;
             if (east.MagnitudeSquared < 1e-9)

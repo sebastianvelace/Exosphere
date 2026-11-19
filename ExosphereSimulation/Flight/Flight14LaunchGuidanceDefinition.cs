@@ -27,6 +27,7 @@ public sealed class Flight14LaunchGuidanceDefinition
     public double MinimumShipReserveKg { get; set; }
     public double MaximumAscentSeconds { get; set; }
     public double MaximumInsertionSeconds { get; set; }
+    public bool InjectAscentFaults { get; set; } = true;
     public double BoosterFaultSeconds { get; set; }
     public double VacuumFaultSeconds { get; set; }
     public double CutoffApoapsisToleranceM { get; set; }

@@ -706,7 +706,7 @@ public partial class HUDController : Control
 
     private void OnReentryDemoPressed()
     {
-        if (SimulationBridge.Instance?.IsFlight14Exploration == true) return;
+        if (SimulationBridge.Instance?.IsGuidedStarshipExploration == true) return;
         if (SimulationBridge.Instance?.BeginReentryDemonstration() != true) return;
         _padHelpDismissed = true;
         _events.Insert(0, $"{FormatClock(SimulationBridge.Instance.Universe.CurrentTime)}  REENTRY DEMO");
@@ -823,7 +823,7 @@ public partial class HUDController : Control
         var mission  = MissionManager.Instance;
         if (bridge == null || vessel == null || universe == null) return;
 
-        if (!bridge.IsFlight14Exploration)
+        if (!bridge.IsGuidedStarshipExploration)
         {
             // ── Attitude / throttle ─────────────────────────────────────────────
             // Crewed craft fly an onboard FCS: stick writes the vessel directly and
@@ -1058,7 +1058,9 @@ public partial class HUDController : Control
         {
             _guidanceLabel.Text = preview.IsObservingBooster
                 ? "SUPER HEAVY RETURN · AUTOMATIC · ESTIMATED GUIDANCE"
-                : "FLIGHT 14 EXPLORATION · AUTOMATIC · ESTIMATED GUIDANCE";
+                : preview.ActiveProfileId == Flight15Mission.AscentProfileId
+                    ? UiText.Get("flight15_automatic")
+                    : "FLIGHT 14 EXPLORATION · AUTOMATIC · ESTIMATED GUIDANCE";
             _padHelpDismissed = true;
             _reentryDemoButton.Disabled = true;
             return;
@@ -1560,7 +1562,7 @@ public partial class HUDController : Control
 
         if (@event is InputEventKey key && key.Pressed && !key.Echo)
         {
-            if (bridge.IsFlight14Exploration && key.Keycode is
+            if (bridge.IsGuidedStarshipExploration && key.Keycode is
                 (Key.Space or Key.T or Key.L or Key.O or Key.R or Key.V or Key.F5 or Key.F9))
             {
                 viewport.SetInputAsHandled();

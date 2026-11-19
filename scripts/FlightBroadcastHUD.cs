@@ -1,6 +1,7 @@
 namespace Exosphere.Game;
 
 using Godot;
+using Exosphere.Simulation.Flight;
 using System.Linq;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Presentation;
@@ -27,11 +28,37 @@ public partial class FlightBroadcastHUD : Control
     private static readonly Color Dim = new(0.46f, 0.47f, 0.49f);
     private static readonly Color Readout = new(0.78f, 0.79f, 0.81f);
     private static readonly Color Track = new(0.22f, 0.23f, 0.24f);
+    private static readonly Color TimelineAccent = new(0.47f, 0.78f, 0.96f);
+    private const int TimelineSegments = 80;
+    private readonly Vector2[] _timelinePath = new Vector2[TimelineSegments + 1];
+    private Vector2[] _timelineProgress = Array.Empty<Vector2>();
+    private float _timelineLeft = float.NaN;
+    private float _timelineRight = float.NaN;
+    private float _timelineReached = float.NaN;
     private static readonly (string Label, string Event)[] Milestones =
     {
         ("LIFTOFF", "LIFTOFF"), ("MAX Q", "MAX_Q"), ("STAGE SEP", "SEPARATION"),
         ("ORBIT", "ORBIT"), ("ENTRY", "ENTRY"), ("LANDING", "LANDED"),
     };
+
+    private static readonly (string Label, string Event)[] AscentAndDeploymentMilestones =
+    [
+        ("LIFTOFF", "LIFTOFF"), ("STAGE SEP", "SEPARATION"), ("ORBIT", "ORBIT"), ("DEPLOY", "PAYLOAD"),
+    ];
+    private static readonly (string Label, string Event)[] Flight14ShipMilestones =
+    [
+        ("LIFTOFF", "LIFTOFF"), ("STAGE SEP", "SEPARATION"), ("ORBIT", "ORBIT"),
+        ("DEPLOY", "PAYLOAD"), ("ENTRY", "ENTRY"), ("FLIP", "RETRO_BURN"), ("WATER", "WATER_ENTRY"),
+    ];
+    private static readonly (string Label, string Event)[] Flight14BoosterMilestones =
+    [
+        ("LIFTOFF", "LIFTOFF"), ("STAGE SEP", "SEPARATION"), ("BOOSTBACK", "BOOSTER_BOOSTBACK"),
+        ("COAST", "BOOSTER_COAST"), ("LANDING", "BOOSTER_LANDING"), ("WATER", "BOOSTER_WATER"),
+    ];
+    private static readonly (string Label, string Event)[] CatchMilestones =
+    [
+        ("ENTRY", "ENTRY"), ("DESCENT", "AERO_DESCENT"), ("FLIP", "RETRO_BURN"), ("CATCH", "CAUGHT"),
+    ];
 
     public override void _Ready()
     {
@@ -84,9 +111,17 @@ public partial class FlightBroadcastHUD : Control
                     .Select(m => suborbital && m.Event == "ORBIT" ? ("COAST", "COAST") : m).ToArray();
             }
         }
+        if (bridge.ActiveFlightProfileId == Flight15Mission.CatchProfileId)
+        {
+            _vehicleLabel = "STARSHIP FLIGHT 15 / ENTRY & CATCH";
+            _milestones = CatchMilestones;
+            _events.Add("ENTRY");
+        }
         if (bridge.Flight14Preview is { } preview)
         {
-            _vehicleLabel = preview.IsObservingBooster ? "SUPER HEAVY / FLIGHT 14 EXPLORATION" : "STARSHIP FLIGHT 14 / EXPLORATION";
+            bool flight15 = preview.ActiveProfileId == Flight15Mission.AscentProfileId;
+            _vehicleLabel = flight15 ? "STARSHIP FLIGHT 15"
+                : preview.IsObservingBooster ? "SUPER HEAVY / FLIGHT 14 EXPLORATION" : "STARSHIP FLIGHT 14 / EXPLORATION";
             if (double.IsFinite(preview.Run.Controller.LiftoffEpoch))
             {
                 _launchEpoch = preview.Run.Controller.LiftoffEpoch;
@@ -94,18 +129,13 @@ public partial class FlightBroadcastHUD : Control
             }
             if (preview.Run.Controller.DetachedBooster != null) _events.Add("SEPARATION");
             if (double.IsFinite(preview.Run.Controller.OrbitElapsedSeconds)) _events.Add("ORBIT");
-            _milestones = new[]
-            {
-                ("LIFTOFF", "LIFTOFF"), ("STAGE SEP", "SEPARATION"), ("ORBIT", "ORBIT"),
-                ("DEPLOY", "PAYLOAD"), ("ENTRY", "ENTRY"), ("FLIP", "RETRO_BURN"), ("WATER", "WATER_ENTRY"),
-            };
+            _milestones = flight15 ? AscentAndDeploymentMilestones : Flight14ShipMilestones;
             if (preview.Run.PoweredReturnController?.Landing?.WaterEntryWitness != null) _events.Add("WATER_ENTRY");
-            if (preview.Run.PayloadController.Releases.Count > 0) _events.Add("PAYLOAD");
+            if (flight15 ? preview.Run.PayloadController.Phase == Flight14PayloadPhase.Complete
+                : preview.Run.PayloadController.Releases.Count > 0) _events.Add("PAYLOAD");
             if (preview.IsObservingBooster && preview.Run.BoosterReturnController is { } booster)
             {
-                _milestones = new[] { ("LIFTOFF", "LIFTOFF"), ("STAGE SEP", "SEPARATION"),
-                    ("BOOSTBACK", "BOOSTER_BOOSTBACK"), ("COAST", "BOOSTER_COAST"),
-                    ("LANDING", "BOOSTER_LANDING"), ("WATER", "BOOSTER_WATER") };
+                _milestones = Flight14BoosterMilestones;
                 foreach (var witness in booster.Events)
                     _events.Add(witness.Phase switch
                     {
@@ -217,23 +247,41 @@ public partial class FlightBroadcastHUD : Control
     private void DrawTimeline(float left, float right)
     {
         if (right <= left) return;
-        const int segments = 80;
         Vector2 Point(float t) => new(Mathf.Lerp(left, right, t), 43 + 26 * Mathf.Pow(2 * t - 1, 2));
         int lastReached = -1;
         for (int i = 0; i < _milestones.Length; i++)
             if (_events.Contains(_milestones[i].Event)) lastReached = i;
         float reachedT = lastReached < 0 ? -1 : (lastReached + 0.5f) / _milestones.Length;
-        for (int i = 0; i < segments; i++)
-            DrawLine(Point(i / (float)segments), Point((i + 1f) / segments),
-                i / (float)segments <= reachedT ? Colors.White : Track, 1.6f, true);
+        bool resized = left != _timelineLeft || right != _timelineRight;
+        if (resized)
+        {
+            _timelineLeft = left;
+            _timelineRight = right;
+            for (int i = 0; i <= TimelineSegments; i++) _timelinePath[i] = Point(i / (float)TimelineSegments);
+        }
+        if (resized || reachedT != _timelineReached)
+        {
+            _timelineReached = reachedT;
+            int segmentsReached = Mathf.CeilToInt(Mathf.Max(0, reachedT) * TimelineSegments);
+            int pointCount = segmentsReached == 0 ? 0 : segmentsReached + 1;
+            if (_timelineProgress.Length != pointCount) Array.Resize(ref _timelineProgress, pointCount);
+            if (pointCount > 0)
+            {
+                Array.Copy(_timelinePath, _timelineProgress, segmentsReached);
+                _timelineProgress[^1] = Point(reachedT);
+            }
+        }
+        DrawPolyline(_timelinePath, Track, 1.6f, true);
+        if (_timelineProgress.Length >= 2)
+            DrawPolyline(_timelineProgress, TimelineAccent, 1.8f, true);
         for (int i = 0; i < _milestones.Length; i++)
         {
             var milestone = _milestones[i];
             var point = Point((i + 0.5f) / _milestones.Length);
             bool reached = _events.Contains(milestone.Event);
             DrawCircle(point, 4.5f, new Color(0.01f, 0.01f, 0.01f));
-            DrawArc(point, 4.5f, 0, Mathf.Tau, 20, reached ? Colors.White : Track, 1.5f, true);
-            if (reached) DrawCircle(point, 1.8f, Colors.White);
+            DrawArc(point, 4.5f, 0, Mathf.Tau, 20, reached ? TimelineAccent : Track, 1.5f, true);
+            if (reached) DrawCircle(point, 1.8f, TimelineAccent);
             Text(milestone.Label, point + new Vector2(0, i % 2 == 0 ? -11 : 19), 11, reached ? Colors.White : Dim);
         }
     }

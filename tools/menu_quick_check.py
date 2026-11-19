@@ -34,6 +34,10 @@ def main():
         ("home-es-1920", "", "1920x1080", 1.0, 1, ""),
         ("home-1280", "", "1280x720", 1.0, 0, ""),
         ("vehicles-1280", "vehicles", "1280x720", 1.0, 0, ""),
+        ("flight15-1280", "flight15", "1280x720", 1.0, 0, ""),
+        ("flight15-es-scale150", "flight15", "1280x720", 1.5, 1, ""),
+        ("flight15-launch-1280", "flight15launch", "1280x720", 1.0, 0, ""),
+        ("flight15-catch-1280", "flight15catch", "1280x720", 1.0, 0, ""),
         ("flight14-1280", "flight14", "1280x720", 1.0, 0, ""),
         ("flight14-launch-1280", "flight14launch", "1280x720", 1.0, 0, ""),
         ("campaign-1280", "campaign", "1280x720", 1.0, 0, ""),
@@ -106,6 +110,10 @@ def main():
                 markers.append("MENU_CONTINUE_CHOICE_OK")
             if mode and mode not in {"launch", "missionlaunch", "flight14launch", "vab"}:
                 markers.append("MENU_BACK_OK")
+            if mode in {"flight15launch", "flight15catch"}:
+                markers = ["MENU_CAPTURE", f"FLIGHT15_CHAPTER_OK mode={mode}"]
+            if mode == "flight15catch":
+                markers.append("[DEMO] Starship reentry")
             if (result.returncode or any(marker not in evidence for marker in markers)
                     or (mode == "graphics" and "This control can't grab focus" in evidence)):
                 raise SystemExit(f"FAIL {name}: inspect {log_path}\n{evidence[-4000:]}")

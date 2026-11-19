@@ -22,8 +22,12 @@ func _capture() -> void:
 		"missionlaunch": ["HISTORICAL CAMPAIGN", "CAMPAÑA HISTÓRICA"],
 		"partial": ["HISTORICAL CAMPAIGN", "CAMPAÑA HISTÓRICA"],
 		"vab": ["VEHICLE ASSEMBLY", "ENSAMBLAJE DE VEHÍCULOS"],
-		"flight14": ["EXPLORE FLIGHT 14", "EXPLORAR VUELO 14"],
-		"flight14launch": ["EXPLORE FLIGHT 14", "EXPLORAR VUELO 14"],
+		"flight15": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
+		"flight15launch": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
+		"flight15catch": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
+		"flight15catchverify": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
+		"flight14": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
+		"flight14launch": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
 		"settings": ["SETTINGS", "AJUSTES"],
 		"graphics": ["SETTINGS", "AJUSTES"],
 		"continue": ["CONTINUE", "CONTINUAR"],
@@ -31,6 +35,39 @@ func _capture() -> void:
 	if labels.has(mode):
 		if not _press(labels[mode]): return
 		await process_frame
+		if mode in ["flight14", "flight14launch"]:
+			if not _press(["EXPLORE FLIGHT 14", "EXPLORAR VUELO 14"]): return
+			await process_frame
+		if mode in ["flight15launch", "flight15catch", "flight15catchverify"]:
+			var ascent := mode == "flight15launch"
+			if not _press(["START ASCENT", "INICIAR ASCENSO"] if ascent else ["FLY THE ENTRY", "VOLAR EL CAPÍTULO"]): return
+			if mode == "flight15catchverify":
+				await _verify_flight15_catch()
+				return
+			for _frame in range(60): await process_frame
+			var bridge := root.find_child("SimulationBridge", true, false)
+			if bridge == null:
+				_fail("Flight 15 did not load Flight"); return
+			if ascent:
+				var state: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+				if state.get("profile_id") != "starship-flight15-ascent" or state.get("blocked") != "":
+					_fail("Flight 15 ascent did not initialize: " + str(state)); return
+				bridge.call("SetWarpIndex", 5)
+				while float(state["met"]) < 8.0:
+					await process_frame
+					state = bridge.call("GetFlight14ExplorationSnapshot")
+					if state["blocked"] != "":
+						_fail("Flight 15 ascent blocked: " + str(state)); return
+				bridge.call("SetWarpIndex", 0)
+			var path := OS.get_environment("CAPTURE_MENU_OUTPUT")
+			if root.get_texture().get_image().save_png(path) != OK:
+				_fail("Flight 15 capture failed"); return
+			print("FLIGHT15_CHAPTER_OK mode=" + mode)
+			print("MENU_CAPTURE path=" + path)
+			current_scene.queue_free()
+			await process_frame
+			quit()
+			return
 		if mode == "graphics":
 			if not await _check_graphics(): return
 		if mode in ["vehicle", "launch"]:
@@ -121,6 +158,28 @@ func _capture() -> void:
 			return
 		print("MENU_BACK_OK")
 	quit()
+
+func _verify_flight15_catch() -> void:
+	# Run with --headless --fixed-fps 60 to retain gameplay cadence without capture overhead.
+	for _frame in range(10): await process_frame
+	var mission := root.find_child("MissionManager", true, false)
+	if mission == null:
+		_fail("Flight 15 catch chapter did not create MissionManager")
+		return
+	var observed: Array[String] = []
+	mission.connect("PhaseChanged", func(phase: String):
+		observed.append(phase)
+		print("FLIGHT15_CATCH_PHASE " + phase))
+	for _frame in range(54_000):
+		await process_frame
+		if observed.has("CAUGHT"):
+			print("FLIGHT15_CATCH_VERIFIED")
+			quit()
+			return
+		if observed.has("LANDED") or observed.has("CRASHED"):
+			_fail("Flight 15 catch ended at " + observed.back())
+			return
+	_fail("Flight 15 catch did not finish within the verification window")
 
 func _check_graphics() -> bool:
 	var initial_scale := root.content_scale_factor

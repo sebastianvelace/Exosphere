@@ -5,9 +5,10 @@ namespace Exosphere.Simulation.Flight;
 /// whole control steps, never rails, reseeding or larger actuator integration intervals.
 /// Stops at the configured contact observation boundary; it does not assert recovery or capsize.
 /// </summary>
-public sealed class Flight14Exploration(Flight14LaunchDiagnostic run)
+public sealed class Flight14Exploration(Flight14LaunchDiagnostic run, string profileId = Flight14Exploration.ProfileId)
 {
     public const string ProfileId = "starship-flight14-exploration";
+    public string ActiveProfileId { get; } = profileId;
     public Flight14LaunchDiagnostic Run { get; } = run;
     public bool IsObservingBooster { get; private set; }
     private bool _boosterBoundaryPaused;
@@ -22,8 +23,9 @@ public sealed class Flight14Exploration(Flight14LaunchDiagnostic run)
         IsObservingBooster = observe; return true;
     }
     public bool IsPaused { get; set; }
-    public bool IsTerminal => Run.PoweredReturnController?.Landing?.Phase is Flight14LandingPhase.TerminalReached or Flight14LandingPhase.SplashdownReached;
-    public string? BlockReason => Run.PoweredReturnController?.BlockReason;
+    public bool IsTerminal => Run.ReturnController == null && Run.PayloadController.Phase == Flight14PayloadPhase.Complete
+        || Run.PoweredReturnController?.Landing?.Phase is Flight14LandingPhase.TerminalReached or Flight14LandingPhase.SplashdownReached;
+    public string? BlockReason => Run.PoweredReturnController?.BlockReason ?? Run.PayloadController.BlockReason ?? Run.Controller.BlockReason;
     public bool IsStopped => IsTerminal || BlockReason != null || Run.Ship.IsDestroyed;
     public double MissionElapsedSeconds => double.IsFinite(Run.Controller.LiftoffEpoch)
         ? System.Math.Max(0, Run.Universe.CurrentTime - Run.Controller.LiftoffEpoch) : 0;
