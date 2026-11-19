@@ -60,6 +60,10 @@ public partial class EDLController : Control
     // vehicle and amplified tangential velocity in the final approach.
     private const double TerminalVerticalPriorityAltitudeM = 300.0;
     private bool _towerCatchAborted;
+    private bool _catchCutoffCommitted;
+    private readonly bool _traceCatch = Godot.OS.GetEnvironment("EXOSPHERE_TRACE_CATCH") == "1";
+    private double _nextCatchTraceEpoch;
+
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
     private const double EntrySpeed   = StarbaseCatchPolicy.MinimumEntrySpeedMps;
@@ -263,6 +267,7 @@ public partial class EDLController : Control
                 _flipElapsed = 0.0;
                 _flipGateDiagnosticEmitted = false;
                 _towerCatchAborted = false;
+                _catchCutoffCommitted = false;
                 // Normal Earth Starbase returns use the same physical two-pin catch
                 // path as the deterministic reentry demo. The policy is deliberately
                 // narrow; Mars/Venus, other launch sites and non-Starship vehicles keep
@@ -535,6 +540,12 @@ public partial class EDLController : Control
             case Edl.Caught:
             case Edl.Touchdown:
                 return;
+        }
+
+        if (_phase == Edl.Catch && _catchCutoffCommitted)
+        {
+            CutEnginesForCatch(vessel, shipEngines);
+            return;
         }
 
         // ── Attitude: belly-flop in the aero phases, flip-and-burn for the descent ─
@@ -956,19 +967,17 @@ public partial class EDLController : Control
             // A catch approach's "ground" is the cradle's height up the tower, not the planet
             // surface below it — the descent profile must arrest at the arms, not fly through
             // them toward the ground the tower stands on.
-            double effectiveContactDatumAlt = _phase == Edl.Catch
-                ? body.GetAltitude(catchTargetPosition)
-                    - vessel.CatchContactPoints
-                        .Select(point => point.LocalPositionFromDatum.Y)
-                        .DefaultIfEmpty(0.0)
-                        .Max()
-                : contactDatumAlt;
+            var pinGeometry = _phase == Edl.Catch
+                ? TowerCatchPinGeometry.Measure(vessel.CatchContactPoints, vessel.Position - catchTargetPosition,
+                    vessel.Orientation, vessel.CatchTargetUpWorld)
+                : default;
             // Target descent rate: a gentle LINEAR profile that eases to 1.2 m/s at first
             // physical foot contact and
             // is already below the post-belly-flop terminal velocity (~70 m/s) at the flip, so the
             // burn starts braking immediately. Cap it by a constant-deceleration limit so a faster
             // arrival is still braked hard enough. Close the loop with gravity feed-forward.
-            double heightToContact = System.Math.Max(0.0, _alt - effectiveContactDatumAlt);
+            double heightToContact = System.Math.Max(0.0,
+                _phase == Edl.Catch ? pinGeometry.FirstPinGapM : _alt - contactDatumAlt);
             double vTargetLin = touchdownRate + heightToContact * 0.035;
             double vTargetMax = System.Math.Sqrt(2.0 * 0.60 * aThrustFull * heightToContact)
                 + touchdownRate;
@@ -991,22 +1000,39 @@ public partial class EDLController : Control
             double aCmd = PoweredLandingGuidance.ComputeAccelerationCommand(
                 g, thrustUpComponent, verticalError, coupledHorizontalError, _vUp);
 
-            // A single Raptor cannot command below its physical minimum throttle. Near the
-            // cradle that minimum is enough to hover a catch-only Ship a few decimetres above
-            // the pin plane indefinitely (the observed ~52 m FINAL_DESCENT plateau). Once the
-            // approach is centred and inside the last 1.5 m of the contact datum, release the
-            // engine for the short final drop; the pin springs then absorb the bounded impact.
-            // This is a narrow physical hand-off, not a scripted catch or teleport.
-            bool finalCatchRelease = _phase == Edl.Catch
-                && heightToContact <= 1.5
-                && vDown < 0.65
-                && horizontalError <= 2.0;
-            if (finalCatchRelease)
+            // After releasing into the cradle, leave the finite shutdown transient and
+            // pin springs in charge. Re-evaluating the descent-speed gate would relight
+            // during the short drop or the first compression.
+            if (_traceCatch && _phase == Edl.Catch && heightToContact < 25.0
+                && universe.CurrentTime >= _nextCatchTraceEpoch)
             {
-                shipEngines?.SelectEngineCount(0);
-                vessel.Throttle = 0.0;
-                _landingEngineCount = 0;
-                return;
+                _nextCatchTraceEpoch = universe.CurrentTime + 0.2;
+                var cradleUp = vessel.CatchTargetUpWorld.Normalized;
+                string pins = string.Join(" ", vessel.CatchContactPoints.Select(pin =>
+                {
+                    var offset = vessel.Position - catchTargetPosition
+                        + vessel.Orientation.Rotate(pin.LocalPositionFromDatum);
+                    double z = offset.Dot(cradleUp);
+                    return $"{pin.Name}:range={(offset - cradleUp * z).Magnitude:F3},gap={z - pin.ContactRadiusM:F3}";
+                }));
+                GD.Print($"CATCH_TRACE t={universe.CurrentTime:F2} alt={_alt:F3} height={heightToContact:F3} "
+                    + $"down={vDown:F3} side={_horiz:F3} error={horizontalError:F3} throttle={vessel.Throttle:F3} "
+                    + $"contacts={vessel.LastCatchContact?.ContactCount ?? 0} {pins}");
+            }
+            if (_phase == Edl.Catch && pinGeometry.BothPinsFit && pinGeometry.LastPinGapM <= 0.25)
+            {
+                var relativeVelocity = vessel.Velocity - vessel.CatchTargetVelocityWorld;
+                var cradleUp = vessel.CatchTargetUpWorld.Normalized;
+                double verticalSpeed = relativeVelocity.Dot(cradleUp);
+                double lateralSpeed = (relativeVelocity - cradleUp * verticalSpeed).Magnitude;
+                if (System.Math.Abs(verticalSpeed) <= 0.65 && lateralSpeed <= 0.35)
+                {
+                    _catchCutoffCommitted = true;
+                    CutEnginesForCatch(vessel, shipEngines);
+                    GD.Print($"[EDL] catch cutoff gap={pinGeometry.LastPinGapM:F3} "
+                        + $"pinRange={pinGeometry.FarthestPinRangeM:F3} speed={relativeVelocity.Magnitude:F3}");
+                    return;
+                }
             }
 
             // A normal leg landing has no pin solver to announce contact before the feet touch.
@@ -1063,13 +1089,26 @@ public partial class EDLController : Control
             $"contacts={vessel.LastSurfaceContact?.ContactCount ?? 0}");
     }
 
+    private void CutEnginesForCatch(Vessel vessel, Part? shipEngines)
+    {
+        shipEngines?.SelectEngineCount(0);
+        vessel.Throttle = 0.0;
+        vessel.PitchYawRoll = Vector3d.Zero;
+        vessel.FlapCommandOverride = null;
+        _landingEngineCount = 0;
+    }
+
     private void Caught(Vessel vessel, CelestialBody body, MissionManager? mission)
     {
         vessel.Throttle = 0.0;
         vessel.PitchYawRoll = Vector3d.Zero;
         mission?.EnterPhase(MissionPhase.CAUGHT);
-        GD.Print($"[EDL] CAUGHT by the tower at {_bodyName}  vUp={_vUp:F1} m/s " +
-            $"contacts={vessel.LastCatchContact?.ContactCount ?? 0}");
+        var contact = vessel.LastCatchContact;
+        GD.Print($"[EDL] CAUGHT by the tower at {_bodyName}  vUp={_vUp:F1} m/s "
+            + $"contacts={contact?.ContactCount ?? 0} massKg={vessel.TotalMass:F0} "
+            + $"compressionM={contact?.Points.Max(p => p.PenetrationM):F3} "
+            + $"peakLoadN={contact?.Points.Max(p => p.NormalLoadN):F0} "
+            + $"overTravel={contact?.HasOverTravel} overload={contact?.HasOverload}");
     }
 
     private void Deactivate()

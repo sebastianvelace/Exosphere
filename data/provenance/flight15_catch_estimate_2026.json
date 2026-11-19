@@ -1,0 +1,16 @@
+{
+  "manifestId": "flight15-catch-estimate-2026",
+  "records": [
+    {
+      "dataId": "starship_v3_command_flight12",
+      "field": "catchPinSpringStiffnessNPerM",
+      "status": "estimated",
+      "value": 2500000,
+      "source": "Exosphere two-pin static load budget for the Flight 15 entry chapter",
+      "accessedDate": "2026-11-19",
+      "variant": "Starship V3 simulation",
+      "conditions": "At 225 t and 9.81 m/s², two matched supports deflect about 0.44 m each. The existing 0.60 m travel, 3 MN load and 5 m cradle radius limits apply.",
+      "uncertainty": "Effective compliance chosen for the simulated mass envelope. Actual pin, arm and vehicle stiffness and loads are unpublished in the mission material."
+    }
+  ]
+}

@@ -8,7 +8,7 @@ provenance record is upgraded to `published` with a cited source.
 | Status | Records |
 | --- | ---: |
 | calibrated | 52 |
-| estimated | 242 |
+| estimated | 243 |
 | derived | 126 |
 | regulatory_envelope | 5 |
 | published | 136 |
@@ -296,6 +296,7 @@ provenance record is upgraded to `published` with a cited source.
 | starship_tank | rcsThrusters |  | thrust ±50 %, Isp ±30 %, gas store ±50 % (ullage pressure and temperature not published), positions ±2 m | SpaceX Starship/Super Heavy public descriptions (Wikipedia SpaceX Super Heavy; flight-test commentary): cold-gas attitude thrusters fed with residual tank ullage gas; no published thrust | reaction_control_2026.json |
 | starship_tank | ventOutlet |  | Station +/-8 m along the axis; real vents are on the hull and may discharge laterally, which this axisymmetric point omits. | No published Starship main-tank vent geometry was found; SpaceX broadcast imagery shows venting from the ship's forward and aft sections without a measurable station. | rigid_body_f4_outlets_2026.json |
 | starship_v3_command_flight12 | bodyFlaps |  | planform ±20%; travel and rate unknown publicly | Exosphere image-derived Flight 7 proportions (VesselRenderer flap rigs); travel and servo rate are simulator estimates | rigid_body_fidelity_2026.json |
+| starship_v3_command_flight12 | catchPinSpringStiffnessNPerM | 2.5e+06 | Effective compliance chosen for the simulated mass envelope. Actual pin, arm and vehicle stiffness and loads are unpublished in the mission material. | Exosphere two-pin static load budget for the Flight 15 entry chapter | flight15_catch_estimate_2026.json |
 | starship_v3_command_flight12 | dryMassCenterYM | -2.07 | ±1 m (internal layout, tiles and plumbing not published) | Exosphere: thin-shell centroid of the 14 m tangent ogive plus the cylindrical payload section (lateral areas), with ~3 t of forward-flap hinge hardware at the hinge station | rigid_body_fidelity_2026.json |
 | starship_v3_command_flight12 | noseLengthM | 14 | ±20%; no published contour in the cited material | Exosphere image-scale estimate from public vehicle photographs | rigid_body_fidelity_2026.json |
 | starship_v3_command_flight12 | rcsThrusters |  | thrust ±50 %, Isp ±30 %, gas store ±50 % (ullage pressure and temperature not published), positions ±2 m | SpaceX Starship/Super Heavy public descriptions (Wikipedia SpaceX Super Heavy; flight-test commentary): cold-gas attitude thrusters fed with residual tank ullage gas; no published thrust | reaction_control_2026.json |

@@ -332,7 +332,6 @@ public class Vessel
     // landing leg's suspension, because the arms are a rigid grab, not a spring strut.
     // These are first-order constants (not per-part JSON) since the compliance being
     // modelled belongs to the tower's catch mechanism, not the vessel.
-    private const double CatchPinSpringStiffnessNPerM = 1.2e6;
     private const double CatchPinDampingNsPerM = 5.0e5;
     private const double CatchPinTangentialDampingNsPerM = 1.0e5;
     private const double CatchPinFrictionCoefficient = 0.6;
@@ -373,7 +372,7 @@ public class Vessel
                 Name: $"{def.Id}-catch-pin-left",
                 LocalPositionFromDatum: new Vector3d(0.0, y, -lateral),
                 ContactRadiusM: radius,
-                SpringStiffnessNPerM: CatchPinSpringStiffnessNPerM,
+                SpringStiffnessNPerM: def.CatchPinSpringStiffnessNPerM,
                 DampingNsPerM: CatchPinDampingNsPerM,
                 TangentialDampingNsPerM: CatchPinTangentialDampingNsPerM,
                 FrictionCoefficient: CatchPinFrictionCoefficient,
@@ -383,7 +382,7 @@ public class Vessel
                 Name: $"{def.Id}-catch-pin-right",
                 LocalPositionFromDatum: new Vector3d(0.0, y, lateral),
                 ContactRadiusM: radius,
-                SpringStiffnessNPerM: CatchPinSpringStiffnessNPerM,
+                SpringStiffnessNPerM: def.CatchPinSpringStiffnessNPerM,
                 DampingNsPerM: CatchPinDampingNsPerM,
                 TangentialDampingNsPerM: CatchPinTangentialDampingNsPerM,
                 FrictionCoefficient: CatchPinFrictionCoefficient,

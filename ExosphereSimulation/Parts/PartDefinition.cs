@@ -296,6 +296,10 @@ public class PartDefinition
     [JsonPropertyName("catch_pin_radius_m")]
     public double CatchPinRadiusM { get; set; } = 0.4;
 
+    /// <summary>Effective spring stiffness of one pin and its cradle support (N/m).</summary>
+    [JsonPropertyName("catch_pin_spring_stiffness_n_m")]
+    public double CatchPinSpringStiffnessNPerM { get; set; } = 1.2e6;
+
     // Engine
     [JsonPropertyName("thrust_vac")]   public double ThrustVac   { get; set; }
     [JsonPropertyName("thrust_sl")]    public double ThrustSL    { get; set; }
@@ -458,6 +462,10 @@ public class PartDefinition
                 $"Failed to parse part JSON: {jsonPath}");
         definition.ValidateDockingDefinition(jsonPath);
         definition.ValidateParachuteDefinition(jsonPath);
+        if (definition.CatchPinLateralOffsetM > 0.0
+            && (!double.IsFinite(definition.CatchPinSpringStiffnessNPerM)
+                || definition.CatchPinSpringStiffnessNPerM <= 0.0))
+            throw new InvalidDataException($"Invalid catch pin stiffness in '{jsonPath}'.");
         return definition;
     }
 

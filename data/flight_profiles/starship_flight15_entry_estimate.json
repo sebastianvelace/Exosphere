@@ -1,6 +1,6 @@
 {
-  "upstreamDistanceM": 178349,
-  "northOffsetM": 3123,
+  "upstreamDistanceM": 178353,
+  "northOffsetM": 3066,
   "status": "engineering-estimate",
-  "assumptions": "Independent 70 km V3 entry scenario. Initial position estimated against the existing physics and controls. The verified run diverts to a landing when it misses the catch corridor. SpaceX did not publish the state used here."
+  "assumptions": "Independent 70 km V3 entry scenario. Initial position estimated against the existing physics and controls. The modeled chapter supports a two-pin tower catch. A miss can divert to a landing. SpaceX did not publish the state used here."
 }

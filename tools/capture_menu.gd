@@ -160,7 +160,12 @@ func _capture() -> void:
 	quit()
 
 func _verify_flight15_catch() -> void:
-	# Run with --headless --fixed-fps 60 to retain gameplay cadence without capture overhead.
+	# Run with --fixed-fps 60. A requested PNG enables drawing after confirmed contact.
+	var output := OS.get_environment("CAPTURE_MENU_OUTPUT")
+	if not output.is_empty() and DisplayServer.get_name() == "headless":
+		_fail("Flight 15 catch capture requires a framebuffer")
+		return
+	RenderingServer.set_render_loop_enabled(false)
 	for _frame in range(10): await process_frame
 	var mission := root.find_child("MissionManager", true, false)
 	if mission == null:
@@ -174,6 +179,13 @@ func _verify_flight15_catch() -> void:
 		await process_frame
 		if observed.has("CAUGHT"):
 			print("FLIGHT15_CATCH_VERIFIED")
+			if not output.is_empty():
+				RenderingServer.set_render_loop_enabled(true)
+				for frame in range(8): await RenderingServer.frame_post_draw
+				if root.get_texture().get_image().save_png(output) != OK:
+					_fail("Flight 15 catch capture failed")
+					return
+				print("MENU_CAPTURE path=" + output)
 			quit()
 			return
 		if observed.has("LANDED") or observed.has("CRASHED"):

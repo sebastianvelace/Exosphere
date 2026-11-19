@@ -7,15 +7,14 @@ fail() { echo "edl_catch_guidance_contract_test: FAIL: $*" >&2; exit 1; }
 EDL="$ROOT/scripts/EDLController.cs"
 [[ -f "$EDL" ]] || fail "EDLController.cs missing"
 
-rg -q 'bool finalCatchRelease = _phase == Edl\.Catch' "$EDL" \
-  || fail "catch approach has no bounded final release gate"
-rg -q 'heightToContact <= 1\.5' "$EDL" \
-  || fail "final release is not limited to the last contact metre"
-rg -q 'vDown < 0\.65' "$EDL" \
-  || fail "final release is not speed-gated"
-rg -q 'horizontalError <= 2\.0' "$EDL" \
-  || fail "final release can occur while the vessel is laterally misaligned"
+rg -q 'Edl\.Catch && pinGeometry\.BothPinsFit && pinGeometry\.LastPinGapM <= 0\.25' "$EDL" \
+  || fail "catch cutoff must require both pin footprints and bounded clearance"
+rg -q 'Abs\(verticalSpeed\) <= 0\.65 && lateralSpeed <= 0\.35' "$EDL" \
+  || fail "catch cutoff must be bounded by cradle-relative velocity"
+rg -q '_catchCutoffCommitted = true' "$EDL" \
+  && rg -q 'Edl\.Catch && _catchCutoffCommitted' "$EDL" \
+  || fail "catch cutoff must remain committed while pins settle"
 rg -q 'shipEngines\?\.SelectEngineCount\(0\)' "$EDL" \
   || fail "final catch release does not cut the selected engines"
 
-echo "edl_catch_guidance_contract_test: PASS (bounded final catch release prevents hover plateau)"
+echo "edl_catch_guidance_contract_test: PASS (two-pin geometry, bounded speed and committed cutoff)"

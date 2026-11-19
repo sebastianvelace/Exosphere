@@ -30,10 +30,13 @@ Base tecnica cerrada en `main`:
   in its briefing rather than a side panel.
   Flight 15 is now featured with a modeled ascent and 26 satellite deployments,
   plus a separate experimental entry and tower approach from a modeled 70 km state.
-  The V3 vehicle and control commands are estimates. The entry chapter reached
-  the fallback landing in Godot. Tower capture, continuous orbital return and
-  booster diversion reconstruction remain open. Flight 14 remains available from the Flight 15
-  briefing and exposes an automatic engineering exploration: loaded ascent, insertion, 26 payload releases and estimated ship water entry.
+  The V3 vehicle and controls use engineering estimates. The nominal entry chapter
+  now settles on both tower pins within the modeled travel and load limits.
+  Continuous orbital return and booster diversion reconstruction remain open.
+  See the [Flight 15 verification](docs/audits/flight15_capture_and_gpu_2026-11-19.md).
+  Flight 14 remains available from the Flight 15 briefing and exposes an automatic
+  engineering exploration: loaded ascent, insertion, 26 payload releases and estimated
+  ship water entry.
   A presentation shortcut becomes available after all 26 payload releases: **SKIP TO
   ENTRY** advances the continuous physical mission and pauses at its entry interface.
   Bounded work keeps cancel/menu usable; the 3D view hides during advancement and

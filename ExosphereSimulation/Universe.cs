@@ -3239,7 +3239,6 @@ public partial class Universe
     // near it (deorbit, entry, aero descent). Generous enough to cover final-approach
     // maneuvering error without ever gating out a genuine catch attempt.
     private const double CatchRangeGateM = 500.0;
-    private const double CatchCaptureRadiusM = 5.0;
 
     /// <summary>
     /// Cradle position for an integrator stage. Stage candidates live in the reference body's
@@ -3280,7 +3279,7 @@ public partial class Universe
             input,
             vessel.CatchContactPoints,
             point => Physics.SurfaceSample.FromCatchCradle(
-                cradlePosition, up, cradleVelocity, CatchCaptureRadiusM, point));
+                cradlePosition, up, cradleVelocity, TowerCatchPinGeometry.CaptureRadiusM, point));
     }
 
     private static Physics.ContactWrench? EvaluateCatchContact(
@@ -3307,7 +3306,7 @@ public partial class Universe
                 cradlePosition,
                 vessel.CatchTargetUpWorld,
                 vessel.CatchTargetVelocityWorld,
-                CatchCaptureRadiusM,
+                TowerCatchPinGeometry.CaptureRadiusM,
                 point));
     }
 
@@ -3334,6 +3333,8 @@ public partial class Universe
 
         double relativeSpeed = (vessel.Velocity - vessel.CatchTargetVelocityWorld).Magnitude;
         bool settledNow = contact.ContactCount == 2
+            && !contact.HasOverTravel
+            && !contact.HasOverload
             && relativeSpeed < 0.50
             && vessel.AngularVelocity.Magnitude < 0.05;
         vessel.CatchSettledDuration = settledNow ? vessel.CatchSettledDuration + dt : 0.0;

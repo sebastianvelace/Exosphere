@@ -20,6 +20,7 @@
   "catch_pin_lateral_offset_m": 4.4,
   "catch_pin_offset_y_m": 5.0,
   "catch_pin_radius_m": 0.4,
+  "catch_pin_spring_stiffness_n_m": 2500000,
   "header_tanks": [
       {
           "id": "lox_header",
