@@ -26,6 +26,8 @@ func _capture() -> void:
 		"flight15launch": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
 		"flight15catch": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
 		"flight15catchverify": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
+		"flightpause": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
+		"trainingpause": ["TRAINING", "ENTRENAMIENTO"],
 		"flight14": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
 		"flight14launch": ["EXPLORE FLIGHT 15", "EXPLORAR VUELO 15"],
 		"settings": ["SETTINGS", "AJUSTES"],
@@ -35,6 +37,9 @@ func _capture() -> void:
 	if labels.has(mode):
 		if not _press(labels[mode]): return
 		await process_frame
+		if mode in ["flightpause", "trainingpause"]:
+			await _verify_flight_pause(mode == "trainingpause")
+			return
 		if mode in ["flight14", "flight14launch"]:
 			if not _press(["EXPLORE FLIGHT 14", "EXPLORAR VUELO 14"]): return
 			await process_frame
@@ -157,6 +162,120 @@ func _capture() -> void:
 			_fail("Escape did not close dialog and restore initiating focus")
 			return
 		print("MENU_BACK_OK")
+	quit()
+
+func _verify_flight_pause(training: bool) -> void:
+	root.disable_3d = true
+	if training:
+		if not _press(["CIRCULARIZE AN ORBIT", "CIRCULARIZAR UNA ÓRBITA"]): return
+		await process_frame
+		if not _press(["START EXERCISE", "INICIAR EJERCICIO"]): return
+	else:
+		if not _press(["START ASCENT", "INICIAR ASCENSO"]): return
+
+	for _frame in range(24): await process_frame
+	var flight := current_scene
+	var bridge := flight.get_node_or_null("SimulationBridge")
+	var menu_layer := flight.get_node_or_null("FlightPauseMenu")
+	if bridge == null or menu_layer == null:
+		_fail("Flight pause UI did not load"); return
+	if not training:
+		bridge.call("SetWarpIndex", 5)
+		for _frame in range(90):
+			var underway: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+			if underway.get("met", 0.0) > 2.0: break
+			await process_frame
+		bridge.call("SetWarpIndex", 0)
+	var overlay := menu_layer.get_node("PauseOverlay") as Control
+	var launcher := menu_layer.get_node("PauseFlight") as Button
+	if paused or overlay.visible:
+		_fail("Flight started with the pause overlay open"); return
+	if not root.get_visible_rect().encloses(launcher.get_global_rect()):
+		_fail("The flight menu button is outside the viewport"); return
+
+	if training:
+		launcher.pressed.emit()
+	else:
+		_key(KEY_ESCAPE)
+	await process_frame
+	if not paused or not overlay.visible or current_scene != flight:
+		_fail("Flight menu did not pause in place"); return
+	var focus := root.gui_get_focus_owner()
+	if focus == null or not overlay.is_ancestor_of(focus):
+		_fail("Flight menu did not receive keyboard focus"); return
+	var paused_met := 0.0
+	if not training:
+		var initial: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+		paused_met = initial.get("met", 0.0)
+		_key(KEY_PERIOD)
+		for _frame in range(8): await process_frame
+		var after: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+		if paused_met <= 0 or after["met"] != paused_met:
+			_fail("Guided flight advanced while the menu was open"); return
+
+	var capture_path := OS.get_environment("CAPTURE_MENU_OUTPUT")
+	if not training:
+		root.disable_3d = false
+		await RenderingServer.frame_post_draw
+		if root.get_texture().get_image().save_png(capture_path) != OK:
+			_fail("Could not save pause image"); return
+		root.disable_3d = true
+	_key(KEY_F1)
+	await process_frame
+	var title := overlay.find_child("PauseTitle", true, false) as Label
+	if not paused or title.text not in ["Flight controls", "Controles de vuelo"]:
+		_fail("F1 did not open the controls reference"); return
+	var panel := title.get_parent().get_parent() as Control
+	if not root.get_visible_rect().encloses(panel.get_global_rect()):
+		_fail("Controls reference overflows the viewport"); return
+	if training:
+		root.disable_3d = false
+		await RenderingServer.frame_post_draw
+		if root.get_texture().get_image().save_png(capture_path) != OK:
+			_fail("Could not save controls image"); return
+		root.disable_3d = true
+		_key(KEY_PAGEDOWN)
+		await process_frame
+		var scroll := overlay.find_child("PauseScroll", true, false) as ScrollContainer
+		if scroll.scroll_vertical <= 0:
+			_fail("Controls do not scroll with the keyboard"); return
+	_key(KEY_ESCAPE)
+	await process_frame
+	if paused or overlay.visible or current_scene != flight:
+		_fail("Escape did not resume flight"); return
+	if not training:
+		for _frame in range(24): await process_frame
+		var resumed: Dictionary = bridge.call("GetFlight14ExplorationSnapshot")
+		if resumed["met"] <= paused_met:
+			_fail("Flight clock did not resume"); return
+
+	_key(KEY_ESCAPE)
+	await process_frame
+	var action := _find_button(overlay, ["RESTART FLIGHT", "REINICIAR VUELO"] if training else
+		["RETURN TO MAIN MENU", "VOLVER AL MENÚ PRINCIPAL"])
+	if action == null:
+		_fail("Missing flight transition action"); return
+	action.pressed.emit()
+	await process_frame
+	if not paused or current_scene != flight or not title.text.ends_with("?"):
+		_fail("Flight transition bypassed confirmation"); return
+	var confirm := _find_button(overlay, ["RESTART FLIGHT", "REINICIAR VUELO"] if training else
+		["RETURN TO MAIN MENU", "VOLVER AL MENÚ PRINCIPAL"])
+	if confirm == null:
+		_fail("Missing confirmation button"); return
+	confirm.pressed.emit()
+	for _frame in range(30): await process_frame
+	if paused or current_scene == flight or current_scene == null:
+		_fail("Scene transition did not release pause"); return
+	if training:
+		var training_panel := current_scene.find_child("TrainingPanel", true, false) as Control
+		if training_panel == null or not training_panel.visible:
+			_fail("Restart did not retain the selected training drill"); return
+	elif current_scene.name != "MainMenu":
+		_fail("Confirmation did not return to the main menu"); return
+	print("MENU_CAPTURE path=" + capture_path)
+	print("FLIGHT_PAUSE_OK training=" + str(training))
+	root.disable_3d = false
 	quit()
 
 func _verify_flight15_catch() -> void:
@@ -293,7 +412,6 @@ func _fail(message: String) -> void:
 func _capture_flight_hud() -> void:
 	var flight := root.get_node("Flight")
 	var hud := flight.get_node("UI/HUDController")
-	hud.call("DismissPadHelp")
 	var band := hud.get_node("FlightBroadcastHUD") as Control
 	print("FLIGHT_INSTRUMENTS " + JSON.stringify(band.call("GetInstrumentState")))
 	var output := OS.get_environment("CAPTURE_MENU_OUTPUT").get_base_dir()

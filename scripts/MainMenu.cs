@@ -263,17 +263,17 @@ public partial class MainMenu : Control
         _primaryColumn.MoveChild(_navigation, _primaryColumn.GetChildCount() - 1);
 
         AddNavButton(UiText.Get("free_flight"), ShowVehicles, primary: true);
+        AddNavButton(UiText.Get("training_title"), ShowTraining);
         AddNavButton(UiText.Get("campaign"), ShowCampaign);
+        AddNavButton(UiText.Get("scenarios"), ShowScenarios);
         AddNavButton(UiText.Get("vab"),
             () => GetTree().ChangeSceneToFile("res://scenes/construction/Construction.tscn"));
-        AddNavButton(UiText.Get("scenarios"), ShowScenarios);
         string[] saves = SaveSystem.ListSaveSlots();
         AddNavButton(UiText.Get("continue"), () => ContinueSave(saves),
             disabled: saves.Length == 0,
             tooltip: saves.Length == 0 ? UiText.Get("no_saves") : "");
         AddNavButton(UiText.Get("saves"), ShowSaves);
         AddNavButton(UiText.Get("settings"), ShowSettings);
-        AddNavButton(UiText.Get("quit"), () => GetTree().Quit());
 
     }
 
@@ -322,7 +322,12 @@ public partial class MainMenu : Control
         InterfaceTheme.ApplyMono(note, 10);
         note.AddThemeColorOverride("font_color", InterfaceTheme.TextFaint);
         row.AddChild(note);
-
+        var quitButton = ModalButton(UiText.Get("quit"), () => GetTree().Quit());
+        InterfaceTheme.StyleButton(quitButton, fontSize: 12, minSize: new Vector2(0, 28), paddingX: 12, paddingY: 4);
+        quitButton.Alignment = HorizontalAlignment.Center;
+        quitButton.SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
+        row.AddThemeConstantOverride("separation", 18);
+        row.AddChild(quitButton);
     }
 
     private void ApplyEntrance()
@@ -490,7 +495,8 @@ public partial class MainMenu : Control
 
     private void ShowScenarios() => ShowModal(UiText.Get("scenario_title"), body =>
     {
-        body.AddChild(ModalButton("FALCON 9 BLOCK 5 / KENNEDY", LaunchFalconScenario, true));
+        body.AddChild(ModalButton(UiText.Get("training_title"), ShowTraining, true));
+        body.AddChild(ModalButton("FALCON 9 BLOCK 5 / KENNEDY", LaunchFalconScenario));
         body.AddChild(ModalButton(
             "NEW GLENN 7x2 / CAPE CANAVERAL SLC-36",
             LaunchNewGlennScenario));
@@ -502,12 +508,22 @@ public partial class MainMenu : Control
             LaunchStarshipFlight12Scenario));
         body.AddChild(ModalButton("STARSHIP / 70 KM ENTRY INTERFACE", OpenReentry));
         body.AddChild(ModalButton("STARSHIP / STARBASE MANUAL LAUNCH", OpenSandbox));
-        body.AddChild(InterfaceTheme.SectionLabel(UiText.Get("training_title")));
+    });
+
+    private void ShowTraining() => ShowModal(UiText.Get("training_title"), body =>
+    {
         bool spanish = UserInterfaceSettings.Language == InterfaceLanguage.Spanish;
         foreach (var training in Exosphere.Simulation.Training.TrainingDefinition.LoadAll(
                      System.IO.Path.Combine(GameDataPath.Resolve(), "training")))
-            body.AddChild(ModalButton((spanish ? training.TitleEs : training.TitleEn).ToUpperInvariant(),
-                () => LaunchTraining(training)));
+        {
+            string title = spanish ? training.TitleEs : training.TitleEn;
+            body.AddChild(ModalButton(title.ToUpperInvariant(), () => ShowModal(title, briefing =>
+            {
+                briefing.AddChild(Description(spanish ? training.InstructionsEs : training.InstructionsEn));
+                briefing.AddChild(ModalButton(UiText.Get("start_training"), () => LaunchTraining(training), true));
+                briefing.AddChild(ModalButton(UiText.Get("training_title"), ShowTraining));
+            })));
+        }
     });
 
     /// <summary>Builds the drill's vehicle and hands it to the flight scene to be seeded.</summary>

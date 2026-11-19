@@ -19,15 +19,6 @@ public partial class HUDController : Control
     private const double PresentationRefreshPeriodSeconds = 1.0 / 30.0;
     public static FlightHudSnapshot? LatestSnapshot { get; private set; }
 
-    /// <summary>Hide the pad mission-controls sheet (F1 / visual capture).</summary>
-    public void DismissPadHelp()
-    {
-        _padHelpDismissed = true;
-        _padHelpAutoDismissed = true;
-        if (_padHelpRoot != null)
-            _padHelpRoot.Visible = false;
-    }
-
     // ── Palette ─────────────────────────────────────────────────────────────
     private static readonly Color LabelDim    = InterfaceTheme.TextMuted;
     private static readonly Color ValueBright = InterfaceTheme.Text;
@@ -97,12 +88,8 @@ public partial class HUDController : Control
     private AttitudeDataStrip _attitudeStrip = null!;
     private FlightBroadcastHUD _broadcast = null!;
 
-    // ── Pad help overlay + launch path callout (UX-001 / UX-002) ─────────────
-    private PanelContainer _padHelpRoot = null!;
-    private Button _reentryDemoButton = null!;
+    // ── Launch path callout ────────────────────────────────────────────────
     private Label _launchPathLabel = null!;
-    private bool _padHelpDismissed;
-    private bool _padHelpAutoDismissed;
 
     // ── Presentation state ─────────────────────────────────────────────────
     private readonly FlightHudPresenter _presenter = new();
@@ -129,7 +116,6 @@ public partial class HUDController : Control
         BuildPhaseBanner();
         BuildBottomBand();
         BuildCountdown();
-        BuildPadHelpOverlay();
         BuildDensityToast();
 
         // Attitude cluster: navball owns CenterBottom; engines/strip are children
@@ -220,7 +206,7 @@ public partial class HUDController : Control
         var panel = MakePanel();
         panel.Name = "FlightLoadsPanel";
         _leftRoot = panel;
-        panel.OffsetLeft = 18; panel.OffsetTop = 18;
+        panel.OffsetLeft = 18; panel.OffsetTop = FlightPauseMenu.HudTopInset;
         AddChild(panel);
 
         var vbox = new VBoxContainer();
@@ -249,7 +235,7 @@ public partial class HUDController : Control
         _rightRoot = panel;
         panel.SetAnchorsPreset(LayoutPreset.TopRight);
         panel.GrowHorizontal = GrowDirection.Begin;
-        panel.OffsetRight = -18; panel.OffsetTop = 18;
+        panel.OffsetRight = -18; panel.OffsetTop = FlightPauseMenu.HudTopInset;
         AddChild(panel);
 
         var vbox = new VBoxContainer();
@@ -298,7 +284,7 @@ public partial class HUDController : Control
         center.SetAnchorsPreset(LayoutPreset.CenterTop);
         center.GrowHorizontal = GrowDirection.Both;
         center.OffsetLeft = -320;
-        center.OffsetTop = 18;
+        center.OffsetTop = FlightPauseMenu.HudTopInset;
         center.OffsetRight = 320;
         center.AddThemeStyleboxOverride("panel", InterfaceTheme.PanelStyle(0.62f, 12, 6));
         center.MouseFilter = MouseFilterEnum.Ignore;
@@ -536,179 +522,10 @@ public partial class HUDController : Control
     }
     private CenterContainer _countdownRoot = null!;
 
-    /// <summary>
-    /// C5: the complete flight key inventory, grouped, re-invokable with [F1] at any time.
-    /// It used to list 9 of ~30 keys — omitting [Space] staging, the single most important
-    /// key in the game — and hid itself permanently at liftoff.
-    /// </summary>
-    private void BuildPadHelpOverlay()
-    {
-        _padHelpRoot = new PanelContainer();
-        _padHelpRoot.SetAnchorsPreset(LayoutPreset.Center);
-        // Keep the sheet above the attitude cluster so a late dismiss cannot bury engines/strip.
-        _padHelpRoot.OffsetLeft = -400;
-        _padHelpRoot.OffsetTop = -280;
-        _padHelpRoot.OffsetRight = 400;
-        _padHelpRoot.OffsetBottom = 120;
-        _padHelpRoot.AddThemeStyleboxOverride(
-            "panel", InterfaceTheme.PanelStyle(0.96f, 22, 18, deep: true));
-        _padHelpRoot.MouseFilter = MouseFilterEnum.Stop;
-        _padHelpRoot.ZIndex = 5;
-        AddChild(_padHelpRoot);
-
-        var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 8);
-        _padHelpRoot.AddChild(vbox);
-
-        var title = new Label { Text = "MISSION CONTROLS" };
-        title.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyLabel(title, 24);
-        title.AddThemeColorOverride("font_color", ValueBright);
-        vbox.AddChild(title);
-
-        var columns = new HBoxContainer();
-        columns.AddThemeConstantOverride("separation", 28);
-        columns.Alignment = BoxContainer.AlignmentMode.Center;
-        vbox.AddChild(columns);
-
-        var left = MakeHelpColumn(columns);
-        AddHelpGroup(left, "FLIGHT", new[]
-        {
-            ("Space", "STAGE / SEPARATE"),
-            ("hold Z", "IGNITION / THROTTLE UP"),
-            ("hold X", "THROTTLE DOWN"),
-            ("W S", "PITCH"),
-            ("A D", "YAW"),
-            ("Q E", "ROLL"),
-            ("T", "SAS HOLD ON / OFF"),
-            ("Y Shift+Y", "SAS MODE: PRO/RETRO · NORMAL · RADIAL · TARGET · NODE"),
-            ("arrows", "RCS TRANSLATE FWD/AFT · LEFT/RIGHT"),
-            ("PgUp PgDn", "RCS TRANSLATE UP / DOWN"),
-            ("Shift+arrows", "RCS FINE CONTROL (20 %)"),
-        });
-        AddHelpGroup(left, "MISSION", new[]
-        {
-            ("L", "AUTO COUNT · MISSION CONTROL FLIES"),
-            ("K", "MISSION CONTROL TAKES / GIVES CONTROL"),
-            ("G", "FULL ASCENT GUIDANCE"),
-            ("H", "PITCH ASSIST ON / OFF"),
-            ("R", "REENTRY DEMONSTRATION"),
-            ("V", "VEHICLE ASSEMBLY"),
-            ("Esc", "MAIN MENU"),
-        });
-
-        var right = MakeHelpColumn(columns);
-        AddHelpGroup(right, "VIEW", new[]
-        {
-            ("C", "CAMERA PRESET / COCKPIT"),
-            ("mouse drag", "ORBIT CAMERA"),
-            ("wheel", "ZOOM"),
-            ("M", "ORBITAL MAP"),
-            ("F1", "THIS PANEL"),
-            ("F2", "ACKNOWLEDGE ALERT"),
-            ("F3", "HUD DENSITY"),
-        });
-        AddHelpGroup(right, "TIME & FILE", new[]
-        {
-            (", .", "TIME WARP DOWN / UP"),
-            ("F5", "QUICKSAVE"),
-            ("F9", "QUICKLOAD"),
-            ("F6", "BACK TO LAST MILESTONE CHECKPOINT"),
-        });
-        AddHelpGroup(right, "MAP VIEW", new[]
-        {
-            ("Tab", "SOLAR / LOCAL VIEW"),
-            ("1…6", "TRANSFER TARGET"),
-            ("Enter", "EXECUTE NODE"),
-            ("B", "DEORBIT · AT THE MOON: LOI / TEI"),
-            ("N", "WARP TO NODE"),
-            ("wheel Ctrl Alt", "NODE Δv PRO / NORMAL / RADIAL"),
-            ("[ ]", "NODE Δv −5% / +5%"),
-            ("Del", "CLEAR NODE"),
-        });
-        AddHelpGroup(right, "DEBUG", new[]
-        {
-            ("O", "JUMP TO ORBIT"),
-            ("J", "JUMP TO BODY (MAP)"),
-        }, debug: true);
-
-        _reentryDemoButton = new Button
-        {
-            Text = "VIEW REENTRY → LANDING",
-            CustomMinimumSize = new Vector2(360, 38),
-            TooltipText = "Start the verified physical EDL demonstration at the 70 km entry interface",
-        };
-        InterfaceTheme.StyleButton(_reentryDemoButton, primary: true);
-        _reentryDemoButton.Pressed += OnReentryDemoPressed;
-        vbox.AddChild(_reentryDemoButton);
-
-        var dismiss = new Label
-        {
-            Text = "[F1] show / dismiss at any time  ·  auto-hides at ignition",
-        };
-        dismiss.HorizontalAlignment = HorizontalAlignment.Center;
-        InterfaceTheme.ApplyBody(dismiss, 10);
-        dismiss.AddThemeColorOverride("font_color", LabelDim);
-        vbox.AddChild(dismiss);
-    }
-
-    private static VBoxContainer MakeHelpColumn(HBoxContainer parent)
-    {
-        var column = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        column.AddThemeConstantOverride("separation", 2);
-        parent.AddChild(column);
-        return column;
-    }
-
-    private static void AddHelpGroup(
-        VBoxContainer column,
-        string heading,
-        (string key, string action)[] bindings,
-        bool debug = false)
-    {
-        var head = new Label { Text = debug ? $"{heading} — NOT PART OF FLIGHT" : heading };
-        InterfaceTheme.ApplyLabel(head, 11);
-        head.AddThemeColorOverride(
-            "font_color", debug ? InterfaceTheme.Warning : InterfaceTheme.TextMuted);
-        column.AddChild(head);
-
-        foreach (var (key, action) in bindings)
-        {
-            var row = new HBoxContainer();
-            row.AddThemeConstantOverride("separation", 10);
-
-            var keyLabel = new Label
-            {
-                Text = key,
-                CustomMinimumSize = new Vector2(86, 0),
-                HorizontalAlignment = HorizontalAlignment.Right,
-            };
-            InterfaceTheme.ApplyMono(keyLabel, 11);
-            keyLabel.AddThemeColorOverride(
-                "font_color", debug ? InterfaceTheme.TextFaint : ValueBright);
-            row.AddChild(keyLabel);
-
-            var actionLabel = new Label
-            {
-                Text = action,
-                SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            };
-            InterfaceTheme.ApplyLabel(actionLabel, 12);
-            actionLabel.AddThemeColorOverride(
-                "font_color", debug ? InterfaceTheme.TextFaint : LabelDim);
-            row.AddChild(actionLabel);
-
-            column.AddChild(row);
-        }
-
-        column.AddChild(new Control { CustomMinimumSize = new Vector2(0, 6) });
-    }
-
     private void OnReentryDemoPressed()
     {
         if (SimulationBridge.Instance?.IsGuidedStarshipExploration == true) return;
         if (SimulationBridge.Instance?.BeginReentryDemonstration() != true) return;
-        _padHelpDismissed = true;
         _events.Insert(0, $"{FormatClock(SimulationBridge.Instance.Universe.CurrentTime)}  REENTRY DEMO");
         if (_events.Count > 5) _events.RemoveAt(_events.Count - 1);
         _eventLog.Text = string.Join("\n", _events);
@@ -1033,7 +850,6 @@ public partial class HUDController : Control
             UpdateLaunchPathCallout(mission, bridge, snapshot);
             UpdateDeorbitEdlCue(mission, peAlt, atmoMax, snapshot.TimeToPeriapsisS);
             UpdateControlAuthorityCue(vessel, mission);
-            UpdatePadHelp(mission);
         }
         UpdateGuidanceLine();
         if (bridge.Flight14Preview is { IsObservingBooster: true } boosterPreview)
@@ -1061,8 +877,6 @@ public partial class HUDController : Control
                 : preview.ActiveProfileId == Flight15Mission.AscentProfileId
                     ? UiText.Get("flight15_automatic")
                     : "FLIGHT 14 EXPLORATION · AUTOMATIC · ESTIMATED GUIDANCE";
-            _padHelpDismissed = true;
-            _reentryDemoButton.Disabled = true;
             return;
         }
         if (EDLController.Instance?.BannerStatus is { Length: > 0 } edl)
@@ -1360,42 +1174,6 @@ public partial class HUDController : Control
                 : Accent);
     }
 
-    private void UpdatePadHelp(MissionManager mission)
-    {
-        // Auto-hide once the stack leaves the pad. Phase>=LIFTOFF alone was not enough:
-        // a WASD soft-disengage during IGNITION could leave MissionManager stuck in
-        // IGNITION after clamps released, so this overlay covered the attitude cluster
-        // for the whole climb. Also dismiss on altitude / ground-hold clear.
-        if (!_padHelpAutoDismissed && ShouldAutoDismissPadHelp(mission))
-        {
-            _padHelpAutoDismissed = true;
-            _padHelpDismissed = true;
-        }
-
-        _padHelpRoot.Visible = !_padHelpDismissed
-            && _snapshot?.ViewMode == FlightHudViewMode.Exterior;
-    }
-
-    private static bool ShouldAutoDismissPadHelp(MissionManager mission)
-    {
-        // Dismiss as soon as the launch sequence commits (IGNITION+), not only after
-        // LIFTOFF — otherwise the sheet sits over the attitude cluster through spool-up.
-        if (mission.Phase >= MissionPhase.IGNITION)
-            return true;
-
-        var bridge = SimulationBridge.Instance;
-        var vessel = bridge?.ActiveVessel;
-        var universe = bridge?.Universe;
-        if (vessel == null || universe == null)
-            return false;
-
-        if (!vessel.IsGroundHeld && mission.Phase is not MissionPhase.PRE_LAUNCH)
-            return true;
-
-        var body = universe.GetDominantBody(vessel.Position);
-        return vessel.GetAltitude(body) > 80.0;
-    }
-
     private void UpdateLaunchPathCallout(
         MissionManager mission,
         SimulationBridge bridge,
@@ -1570,10 +1348,6 @@ public partial class HUDController : Control
             }
             switch (key.Keycode)
             {
-                case Key.Escape:
-                    GetTree().ChangeSceneToFile("res://scenes/ui/MainMenu.tscn");
-                    viewport.SetInputAsHandled();
-                    break;
                 // [Z]/[X] son hold-throttle: se sondean en _Process (mantener para
                 // encender/acelerar / bajar). Aquí solo van las acciones de pulsación única.
                 // [Z]/[X] are hold-throttle, polled in _Process; only one-shot actions here.
@@ -1619,10 +1393,6 @@ public partial class HUDController : Control
                     break;
                 // [,] / [.] time warp is handled by WarpController alone (C2 dedupe):
                 // both handlers used to fire, stepping the warp index twice per press.
-                case Key.F1:
-                    _padHelpDismissed = !_padHelpDismissed;
-                    viewport.SetInputAsHandled();
-                    break;
                 case Key.F3:
                     CycleHudDensity();
                     viewport.SetInputAsHandled();

@@ -160,6 +160,7 @@ public static class UiText
         ["apollo11_partial"] = ("Partial mission: it ends with Eagle on the Moon. The lunar ascent, rendezvous and return to Earth are still in development.", "Misión parcial: termina con el Eagle en la Luna. El despegue lunar, el encuentro y el regreso a la Tierra siguen en desarrollo."),
         ["mission_procedure"] = ("PROCEDURE", "PROCEDIMIENTO"),
         ["training_title"] = ("TRAINING", "ENTRENAMIENTO"),
+        ["start_training"] = ("START EXERCISE", "INICIAR EJERCICIO"),
         ["mission_control_hint"] = ("Stuck on a step? [K] hands it to Mission Control and [K] again takes it back.", "¿Trabado en un paso? [K] se lo pasa a Control de Misión y otra vez [K] te lo devuelve."),
         ["mission_objectives"] = ("OBJECTIVES", "OBJETIVOS"),
         ["mission_limits"] = ("FLIGHT LIMITS", "LÍMITES DE VUELO"),

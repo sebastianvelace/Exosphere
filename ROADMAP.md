@@ -306,7 +306,7 @@ hacer.
    estructurales".
    Plan original: Volver al inicio de la fase, quickload visible, asistencias
    opcionales (propelente infinito, sin fallas estructurales) puntuadas aparte.
-8. ✅ **Entrenamiento.** (2026-10-23) Cuatro ejercicios en Escenarios → Entrenamiento
+8. ✅ **Entrenamiento.** (2026-10-23) Cuatro ejercicios en Entrenamiento desde el menú principal
    (circularizar, acoplar desde 200 m, LOI, alunizar desde 15 km), cada uno con instrucciones,
    estado sembrado una sola vez y meta evaluada. Jugando el de acople se corrigió la
    "deriva" falsa de 0,23 m/s (se medía en el marco inercial; ahora en el orbital del

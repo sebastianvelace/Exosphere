@@ -45,6 +45,8 @@ def main():
         ("mission-1280", "mission", "1280x720", 1.0, 0, ""),
         ("continue-choice", "continue", "1280x720", 1.0, 0, ""),
         ("settings-1280", "settings", "1280x720", 1.0, 0, ""),
+        ("flight-pause-1280", "flightpause", "1280x720", 1.0, 0, ""),
+        ("training-pause-es-scale150", "trainingpause", "1280x720", 1.5, 1, ""),
         ("graphics-1280", "graphics", "1280x720", 1.0, 0, ""),
         ("home-es-scale150", "", "1280x720", 1.5, 1, ""),
         ("vehicles-es-scale150", "vehicles", "1280x720", 1.5, 1, ""),
@@ -87,11 +89,12 @@ def main():
             if mode == "graphics":
                 env.pop("EXOSPHERE_GRAPHICS_PRESET", None)
             log_path = output / f"{name}.log"
+            fixed_fps = ["--fixed-fps", "60"] if mode in {"flightpause", "trainingpause"} else []
             with log_path.open("w") as log:
                 result = subprocess.run([
                     "xvfb-run", "-a", "-s", f"-screen 0 {size}x24", godot,
                     "--path", str(root), "--rendering-driver", "opengl3",
-                    "--resolution", size, "--script", "tools/capture_menu.gd",
+                    "--resolution", size, *fixed_fps, "--script", "tools/capture_menu.gd",
                 ], cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=int(env.get("CAPTURE_FLIGHT14_TIMEOUT", "180")) if mode == "flight14launch" else (360 if args.flight_hud else 180))
             evidence = log_path.read_text()
             route_marker = ("MENU_LAUNCH_OK" if mode in {"launch", "missionlaunch", "flight14launch"}
@@ -112,6 +115,8 @@ def main():
                 markers.append("MENU_BACK_OK")
             if mode in {"flight15launch", "flight15catch"}:
                 markers = ["MENU_CAPTURE", f"FLIGHT15_CHAPTER_OK mode={mode}"]
+            if mode in {"flightpause", "trainingpause"}:
+                markers = ["MENU_CAPTURE", "FLIGHT_PAUSE_OK"]
             if mode == "flight15catch":
                 markers.append("[DEMO] Starship reentry")
             if (result.returncode or any(marker not in evidence for marker in markers)

@@ -106,18 +106,7 @@ public partial class Flight14ExplorationHUD : Control
                 CameraController.Instance?.EnterShipChaseView();
             }
         });
-        AddButton(row, "RESTART", () =>
-        {
-            var preview = SimulationBridge.Instance?.Flight14Preview;
-            if (preview == null) return;
-            CraftLaunchRequest.Set(new LaunchIntent
-            {
-                Mode = "exploration", FlightProfileId = preview.ActiveProfileId,
-                LaunchSiteId = "starbase_pad2",
-            });
-            GetTree().ChangeSceneToFile("res://scenes/flight/Flight.tscn");
-        });
-        AddButton(row, "MENU", () => GetTree().ChangeSceneToFile("res://scenes/ui/MainMenu.tscn"));
+
     }
 
     public override void _ExitTree() => RestoreWorldView();

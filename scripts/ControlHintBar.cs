@@ -5,8 +5,8 @@ using Exosphere.Simulation.Flight;
 using Godot;
 
 /// <summary>
-/// Always-visible strip of the keys that matter right now, above the bottom band (the
-/// F1 sheet hides at ignition and lists everything). It follows the flight: pad, ascent,
+/// Always-visible strip of the keys that matter right now, above the bottom band
+/// (F1 opens the paused controls reference). It follows the flight: pad, ascent,
 /// orbit, near a docking target, descent, Mission Control flying.
 /// </summary>
 public partial class ControlHintBar : Control

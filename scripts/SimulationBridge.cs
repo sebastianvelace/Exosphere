@@ -78,6 +78,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             : 0.0;
     public string ActiveFlightProfileId { get; private set; } = "manual";
     public Flight14Exploration? Flight14Preview { get; private set; }
+    public LaunchIntent? InitialLaunchIntent { get; private set; }
     public bool IsGuidedStarshipExploration => ActiveFlightProfileId is Flight14Exploration.ProfileId or Flight15Mission.AscentProfileId;
     private double _previewProcessedSeconds;
     private readonly HashSet<string> _previewRenderedVessels = new(StringComparer.Ordinal);
@@ -204,6 +205,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         }
 
         var pendingIntent = CraftLaunchRequest.Pop();
+        InitialLaunchIntent = pendingIntent;
         if (pendingIntent != null)
         {
             LaunchSiteId = pendingIntent.LaunchSiteId;
@@ -249,6 +251,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         var uiLayer = GetTree().Root.FindChild("UI", true, false) as CanvasLayer;
         if (uiLayer != null)
         {
+            GetParent()?.CallDeferred("add_child", new FlightPauseMenu { Name = "FlightPauseMenu" });
             var map = new MapViewController { Name = "MapViewController" };
             uiLayer.CallDeferred("add_child", map);
 
