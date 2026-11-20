@@ -320,6 +320,24 @@ reaches its one-engine hold metres off the cradle and burns about 73 t instead o
 Alignment has to finish while two engines still descend, or with steering that does not
 depend on one off-axis Raptor.
 
+### Two-engine alignment trial (not kept)
+
+A follow-up tried to finish the alignment on two engines, as flown. The lateral closing
+speed was synchronised with the descent (2 × miss ÷ time to the pins, bounded by a
+1 m/s² braking profile with that deceleration fed forward), only with two or more
+engines lit. A guard also held the third engine while more than 10 m off and descending
+faster than 15 m/s. On the bench (0 m crossrange) the step to two engines moved from
+7.0 s to 13.0 s (Flight 15: 10 s), and the ship reached the step to one engine 8 m from
+the cradle at 0.5 m/s, where it had crossed it at 9.3 m/s before.
+
+It still did not catch, and both previously passing bench cases timed out, so the trial
+was reverted. The cause is attitude lag on two and one engines: braking the sideways
+speed leaves the axis tilted toward the cradle when that speed reaches zero. The tilt
+then takes about 3 s to come back and pushes the ship 3 m/s the other way (a ±25 m
+swing on one engine). Resetting the off-axis thrust trim at engine changes did not help.
+The lateral loop needs a model of that lag (command the tilt rate, or predict the
+velocity one attitude time constant ahead) before the alignment can finish on two engines.
+
 The default chapter is unchanged and still catches at 50, 60 and 120 Hz.
 
 ## Orbital return feasibility
