@@ -288,6 +288,38 @@ A catch from the opt-in chapter needs a planner that predicts the belly-flop tur
 flip throw together, for example by propagating the glide with its measured turn rate,
 rather than a feedback law on the current state.
 
+### Predictive glide planner
+
+`TowerCatchGlidePredictor` replaces feedback on the glide with prediction. Every 0.5 s it
+propagates candidate S-turns to the moment of ignition: turn away by 0–180° at the
+planning turn rate (0.08 rad/s, below the measured 0.1), turn back until the glide
+points at the tower, then fly straight in. It keeps the candidate that ends one lead
+short of the tower flying head-on, and flies only its present turn. The lift turns that
+far sideways; the rest keeps the glide going.
+
+The approach is now repeatable across cadences:
+
+| Render cadence | Range at ignition | Speed toward tower | Nose to tower |
+| --- | ---: | ---: | ---: |
+| 50 Hz | 1,136 m | 30.6 m/s | 0.93 |
+| 60 Hz | 1,142 m | 30.9 m/s | 0.95 |
+| 120 Hz | 1,145 m | 30.9 m/s | 0.95 |
+
+The burn then also needs an approach slope: descend no lower than one metre of pin
+clearance per metre of miss beyond the alignment tolerance. Without it the descent
+outran the lateral closure and the missed-approach guard fired 300 m out. With the
+slope and a 15 m/s far-field closing speed, the 60 Hz run was caught: no relight, engines
+3 → 2 → 1 → 0, peak compression 0.315 m, peak pin load 0.89 MN, 142 t at the catch. The
+catch came at 120.8 s, after about 40 s hovering on one engine within 10 m of the cradle,
+and the cutoff fell 0.1 s inside the raised 120 s burn budget. At 50 and 120 Hz the same
+approach ended in that hover and diverted to a leg landing. On the bench, the 0 and
+−15 m crossrange cases catch (38 and 77 s); +15 m does not and is kept as a skipped test.
+
+The flown burn lasted 18 s with one engine for its last second. Here the ship still
+reaches its one-engine hold metres off the cradle and burns about 73 t instead of 25–35 t.
+Alignment has to finish while two engines still descend, or with steering that does not
+depend on one off-axis Raptor.
+
 The default chapter is unchanged and still catches at 50, 60 and 120 Hz.
 
 ## Orbital return feasibility

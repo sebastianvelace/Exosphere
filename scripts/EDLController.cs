@@ -74,6 +74,8 @@ public partial class EDLController : Control
     private readonly bool _traceCatch = Godot.OS.GetEnvironment("EXOSPHERE_TRACE_CATCH") == "1";
     private double _nextCatchTraceEpoch;
     private double _nextGlideTraceEpoch;
+    private double _nextGlidePlanEpoch;
+    private GlidePlan _glidePlan;
 
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
@@ -281,6 +283,8 @@ public partial class EDLController : Control
                 _catchCutoffCommitted = false;
                 _catchBurn = null;
                 _catchBurnLoggedSteps = 0;
+                _nextGlidePlanEpoch = 0.0;
+                _glidePlan = default;
                 // Normal Earth Starbase returns use the same physical two-pin catch
                 // path as the deterministic reentry demo. The policy is deliberately
                 // narrow; Mars/Venus, other launch sites and non-Starship vehicles keep
@@ -704,10 +708,28 @@ public partial class EDLController : Control
                             double timeToIgnition = TowerCatchApproachPlanner.TimeToIgnitionS(
                                 TowerCatchBurn.UprightPinClearanceM(vessel, SimulationBridge.Instance!.Universe.CurrentTime),
                                 glideDescent, leadDefinition);
-                            var glideCommand = TowerCatchApproachPlanner.GlideAccelerationCommand(
-                                vessel.CatchTargetUpWorld, vessel.Position, glideHorizontalVelocity,
-                                ignitionPoint, leadDefinition);
-                            guidedLift = TowerCatchApproachPlanner.LiftDirection(velDir, glideCommand, guidedLift);
+                            // Predict the manoeuvre to ignition and fly its present turn. Re-plan
+                            // at 2 Hz: the belly flop turns at about 0.1 rad/s, far slower than that.
+                            double now = SimulationBridge.Instance!.Universe.CurrentTime;
+                            if (now >= _nextGlidePlanEpoch)
+                            {
+                                _nextGlidePlanEpoch = now + 0.5;
+                                var offsetFromTower = vessel.Position - catchTargetPosition;
+                                offsetFromTower -= glideUp * offsetFromTower.Dot(glideUp);
+                                _glidePlan = TowerCatchGlidePredictor.Plan(offsetFromTower, glideHorizontalVelocity,
+                                    glideUp, timeToIgnition,
+                                    leadDefinition.IgnitionLeadDistanceM(glideHorizontalVelocity.Magnitude),
+                                    leadDefinition.GlidePlanningTurnRateRadPerS);
+                            }
+                            var glideCommand = TowerCatchGlidePredictor.TurnAcceleration(
+                                glideHorizontalVelocity, glideUp, _glidePlan.TurnRateRadPerS);
+                            double sideFraction = System.Math.Clamp(
+                                glideCommand.Magnitude / leadDefinition.GlideLiftAccelerationMps2, 0.0, 1.0);
+                            var sideLift = TowerCatchApproachPlanner.LiftDirection(velDir, glideCommand, guidedLift);
+                            guidedLift = sideFraction > 1e-3
+                                ? (guidedLift.Normalized * System.Math.Sqrt(1.0 - sideFraction * sideFraction)
+                                    + sideLift * sideFraction).Normalized
+                                : guidedLift;
                             if (_traceCatch && SimulationBridge.Instance!.Universe.CurrentTime >= _nextGlideTraceEpoch)
                             {
                                 _nextGlideTraceEpoch = SimulationBridge.Instance.Universe.CurrentTime + 2.0;
@@ -718,7 +740,8 @@ public partial class EDLController : Control
                                 toTower -= cradleUp * toTower.Dot(cradleUp);
                                 GD.Print($"GLIDE_TRACE alt={_alt:F0} toPoint={toPoint.Magnitude:F0} toTower={toTower.Magnitude:F0} "
                                     + $"vh={glideHorizontalVelocity.Magnitude:F1} towardPoint={(toPoint.MagnitudeSquared > 1 ? glideHorizontalVelocity.Dot(toPoint.Normalized) : 0):F1} "
-                                    + $"cmd={glideCommand.Magnitude:F2} vDown={-_vUp:F1} tgo={timeToIgnition:F1}");
+                                    + $"turn={_glidePlan.TurnRateRadPerS:F3} planRange={_glidePlan.PredictedRangeAtIgnitionM:F0} "
+                                    + $"planHeading={_glidePlan.PredictedHeadingErrorRad * MathUtils.RAD_TO_DEG:F0} vDown={-_vUp:F1} tgo={timeToIgnition:F1}");
                             }
                         }
                         // The footprint now carries drag, lift and energy at the nominal entry

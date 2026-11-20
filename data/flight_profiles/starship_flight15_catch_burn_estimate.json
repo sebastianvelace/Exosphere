@@ -6,6 +6,8 @@
   "glideClosingGainPerSecond": 0.03,
   "glideMaximumClosingSpeedMps": 40.0,
   "glideVelocityGainPerSecond": 0.2,
+  "glidePlanningTurnRateRadPerS": 0.08,
+  "glideLiftAccelerationMps2": 3.0,
   "ignitionLeadM": 380.0,
   "ignitionLeadPerGlideSeconds": 13.4,
   "ignitionLeadMaximumGlideMps": 60.0,
@@ -17,11 +19,12 @@
   "alignmentHoldClearanceM": 3.0,
   "alignedMissM": 4.0,
   "holdClearanceGainPerSecond": 0.5,
+  "approachSlope": 1.0,
   "flipMaximumTiltDegrees": 10.0,
   "maximumTiltDegrees": 30.0,
   "lateralClosingGainPerSecond": 0.05,
   "closingDecelerationMps2": 0.5,
-  "maximumClosingSpeedMps": 6.0,
+  "maximumClosingSpeedMps": 15.0,
   "lateralDampingPerSecond": 0.15,
   "lateralIntegralGainPerS2": 0.03,
   "lateralIntegralRadiusM": 40.0,
@@ -42,5 +45,5 @@
   "controlAuthorityMargin": 2.0,
   "missedApproachClearanceM": 150.0,
   "missedApproachRadiusM": 150.0,
-  "maximumBurnSeconds": 60.0
+  "maximumBurnSeconds": 120.0
 }

@@ -26,6 +26,10 @@ public sealed class TowerCatchBurnDefinition
     [JsonPropertyName("glideMaximumClosingSpeedMps")] public double GlideMaximumClosingSpeedMps { get; set; }
     /// <summary>Closing speed per metre to the ignition point the glide aims for (1/s).</summary>
     [JsonPropertyName("glideClosingGainPerSecond")] public double GlideClosingGainPerSecond { get; set; }
+    /// <summary>Turn rate the glide predictor plans with; below the measured ~0.1 rad/s (rad/s).</summary>
+    [JsonPropertyName("glidePlanningTurnRateRadPerS")] public double GlidePlanningTurnRateRadPerS { get; set; }
+    /// <summary>Horizontal acceleration the belly-flop lift gives when turned fully sideways (m/s²).</summary>
+    [JsonPropertyName("glideLiftAccelerationMps2")] public double GlideLiftAccelerationMps2 { get; set; }
     /// <summary>Gain from glide velocity error to commanded horizontal acceleration (1/s).</summary>
     [JsonPropertyName("glideVelocityGainPerSecond")] public double GlideVelocityGainPerSecond { get; set; }
     /// <summary>Time the flip and spool take before the braking profile holds (s).</summary>
@@ -39,6 +43,8 @@ public sealed class TowerCatchBurnDefinition
     [JsonPropertyName("alignmentHoldClearanceM")] public double AlignmentHoldClearanceM { get; set; }
     /// <summary>Horizontal miss below which the ship may descend past the hold clearance (m).</summary>
     [JsonPropertyName("alignedMissM")] public double AlignedMissM { get; set; }
+    /// <summary>Lowest pin clearance per metre of horizontal miss while translating to the arms.</summary>
+    [JsonPropertyName("approachSlope")] public double ApproachSlope { get; set; }
     /// <summary>Gain from clearance error to descent speed while holding (1/s).</summary>
     [JsonPropertyName("holdClearanceGainPerSecond")] public double HoldClearanceGainPerSecond { get; set; }
     /// <summary>Tilt the flip may aim past vertical; the rotation carries on past its target (deg).</summary>
@@ -98,16 +104,19 @@ public sealed class TowerCatchBurnDefinition
     }
 
     /// <summary>
-    /// Descent speed for the current horizontal miss. Above the hold clearance the profile
-    /// applies. Below it the ship may only keep descending once it is centred; otherwise it
-    /// holds the hold clearance and lets the horizontal channel finish the alignment, the
-    /// near-hover on one engine seen just before the arms closed.
+    /// Descent speed for the current horizontal miss. The ship may not sink below an approach
+    /// slope over the remaining miss while it is still translating toward the arms, and below
+    /// the hold clearance it may only keep descending once centred: the near-hover on one
+    /// engine seen just before the arms closed. Otherwise the profile applies.
     /// </summary>
     public double TargetDescentSpeedMps(double clearanceM, double horizontalMissM)
     {
         double profile = TargetDescentSpeedMps(clearanceM);
-        if (horizontalMissM <= AlignedMissM) return profile;
-        double hold = HoldClearanceGainPerSecond * (clearanceM - AlignmentHoldClearanceM);
+        double holdClearance = System.Math.Max(
+            horizontalMissM > AlignedMissM ? AlignmentHoldClearanceM : 0.0,
+            ApproachSlope * System.Math.Max(0.0, horizontalMissM - AlignedMissM));
+        if (holdClearance <= 0.0) return profile;
+        double hold = HoldClearanceGainPerSecond * (clearanceM - holdClearance);
         return System.Math.Min(profile, hold);
     }
 
@@ -151,10 +160,10 @@ public sealed class TowerCatchBurnDefinition
     public void Validate()
     {
         double[] positive = [TerminalGlideAltitudeM, GlideMaximumClosingSpeedMps,
-            GlideVelocityGainPerSecond, GlideClosingGainPerSecond, IgnitionLeadM, IgnitionLeadPerGlideSeconds,
+            GlideVelocityGainPerSecond, GlideClosingGainPerSecond, GlidePlanningTurnRateRadPerS, GlideLiftAccelerationMps2, IgnitionLeadM, IgnitionLeadPerGlideSeconds,
             IgnitionLeadMaximumGlideMps, FlipLeadSeconds, BrakingDecelerationMps2, TerminalProfileClearanceM,
             TerminalDecelerationMps2, ContactDescentSpeedMps, AlignmentHoldClearanceM, AlignedMissM,
-            HoldClearanceGainPerSecond, FlipMaximumTiltDegrees, MaximumTiltDegrees, LateralClosingGainPerSecond, ClosingDecelerationMps2, MaximumClosingSpeedMps, ArrestThrottleHeadroom,
+            HoldClearanceGainPerSecond, ApproachSlope, FlipMaximumTiltDegrees, MaximumTiltDegrees, LateralClosingGainPerSecond, ClosingDecelerationMps2, MaximumClosingSpeedMps, ArrestThrottleHeadroom,
             LateralIntegralGainPerS3, LateralIntegralRadiusM, LateralIntegralLimitMps2,
             LateralDampingPerSecond, VerticalDampingPerSecond, ProportionalAttitudeGain, AttitudeDampingGain, RollDampingGain, RollAlignmentGain, RollAlignmentMaximumTiltDegrees, RollAlignmentClearanceM, RollAlignmentCommandLimit,
             FlipAttitudeDampingGain, SingleEngineMaximumLateralSpeedMps, SingleEngineMaximumMissM, ThrottleHeadroom, ControlAuthorityMargin, MissedApproachClearanceM, MissedApproachRadiusM, MaximumBurnSeconds];
