@@ -1169,7 +1169,8 @@ public partial class EDLController : Control
                 double lateralSpeed = (relativeVelocity - cradleUp * verticalSpeed).Magnitude;
                 var cutoff = TowerCatchCutoff.Decide(pinGeometry, vessel.CatchContactPoints,
                     vessel.TotalMass, body.GetGravityAt(catchTargetPosition).Magnitude,
-                    verticalSpeed, lateralSpeed, vessel.AngularVelocity.Magnitude);
+                    verticalSpeed, lateralSpeed, TowerCatchBurn.SplitAngularRate(vessel).Transverse,
+                    TowerCatchBurn.SplitAngularRate(vessel).Roll);
                 if (cutoff.Commit)
                 {
                     _catchCutoffCommitted = true;
@@ -1279,7 +1280,11 @@ public partial class EDLController : Control
                 + $"vz={relative.Dot(cradleUp):F1} vh={(relative - cradleUp * relative.Dot(cradleUp)).Magnitude:F1} "
                 + $"miss={(offset - cradleUp * offset.Dot(cradleUp)).Magnitude:F1} tilt={tilt:F1} "
                 + $"w={vessel.AngularVelocity.Magnitude:F3} thr={vessel.Throttle:F2} "
-                + $"pyr={vessel.PitchYawRoll} mass={vessel.TotalMass:F0}");
+                + $"pyr={vessel.PitchYawRoll} mass={vessel.TotalMass:F0} "
+                + $"gate={burn.LastCutoffDecision.Reason} slack={burn.LastCutoffDecision.RequiredRangeM:F2} "
+                + $"rates={TowerCatchBurn.SplitAngularRate(vessel)} "
+                + $"rcs={vessel.Parts.Parts.Count(p => p.RcsAttitudeEnabled && p.Definition.RcsThrusters.Count > 0)}"
+                + $"/{vessel.Parts.Parts.Count(p => p.Definition.RcsThrusters.Count > 0)} rollCmd={vessel.PitchYawRoll.Z:F2}");
         }
         if (phaseBefore == TowerCatchBurnPhase.Flip && burn.Phase != TowerCatchBurnPhase.Flip)
         {

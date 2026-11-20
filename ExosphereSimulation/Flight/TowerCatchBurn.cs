@@ -31,6 +31,10 @@ public sealed class TowerCatchBurn
     private double _ignitionTime = double.NaN;
     private Vector3d _lateralIntegral;
     private Vector3d _thrustTrim;
+    private Vector3d _previousHorizontalVelocity;
+    private Vector3d _lateralAcceleration;
+    private bool _hasPreviousHorizontalVelocity;
+    private const double LateralAccelerationFilterS = 0.5;
     private const double ThrustTrimTimeConstantS = 1.0;
 
     public TowerCatchBurnPhase Phase { get; private set; } = TowerCatchBurnPhase.Flip;
@@ -129,8 +133,9 @@ public sealed class TowerCatchBurn
                 _ship.CatchTargetRails, 0.5 * _ship.MaximumDiameter);
             if (geometry.EnabledPins == 2 && geometry.LastPinGapM <= TowerCatchCutoff.MaxGapM)
             {
+                var (transverseRate, rollRate) = SplitAngularRate(_ship);
                 LastCutoffDecision = TowerCatchCutoff.Decide(geometry, _ship.CatchContactPoints, _ship.TotalMass,
-                    gravity, verticalSpeed, horizontalVelocity.Magnitude, _ship.AngularVelocity.Magnitude);
+                    gravity, verticalSpeed, horizontalVelocity.Magnitude, transverseRate, rollRate);
                 if (LastCutoffDecision.Commit)
                 {
                     Phase = TowerCatchBurnPhase.Cutoff;
@@ -166,13 +171,29 @@ public sealed class TowerCatchBurn
         double miss = horizontalOffset.Magnitude;
         double closingSpeed = System.Math.Min(_definition.MaximumClosingSpeedMps, System.Math.Min(
             System.Math.Sqrt(2.0 * _definition.ClosingDecelerationMps2 * miss),
-            _definition.LateralClosingGainPerSecond * miss));
+            _definition.LateralClosingGainPerSecond(Phase == TowerCatchBurnPhase.Flip ? 3 : _engineCount) * miss));
         var closing = miss > 1e-6 ? horizontalOffset * (-closingSpeed / miss) : Vector3d.Zero;
         // Attitude authority grows with the lit engines, and the lateral loop must stay several
         // times slower than the attitude loop: one Raptor lags the commanded tilt by seconds.
         int lit = Phase == TowerCatchBurnPhase.Flip ? 3 : _engineCount;
-        double lateralGain = _definition.LateralDampingPerSecond * (1.0 + (lit - 1) / 3.0);
-        var homing = (closing - horizontalVelocity) * lateralGain;
+        double lateralGain = _definition.LateralGainPerSecond(lit);
+        // The tilt, and with it the sideways thrust, follows the command only after the attitude
+        // lag. Feed back the velocity that the thrust acting now will have produced one lag
+        // ahead, so the loop stops leaning toward the cradle before it overshoots it.
+        // Use the measured sideways acceleration, not the thrust: in a steady hold the thrust
+        // still balances the off-axis engine and aero, while the acceleration is zero.
+        if (_hasPreviousHorizontalVelocity)
+        {
+            var measured = (horizontalVelocity - _previousHorizontalVelocity) / interval;
+            double blend = System.Math.Min(1.0, interval / LateralAccelerationFilterS);
+            _lateralAcceleration += (measured - _lateralAcceleration) * blend;
+        }
+        _previousHorizontalVelocity = horizontalVelocity;
+        _hasPreviousHorizontalVelocity = true;
+        var predictedVelocity = Phase == TowerCatchBurnPhase.Braking
+            ? horizontalVelocity + _lateralAcceleration * _definition.LateralLagSeconds(lit)
+            : horizontalVelocity;
+        var homing = (closing - predictedVelocity) * lateralGain;
         // Integral on the velocity error: one or two of the three ring Raptors put the thrust
         // off the axis and push sideways steadily; a velocity integral cancels that without
         // winding up on the position error. It restarts at each engine change.
@@ -315,6 +336,14 @@ public sealed class TowerCatchBurn
         if (angle > 0.5 * System.Math.PI) angle -= System.Math.PI;
         if (angle < -0.5 * System.Math.PI) angle += System.Math.PI;
         return angle;
+    }
+
+    /// <summary>Angular rate across the vehicle axis (pitch and yaw) and about it (roll).</summary>
+    public static (double Transverse, double Roll) SplitAngularRate(Vessel ship)
+    {
+        var axis = ship.Orientation.Rotate(Vector3d.Up).Normalized;
+        double roll = ship.AngularVelocity.Dot(axis);
+        return ((ship.AngularVelocity - axis * roll).Magnitude, roll);
     }
 
     private void CutEngines()

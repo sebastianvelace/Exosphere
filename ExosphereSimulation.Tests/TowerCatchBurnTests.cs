@@ -41,12 +41,8 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
     [Theory]
     [InlineData(0.0)]
     [InlineData(-15.0)]
+    [InlineData(15.0)]
     public void SingleBurnFlipsBrakesAndSettlesOnThePins(double crossrangeM) => FlyToCatch(crossrangeM);
-
-    [Fact(Skip = "Open: from +15 m crossrange the burn reaches the one-engine hold a few metres off "
-        + "and one Raptor cannot close it inside the 120 s burn; the flown catch aligned on two "
-        + "engines and used one for the last second. See the Flight 15 capture audit.")]
-    public void SingleBurnSettlesFromTheOtherCrossrangeSide() => FlyToCatch(15.0);
 
     private void FlyToCatch(double crossrangeM)
     {

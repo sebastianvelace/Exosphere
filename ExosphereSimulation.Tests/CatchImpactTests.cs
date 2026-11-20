@@ -59,6 +59,16 @@ public sealed class CatchImpactTests
     }
 
     [Fact]
+    public void CutoffAcceptsTheSlowRollOfADrainingShip()
+    {
+        var geometry = new TowerCatchPinGeometry(2, 0.02, 0.03, 4.45);
+
+        var decision = TowerCatchCutoff.Decide(geometry, Pins(2.5e6), 210_000.0, 9.81, -0.40, 0.10, 0.01, 0.06);
+
+        Assert.True(decision.Commit, decision.Reason);
+    }
+
+    [Fact]
     public void CutoffCommitsAtFirstContactForASlowCentredApproach()
     {
         var pins = Pins(2.5e6);
@@ -75,13 +85,14 @@ public sealed class CatchImpactTests
     [InlineData(4.85, 0.35, 0.0, "pin range")]
     [InlineData(4.45, 0.0, 0.08, "angular rate")]
     [InlineData(4.45, 0.50, 0.0, "lateral speed")]
+    [InlineData(4.45, 0.0, 0.0, "roll rate", 0.2)]
     public void CutoffRejectsAnApproachThatCannotFinishInsideTheCradle(
-        double range, double lateralSpeed, double angularRate, string reason)
+        double range, double lateralSpeed, double angularRate, string reason, double rollRate = 0.0)
     {
         var geometry = new TowerCatchPinGeometry(2, 0.20, 0.25, range);
 
         var decision = TowerCatchCutoff.Decide(geometry, Pins(2.5e6), 150_000.0, 9.81, -0.2,
-            lateralSpeed, angularRate);
+            lateralSpeed, angularRate, rollRate);
 
         Assert.False(decision.Commit);
         Assert.Equal(reason, decision.Reason);

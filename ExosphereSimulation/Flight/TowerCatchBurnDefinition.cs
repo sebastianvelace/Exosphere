@@ -50,14 +50,26 @@ public sealed class TowerCatchBurnDefinition
     /// <summary>Tilt the flip may aim past vertical; the rotation carries on past its target (deg).</summary>
     [JsonPropertyName("flipMaximumTiltDegrees")] public double FlipMaximumTiltDegrees { get; set; }
     [JsonPropertyName("maximumTiltDegrees")] public double MaximumTiltDegrees { get; set; }
-    /// <summary>Closing speed commanded per metre of horizontal miss (1/s).</summary>
-    [JsonPropertyName("lateralClosingGainPerSecond")] public double LateralClosingGainPerSecond { get; set; }
+    /// <summary>Closing speed per metre of horizontal miss with one, two and three engines lit (1/s).
+    /// With the velocity gain this sets an overdamped loop only while it stays below a quarter of it.</summary>
+    [JsonPropertyName("lateralClosingGainByEngines")] public double[] LateralClosingGainByEngines { get; set; } = [];
+    public double LateralClosingGainPerSecond(int litEngines) => Lookup(LateralClosingGainByEngines, litEngines);
     /// <summary>Deceleration the commanded closing speed assumes on the way in (m/s²).</summary>
     [JsonPropertyName("closingDecelerationMps2")] public double ClosingDecelerationMps2 { get; set; }
     /// <summary>Upper bound on the commanded closing speed toward the cradle (m/s).</summary>
     [JsonPropertyName("maximumClosingSpeedMps")] public double MaximumClosingSpeedMps { get; set; }
-    /// <summary>Gain from horizontal velocity error to horizontal acceleration (1/s).</summary>
-    [JsonPropertyName("lateralDampingPerSecond")] public double LateralDampingPerSecond { get; set; }
+    /// <summary>Gain from horizontal velocity error to horizontal acceleration with one, two and three
+    /// engines lit (1/s). One off-axis Raptor turns the tilt far slower than three.</summary>
+    [JsonPropertyName("lateralGainByEngines")] public double[] LateralGainByEngines { get; set; } = [];
+    public double LateralGainPerSecond(int litEngines) => Lookup(LateralGainByEngines, litEngines);
+
+    private static double Lookup(double[] table, int litEngines) =>
+        table.Length == 0 ? 0.0 : table[System.Math.Clamp(litEngines, 1, table.Length) - 1];
+    /// <summary>Attitude lag of the sideways thrust with one, two and three engines lit (s).</summary>
+    [JsonPropertyName("lateralLagSecondsByEngines")] public double[] LateralLagSecondsByEngines { get; set; } = [];
+
+    /// <summary>Lag for a lit engine count, clamped to the declared table; zero when none is declared.</summary>
+    public double LateralLagSeconds(int litEngines) => Lookup(LateralLagSecondsByEngines, litEngines);
     /// <summary>Integral gain on the horizontal velocity error inside <see cref="LateralIntegralRadiusM"/> (1/s²).</summary>
     [JsonPropertyName("lateralIntegralGainPerS2")] public double LateralIntegralGainPerS3 { get; set; }
     /// <summary>Miss below which the integral term accumulates (m).</summary>
@@ -163,15 +175,18 @@ public sealed class TowerCatchBurnDefinition
             GlideVelocityGainPerSecond, GlideClosingGainPerSecond, GlidePlanningTurnRateRadPerS, GlideLiftAccelerationMps2, IgnitionLeadM, IgnitionLeadPerGlideSeconds,
             IgnitionLeadMaximumGlideMps, FlipLeadSeconds, BrakingDecelerationMps2, TerminalProfileClearanceM,
             TerminalDecelerationMps2, ContactDescentSpeedMps, AlignmentHoldClearanceM, AlignedMissM,
-            HoldClearanceGainPerSecond, ApproachSlope, FlipMaximumTiltDegrees, MaximumTiltDegrees, LateralClosingGainPerSecond, ClosingDecelerationMps2, MaximumClosingSpeedMps, ArrestThrottleHeadroom,
+            HoldClearanceGainPerSecond, ApproachSlope, FlipMaximumTiltDegrees, MaximumTiltDegrees, ClosingDecelerationMps2, MaximumClosingSpeedMps, ArrestThrottleHeadroom,
             LateralIntegralGainPerS3, LateralIntegralRadiusM, LateralIntegralLimitMps2,
-            LateralDampingPerSecond, VerticalDampingPerSecond, ProportionalAttitudeGain, AttitudeDampingGain, RollDampingGain, RollAlignmentGain, RollAlignmentMaximumTiltDegrees, RollAlignmentClearanceM, RollAlignmentCommandLimit,
+            VerticalDampingPerSecond, ProportionalAttitudeGain, AttitudeDampingGain, RollDampingGain, RollAlignmentGain, RollAlignmentMaximumTiltDegrees, RollAlignmentClearanceM, RollAlignmentCommandLimit,
             FlipAttitudeDampingGain, SingleEngineMaximumLateralSpeedMps, SingleEngineMaximumMissM, ThrottleHeadroom, ControlAuthorityMargin, MissedApproachClearanceM, MissedApproachRadiusM, MaximumBurnSeconds];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"
             || string.IsNullOrWhiteSpace(Assumptions) || positive.Any(v => !double.IsFinite(v) || v <= 0.0)
             || MaximumTiltDegrees >= 45.0 || ThrottleHeadroom > 1.0 || ArrestThrottleHeadroom > 1.0
             || ContactDescentSpeedMps > TowerCatchCutoff.MaxVerticalSpeedMps
-            || AlignmentHoldClearanceM >= TerminalProfileClearanceM)
+            || AlignmentHoldClearanceM >= TerminalProfileClearanceM
+            || LateralLagSecondsByEngines.Any(v => !double.IsFinite(v) || v < 0.0)
+            || LateralGainByEngines.Length == 0 || LateralGainByEngines.Any(v => !double.IsFinite(v) || v <= 0.0)
+            || LateralClosingGainByEngines.Length == 0 || LateralClosingGainByEngines.Any(v => !double.IsFinite(v) || v <= 0.0))
             throw new InvalidDataException($"Invalid tower catch burn estimate '{Id}'.");
     }
 

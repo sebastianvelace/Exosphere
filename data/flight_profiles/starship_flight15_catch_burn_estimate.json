@@ -22,10 +22,23 @@
   "approachSlope": 1.0,
   "flipMaximumTiltDegrees": 10.0,
   "maximumTiltDegrees": 30.0,
-  "lateralClosingGainPerSecond": 0.05,
+  "lateralClosingGainByEngines": [
+    0.03,
+    0.08,
+    0.1
+  ],
   "closingDecelerationMps2": 0.5,
   "maximumClosingSpeedMps": 15.0,
-  "lateralDampingPerSecond": 0.15,
+  "lateralGainByEngines": [
+    0.12,
+    0.3,
+    0.4
+  ],
+  "lateralLagSecondsByEngines": [
+    2.5,
+    0.5,
+    0.3
+  ],
   "lateralIntegralGainPerS2": 0.03,
   "lateralIntegralRadiusM": 40.0,
   "lateralIntegralLimitMps2": 0.6,

@@ -20,23 +20,32 @@ public static class TowerCatchCutoff
     public const double MaxVerticalSpeedMps = 0.65;
     public const double MaxLateralSpeedMps = 0.35;
     /// <summary>
-    /// Sideways speed the closing arms accept. Pins sliding along a rail are stopped by pin
-    /// friction (μ 0.6 under about 1 MN) within a few tenths of a second, and the drift until
-    /// contact is already charged against the rail slack.
+    /// Sideways speed the closing arms accept. Pin friction (μ 0.6) decelerates a sliding ship at
+    /// about 5.9 m/s², so 2.5 m/s stops in 0.4 s and 0.5 m, and the drift until contact is
+    /// already charged against the rail slack. One Raptor holds the ship at 1.7–1.9 m/s of
+    /// residual drift over the pins, which a 1.5 m/s limit rejected indefinitely.
     /// </summary>
-    public const double MaxLateralSpeedOnRailsMps = 1.5;
-    /// <summary>Matches the settle criterion in <c>Universe.UpdateCatchContactState</c>.</summary>
+    public const double MaxLateralSpeedOnRailsMps = 2.5;
+    /// <summary>Pitch and yaw rate that would tilt the ship on its pins; matches the settle criterion.</summary>
     public const double MaxAngularRateRadPerS = 0.05;
+    /// <summary>
+    /// Roll rate about the vehicle axis the rails accept: a draining ship spins up in roll and one
+    /// Raptor cannot stop it, but at the fittings 0.15 rad/s is only 0.7 m/s along the rail,
+    /// which pin friction stops.
+    /// </summary>
+    public const double MaxRollRateRadPerS = 0.15;
     /// <summary>Fixed range margin for unmodelled drift and the integrator step (m).</summary>
     public const double RangeMarginM = 0.10;
     /// <summary>Share of the pin travel and load limits the predicted peak may use.</summary>
     public const double LimitUtilization = 0.90;
 
+    /// <param name="angularRateRadPerS">Pitch and yaw rate, about axes across the vehicle.</param>
+    /// <param name="rollRateRadPerS">Roll rate about the vehicle axis.</param>
     /// <param name="verticalSpeedUpMps">Cradle-relative speed along the cradle normal, positive up.</param>
     public static TowerCatchCutoffDecision Decide(
         in TowerCatchPinGeometry geometry, IReadOnlyList<ContactPointDefinition> pins,
         double massKg, double gravityMps2, double verticalSpeedUpMps, double lateralSpeedMps,
-        double angularRateRadPerS)
+        double angularRateRadPerS, double rollRateRadPerS = 0.0)
     {
         if (geometry.EnabledPins != 2)
             return Reject("two pins required");
@@ -48,6 +57,8 @@ public static class TowerCatchCutoff
             return Reject("lateral speed");
         if (angularRateRadPerS > MaxAngularRateRadPerS)
             return Reject("angular rate");
+        if (System.Math.Abs(rollRateRadPerS) > MaxRollRateRadPerS)
+            return Reject("roll rate");
 
         // Time until the highest pin reaches the cradle in free fall, then the drift over it.
         double gap = System.Math.Max(0.0, geometry.LastPinGapM);

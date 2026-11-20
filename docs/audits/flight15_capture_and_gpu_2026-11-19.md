@@ -338,6 +338,38 @@ swing on one engine). Resetting the off-axis thrust trim at engine changes did n
 The lateral loop needs a model of that lag (command the tilt rate, or predict the
 velocity one attitude time constant ahead) before the alignment can finish on two engines.
 
+### Attitude-lag model
+
+The lateral loop now feeds back the velocity predicted one attitude lag ahead,
+`v + a·τ`, from the measured sideways acceleration (filtered over 0.5 s). The thrust
+would bias it: in a steady hold the thrust still balances the off-axis engine. The lag
+τ is 2.5, 0.5 and 0.3 s with one, two and three engines lit. The velocity and closing
+gains are tables by lit engines ([0.12, 0.3, 0.4] /s and [0.03, 0.08, 0.1] /s), so the
+one-engine loop stays overdamped (closing gain below a quarter of the velocity gain).
+
+The ±25 m one-engine swings are gone, and the bench catches from all three crossranges,
++15 m included, which never caught before:
+
+| Crossrange | Catch | Engines | Peak compression | Peak pin load |
+| ---: | ---: | --- | ---: | ---: |
+| 0 m | 59.2 s | 3 → 2 → 1 → 0 | 0.48 m | 1.41 MN |
+| −15 m | 71.3 s | 3 → 2 → 1 → 0 | 0.45 m | 1.35 MN |
+| +15 m | 61.2 s | 3 → 2 → 1 → 0 | 0.49 m | 1.42 MN |
+
+In the opt-in game chapter 120 Hz was caught at 112.2 s (no relight, 146 t, peak
+0.346 m and 0.98 MN); 50 and 60 Hz timed out and landed on their legs. The 60 Hz trace
+shows why. The ship reached the pins centred (0.9 m off at 0.7 m clearance), but it rolled
+at a steady −0.064 rad/s about its axis. The fittings turned off the rails and the
+cutoff gate reported `pin range`. The RCS was armed (both parts) and the roll command
+reached 0.69, yet the rate held: the roll the draining propellant drives balances the
+torque of the modelled 1.5 kN thrusters. The gate now judges pitch-yaw rate (0.05 rad/s)
+apart from roll (0.15 rad/s), and accepts 2.5 m/s of sliding on the rails (pin friction
+stops it in about 0.5 m). Neither changed the 60 Hz outcome; both are physically
+justified and kept.
+
+Next: the roll authority. The 1.5 kN Starship V3 RCS thrust is an estimate, and the
+drain spin-up torque on this return is not yet quantified.
+
 The default chapter is unchanged and still catches at 50, 60 and 120 Hz.
 
 ## Orbital return feasibility
