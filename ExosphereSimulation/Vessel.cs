@@ -151,11 +151,24 @@ public class Vessel
     /// vehicle without them (every part but the V3 ship's catch-equipped nose) can never
     /// be caught, regardless of mission mode or approach quality.</summary>
     public bool HasCatchPins => _catchContactPoints.Length > 0;
+    /// <summary>Height of the lowest catch-pin contact surface above the vehicle datum (m):
+    /// the pin centre less its radius, which is where the pin rests on the arm.</summary>
+    public double CatchPinContactHeightAboveDatumM =>
+        _catchContactPoints.Length == 0
+            ? 0.0
+            : System.Math.Max(0.0, _catchContactPoints.Min(p => p.LocalPositionFromDatum.Y - p.ContactRadiusM));
     public ContactWrench? LastCatchContact { get; internal set; }
     /// <summary>Last tower-contact gate result, retained for flight diagnostics.</summary>
     public double LastCatchEvaluationRangeM { get; internal set; } = double.NaN;
     public bool LastCatchEvaluationPassedGate { get; internal set; }
     public double CatchSettledDuration { get; internal set; }
+    /// <summary>Largest pin compression seen since the vessel entered the catch gate (m).
+    /// The settled sample understates the impact transient, so acceptance reads this.</summary>
+    public double CatchPeakCompressionM { get; internal set; }
+    /// <summary>Largest single-pin normal load seen since the vessel entered the catch gate (N).</summary>
+    public double CatchPeakPinLoadN { get; internal set; }
+    /// <summary>True once any pin has exceeded its travel or load limit during this approach.</summary>
+    public bool CatchLimitExceeded { get; internal set; }
     public bool IsCaught { get; internal set; }
     /// <summary>Set by the game layer when this vessel is flying a return-to-launch-site
     /// catch approach. Gates both the EDL guidance's position-error term and the (cheap)
@@ -174,6 +187,17 @@ public class Vessel
     public Vector3d CatchTargetPositionWorld { get; set; }
     public Vector3d CatchTargetUpWorld { get; set; } = Vector3d.Up;
     public Vector3d CatchTargetVelocityWorld { get; set; }
+    /// <summary>Chopstick arm rails at the cradle. Undefined rails fall back to the legacy
+    /// capture disc of <see cref="Flight.TowerCatchPinGeometry.CaptureRadiusM"/>.</summary>
+    public CatchArmRails CatchTargetRails { get; set; }
+
+    /// <summary>
+    /// Point on the vehicle axis at the pin station for a datum position and attitude: the
+    /// arms close against the hull around this point.
+    /// </summary>
+    public Vector3d GetCatchAxisPointWorld(Vector3d datumWorld, Quaterniond orientation) =>
+        datumWorld + orientation.Rotate(new Vector3d(0.0,
+            _catchContactPoints.Length == 0 ? 0.0 : _catchContactPoints.Average(p => p.LocalPositionFromDatum.Y), 0.0));
     /// <summary>Simulation epoch at which <see cref="CatchTargetPositionWorld"/> was sampled.</summary>
     public double CatchTargetEpochSeconds { get; set; } = double.NaN;
 
@@ -251,6 +275,9 @@ public class Vessel
         LastCatchEvaluationPassedGate = false;
         CatchTargetEpochSeconds = double.NaN;
         CatchSettledDuration = 0.0;
+        CatchPeakCompressionM = 0.0;
+        CatchPeakPinLoadN = 0.0;
+        CatchLimitExceeded = false;
         IsCaught = false;
         IsAttemptingTowerCatch = false;
         IsTowerCatchDemonstration = false;

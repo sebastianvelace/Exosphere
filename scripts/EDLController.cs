@@ -61,8 +61,19 @@ public partial class EDLController : Control
     private const double TerminalVerticalPriorityAltitudeM = 300.0;
     private bool _towerCatchAborted;
     private bool _catchCutoffCommitted;
+    // Single landing burn of a tower catch (Flight 15): one ignition out of the belly flop,
+    // three engines stepping down to one, cut onto the pins. Flown by the simulation-side
+    // TowerCatchBurn so the attitude, engines and contact are all physical.
+    private TowerCatchBurn? _catchBurn;
+    private TowerCatchBurnDefinition? _catchBurnDefinition;
+    private bool _catchBurnDefinitionLoaded;
+    private int _catchBurnLoggedSteps;
+    // Same roll law as TowerCatchBurn (data/flight_profiles/starship_flight15_catch_burn_estimate.json).
+    private const double CatchRollAlignmentGain = 1.0;
+    private const double CatchRollDampingGain = 6.0;
     private readonly bool _traceCatch = Godot.OS.GetEnvironment("EXOSPHERE_TRACE_CATCH") == "1";
     private double _nextCatchTraceEpoch;
+    private double _nextGlideTraceEpoch;
 
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
@@ -268,6 +279,8 @@ public partial class EDLController : Control
                 _flipGateDiagnosticEmitted = false;
                 _towerCatchAborted = false;
                 _catchCutoffCommitted = false;
+                _catchBurn = null;
+                _catchBurnLoggedSteps = 0;
                 // Normal Earth Starbase returns use the same physical two-pin catch
                 // path as the deterministic reentry demo. The policy is deliberately
                 // narrow; Mars/Venus, other launch sites and non-Starship vehicles keep
@@ -417,11 +430,48 @@ public partial class EDLController : Control
             Vector3d desiredHorizontalVelocity = towardTarget * closingSpeed;
             catchLateralVelocityError = (surfVel - up * _vUp) - desiredHorizontalVelocity;
         }
+        if (_catchBurn != null)
+        {
+            RunCatchBurn(vessel, body, mission, universe, delta);
+            return;
+        }
+        bool singleBurnCatch = aeroPhase && !_towerCatchAborted
+            && Flight15Mission.SingleBurnCatchEnabled
+            && vessel.IsAttemptingTowerCatch && vessel.HasCatchPins
+            && vessel.CatchTargetRails.IsDefined && shipEngines != null
+            && CatchBurnDefinition() != null;
+        if (singleBurnCatch)
+        {
+            var cradleUp = vessel.CatchTargetUpWorld.Normalized;
+            double clearance = TowerCatchBurn.UprightPinClearanceM(vessel, universe.CurrentTime);
+            double descent = -(vessel.Velocity - vessel.CatchTargetVelocityWorld).Dot(cradleUp);
+            if (_catchBurnDefinition!.ShouldIgnite(clearance, descent))
+            {
+                _catchBurn = new TowerCatchBurn(vessel, body, _catchBurnDefinition,
+                    shipEngines!.EngineStates.First().EngineModelId);
+                _phase = Edl.Catch;
+                _catchBurnLoggedSteps = 0;
+                mission?.EnterPhase(MissionPhase.RETRO_BURN);
+                var offset = vessel.Position - catchTargetPosition;
+                var horizontalOffset = offset - cradleUp * offset.Dot(cradleUp);
+                var relative = vessel.Velocity - vessel.CatchTargetVelocityWorld;
+                var horizontalVelocity = relative - cradleUp * relative.Dot(cradleUp);
+                var nose = vessel.Orientation.Rotate(Vector3d.Up);
+                var noseHorizontal = nose - cradleUp * nose.Dot(cradleUp);
+                GD.Print($"[EDL] single-burn ignition clearance={clearance:F0} m descent={descent:F1} m/s "
+                    + $"miss={horizontalOffset.Magnitude:F0} m horizontal={horizontalVelocity.Magnitude:F1} m/s "
+                    + $"noseTowardTower={(noseHorizontal.MagnitudeSquared > 1e-9 && horizontalOffset.MagnitudeSquared > 1e-9 ? -noseHorizontal.Normalized.Dot(horizontalOffset.Normalized) : 0.0):F2} "
+                    + $"velocityTowardTower={(horizontalOffset.MagnitudeSquared > 1e-9 ? -horizontalVelocity.Dot(horizontalOffset.Normalized) : 0.0):F1} m/s "
+                    + $"massKg={vessel.TotalMass:F0}");
+                RunCatchBurn(vessel, body, mission, universe, delta);
+                return;
+            }
+        }
         // Keep the gate explicit. The previous pattern expression was easy to misread and
         // made a normal Starbase return reach the ground still in belly-flop when the
         // computed stopping-distance floor was crossed. This is the only transition that
         // may enter the powered flip from aero flight.
-        if (aeroPhase && vDown > 5.0 && _alt <= flipAlt)
+        if (!singleBurnCatch && aeroPhase && vDown > 5.0 && _alt <= flipAlt)
         {
             if (!_flipGateDiagnosticEmitted)
             {
@@ -568,6 +618,25 @@ public partial class EDLController : Control
                 // and reverse it only for a predicted downrange overflight. The normal
                 // aerodynamic integrator remains authoritative.
                 Vector3d targetOffset = catchTargetPosition - vessel.Position;
+                // The single burn lights short of the tower along the approach: the flip throws
+                // the ship along its leading nose and the braking carries it on to the cradle.
+                var leadDefinition = vessel.CatchTargetRails.IsDefined && Flight15Mission.SingleBurnCatchEnabled
+                    ? CatchBurnDefinition() : null;
+                Vector3d ignitionPoint = catchTargetPosition;
+                Vector3d glideHorizontalVelocity = Vector3d.Zero;
+                if (leadDefinition != null)
+                {
+                    var cradleUp = vessel.CatchTargetUpWorld.Normalized;
+                    var relative = vessel.Velocity - vessel.CatchTargetVelocityWorld;
+                    glideHorizontalVelocity = relative - cradleUp * relative.Dot(cradleUp);
+                    var lineOfSight = catchTargetPosition - vessel.Position;
+                    lineOfSight -= cradleUp * lineOfSight.Dot(cradleUp);
+                    double glideTowardTower = lineOfSight.MagnitudeSquared > 1e-6
+                        ? glideHorizontalVelocity.Dot(lineOfSight.Normalized) : 0.0;
+                    ignitionPoint = TowerCatchApproachPlanner.IgnitionPoint(catchTargetPosition, cradleUp,
+                        vessel.Position, leadDefinition.IgnitionLeadDistanceM(glideTowardTower));
+                    targetOffset = ignitionPoint - vessel.Position;
+                }
                 // Match the vehicle's surface-velocity frame. The cradle velocity is
                 // inertial, while surfVel is relative to the body's local rotation at
                 // the vehicle position. Subtract the cradle's local rotational velocity
@@ -615,13 +684,43 @@ public partial class EDLController : Control
                         double downrangeAuthorityMeters = terminalCatchCorridor
                             ? System.Math.Clamp(_alt * 0.12, 1_500.0, 4_000.0)
                             : 180_000.0;
+                        // The single burn needs the crossrange closed as well before ignition: the
+                        // flip throws the ship along its nose, which follows the glide.
+                        bool tightCrossrange = terminalCatchCorridor && Flight15Mission.SingleBurnCatchEnabled;
                         Vector3d guidedLift = EntryCorridorGuidance.SelectLiftDirection(
                             prediction,
                             bodyLiftUp,
-                            corridorMeters: 20_000.0,
-                            authorityMeters: 180_000.0,
+                            corridorMeters: tightCrossrange ? downrangeCorridorMeters : 20_000.0,
+                            authorityMeters: tightCrossrange ? downrangeAuthorityMeters : 180_000.0,
                             downrangeCorridorMeters: downrangeCorridorMeters,
                             downrangeAuthorityMeters: downrangeAuthorityMeters);
+                        // Low in the descent the single burn steers the glide itself: the fall is
+                        // nearly vertical, so the lift lies almost horizontal and turning the belly
+                        // flop points it at any heading. Close on the ignition point from here.
+                        if (leadDefinition != null && _alt < leadDefinition.TerminalGlideAltitudeM)
+                        {
+                            var glideUp = vessel.CatchTargetUpWorld.Normalized;
+                            double glideDescent = -(vessel.Velocity - vessel.CatchTargetVelocityWorld).Dot(glideUp);
+                            double timeToIgnition = TowerCatchApproachPlanner.TimeToIgnitionS(
+                                TowerCatchBurn.UprightPinClearanceM(vessel, SimulationBridge.Instance!.Universe.CurrentTime),
+                                glideDescent, leadDefinition);
+                            var glideCommand = TowerCatchApproachPlanner.GlideAccelerationCommand(
+                                vessel.CatchTargetUpWorld, vessel.Position, glideHorizontalVelocity,
+                                ignitionPoint, leadDefinition);
+                            guidedLift = TowerCatchApproachPlanner.LiftDirection(velDir, glideCommand, guidedLift);
+                            if (_traceCatch && SimulationBridge.Instance!.Universe.CurrentTime >= _nextGlideTraceEpoch)
+                            {
+                                _nextGlideTraceEpoch = SimulationBridge.Instance.Universe.CurrentTime + 2.0;
+                                var toPoint = ignitionPoint - vessel.Position;
+                                var cradleUp = vessel.CatchTargetUpWorld.Normalized;
+                                toPoint -= cradleUp * toPoint.Dot(cradleUp);
+                                var toTower = catchTargetPosition - vessel.Position;
+                                toTower -= cradleUp * toTower.Dot(cradleUp);
+                                GD.Print($"GLIDE_TRACE alt={_alt:F0} toPoint={toPoint.Magnitude:F0} toTower={toTower.Magnitude:F0} "
+                                    + $"vh={glideHorizontalVelocity.Magnitude:F1} towardPoint={(toPoint.MagnitudeSquared > 1 ? glideHorizontalVelocity.Dot(toPoint.Normalized) : 0):F1} "
+                                    + $"cmd={glideCommand.Magnitude:F2} vDown={-_vUp:F1} tgo={timeToIgnition:F1}");
+                            }
+                        }
                         // The footprint now carries drag, lift and energy at the nominal entry
                         // angle of attack. The vertical floor remains a load guard: a true
                         // overflight may bank toward the body, but a saturated down-lift
@@ -858,6 +957,17 @@ public partial class EDLController : Control
                 vessel.AngularVelocity,
                 proportionalGain: 2.2,
                 dampingGain: 6.0);
+        if (_phase == Edl.Catch && vessel.CatchTargetRails.IsDefined)
+        {
+            // The arms close onto the two fittings, so the fittings must face the arms. Roll
+            // the ship about its axis toward that, as the flown ship did on its way between the
+            // arms; the same law flies the single-burn controller.
+            double rollError = TowerCatchBurn.PinRollErrorRad(vessel.Orientation,
+                vessel.CatchTargetUpWorld, vessel.CatchTargetRails.ArmAxisWorld);
+            double rollRate = vessel.AngularVelocity.Dot(vessel.Orientation.Rotate(Vector3d.Up));
+            _aeroAttitudeCommand = new Vector3d(_aeroAttitudeCommand.X, _aeroAttitudeCommand.Y,
+                System.Math.Clamp(CatchRollAlignmentGain * rollError - CatchRollDampingGain * rollRate, -1.0, 1.0));
+        }
         vessel.PitchYawRoll = _aeroAttitudeCommand;
         _attitudeErrorDeg = AttitudeGuidance.ErrorAngleRadians(
             vessel.Orientation, desiredAttitude) * MathUtils.RAD_TO_DEG;
@@ -883,6 +993,14 @@ public partial class EDLController : Control
             // minimum-throttle guidance into an uncommanded cross-range miss. The real
             // translational drag, propulsion, catch-pin contact and settle solver continue to
             // run normally; manual and unscripted reentries retain the physical controller.
+            if (_phase == Edl.Catch && vessel.CatchTargetRails.IsDefined)
+            {
+                // The imposed attitude must still put the fittings across the arms.
+                double rollError = TowerCatchBurn.PinRollErrorRad(desiredAttitude,
+                    vessel.CatchTargetUpWorld, vessel.CatchTargetRails.ArmAxisWorld);
+                desiredAttitude = Quaterniond.FromAxisAngle(
+                    desiredAttitude.Rotate(Vector3d.Up).Normalized, rollError) * desiredAttitude;
+            }
             vessel.Orientation = desiredAttitude;
             vessel.AngularVelocity = Vector3d.Zero;
             vessel.PitchYawRoll = Vector3d.Zero;
@@ -969,7 +1087,7 @@ public partial class EDLController : Control
             // them toward the ground the tower stands on.
             var pinGeometry = _phase == Edl.Catch
                 ? TowerCatchPinGeometry.Measure(vessel.CatchContactPoints, vessel.Position - catchTargetPosition,
-                    vessel.Orientation, vessel.CatchTargetUpWorld)
+                    vessel.Orientation, vessel.CatchTargetUpWorld, vessel.CatchTargetRails, 0.5 * vessel.MaximumDiameter)
                 : default;
             // Target descent rate: a gentle LINEAR profile that eases to 1.2 m/s at first
             // physical foot contact and
@@ -1019,20 +1137,31 @@ public partial class EDLController : Control
                     + $"down={vDown:F3} side={_horiz:F3} error={horizontalError:F3} throttle={vessel.Throttle:F3} "
                     + $"contacts={vessel.LastCatchContact?.ContactCount ?? 0} {pins}");
             }
-            if (_phase == Edl.Catch && pinGeometry.BothPinsFit && pinGeometry.LastPinGapM <= 0.25)
+            if (_phase == Edl.Catch && pinGeometry.EnabledPins == 2
+                && pinGeometry.LastPinGapM <= TowerCatchCutoff.MaxGapM)
             {
                 var relativeVelocity = vessel.Velocity - vessel.CatchTargetVelocityWorld;
                 var cradleUp = vessel.CatchTargetUpWorld.Normalized;
                 double verticalSpeed = relativeVelocity.Dot(cradleUp);
                 double lateralSpeed = (relativeVelocity - cradleUp * verticalSpeed).Magnitude;
-                if (System.Math.Abs(verticalSpeed) <= 0.65 && lateralSpeed <= 0.35)
+                var cutoff = TowerCatchCutoff.Decide(pinGeometry, vessel.CatchContactPoints,
+                    vessel.TotalMass, body.GetGravityAt(catchTargetPosition).Magnitude,
+                    verticalSpeed, lateralSpeed, vessel.AngularVelocity.Magnitude);
+                if (cutoff.Commit)
                 {
                     _catchCutoffCommitted = true;
                     CutEnginesForCatch(vessel, shipEngines);
                     GD.Print($"[EDL] catch cutoff gap={pinGeometry.LastPinGapM:F3} "
-                        + $"pinRange={pinGeometry.FarthestPinRangeM:F3} speed={relativeVelocity.Magnitude:F3}");
+                        + (pinGeometry.UsesRails
+                            ? $"railSlack={pinGeometry.RailSlackM:F3}/{cutoff.RequiredRangeM:F3} "
+                            : $"pinRange={pinGeometry.FarthestPinRangeM:F3}/{cutoff.RequiredRangeM:F3} ")
+                        + $"speed={relativeVelocity.Magnitude:F3} "
+                        + $"predictedCompressionM={cutoff.Prediction.PeakCompressionM:F3} "
+                        + $"predictedPinLoadN={cutoff.Prediction.PeakPinLoadN:F0}");
                     return;
                 }
+                if (_traceCatch)
+                    GD.Print($"CATCH_CUTOFF_HELD reason={cutoff.Reason} gap={pinGeometry.LastPinGapM:F3}");
             }
 
             // A normal leg landing has no pin solver to announce contact before the feet touch.
@@ -1089,6 +1218,74 @@ public partial class EDLController : Control
             $"contacts={vessel.LastSurfaceContact?.ContactCount ?? 0}");
     }
 
+    private TowerCatchBurnDefinition? CatchBurnDefinition()
+    {
+        if (_catchBurnDefinitionLoaded) return _catchBurnDefinition;
+        _catchBurnDefinitionLoaded = true;
+        try
+        {
+            var bridge = SimulationBridge.Instance;
+            if (bridge == null) return null;
+            _catchBurnDefinition = TowerCatchBurnDefinition.LoadFromJson(System.IO.Path.Combine(
+                GameDataPath.Resolve(bridge.DataDirectory), "flight_profiles", "starship_flight15_catch_burn_estimate.json"));
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"[EDL] tower catch burn profile unavailable: {e.Message}");
+            _catchBurnDefinition = null;
+        }
+        return _catchBurnDefinition;
+    }
+
+    private void RunCatchBurn(Vessel vessel, CelestialBody body, MissionManager? mission,
+        Universe universe, double delta)
+    {
+        var burn = _catchBurn!;
+        var phaseBefore = burn.Phase;
+        burn.Advance(universe, delta);
+        if (_traceCatch && universe.CurrentTime >= _nextCatchTraceEpoch)
+        {
+            _nextCatchTraceEpoch = universe.CurrentTime + 0.5;
+            var cradleUp = vessel.CatchTargetUpWorld.Normalized;
+            var relative = vessel.Velocity - vessel.CatchTargetVelocityWorld;
+            var offset = vessel.Position - vessel.GetCatchTargetPositionAt(universe.CurrentTime);
+            double tilt = System.Math.Acos(System.Math.Clamp(
+                vessel.Orientation.Rotate(Vector3d.Up).Normalized.Dot(cradleUp), -1.0, 1.0)) * MathUtils.RAD_TO_DEG;
+            GD.Print($"BURN_TRACE +{burn.ElapsedS(universe):F1}s {burn.Phase} "
+                + $"h={TowerCatchBurn.UprightPinClearanceM(vessel, universe.CurrentTime):F1} "
+                + $"vz={relative.Dot(cradleUp):F1} vh={(relative - cradleUp * relative.Dot(cradleUp)).Magnitude:F1} "
+                + $"miss={(offset - cradleUp * offset.Dot(cradleUp)).Magnitude:F1} tilt={tilt:F1} "
+                + $"w={vessel.AngularVelocity.Magnitude:F3} thr={vessel.Throttle:F2} "
+                + $"pyr={vessel.PitchYawRoll} mass={vessel.TotalMass:F0}");
+        }
+        if (phaseBefore == TowerCatchBurnPhase.Flip && burn.Phase != TowerCatchBurnPhase.Flip)
+        {
+            mission?.EnterPhase(MissionPhase.FINAL_DESCENT);
+            GD.Print($"[EDL] single-burn flip complete in {burn.FlipCompletedS:F1} s "
+                + $"clearance={TowerCatchBurn.UprightPinClearanceM(vessel, universe.CurrentTime):F0} m");
+        }
+        for (; _catchBurnLoggedSteps < burn.EngineSteps.Count; _catchBurnLoggedSteps++)
+        {
+            var step = burn.EngineSteps[_catchBurnLoggedSteps];
+            GD.Print($"[EDL] single-burn engines={step.EngineCount} at +{step.TimeS:F1} s");
+        }
+        if (burn.Phase == TowerCatchBurnPhase.Caught || vessel.IsCaught)
+        {
+            _catchBurn = null;
+            _phase = Edl.Caught;
+            GD.Print($"[EDL] single-burn catch at +{burn.ElapsedS(universe):F1} s relights={burn.Relights}");
+            Caught(vessel, body, mission);
+        }
+        else if (burn.Phase == TowerCatchBurnPhase.Blocked)
+        {
+            GD.Print($"[EDL] single-burn blocked: {burn.BlockReason}; diverting to leg landing");
+            _catchBurn = null;
+            _towerCatchAborted = true;
+            vessel.IsAttemptingTowerCatch = false;
+            _phase = Edl.Final;
+        }
+    }
+
     private void CutEnginesForCatch(Vessel vessel, Part? shipEngines)
     {
         shipEngines?.SelectEngineCount(0);
@@ -1106,9 +1303,11 @@ public partial class EDLController : Control
         var contact = vessel.LastCatchContact;
         GD.Print($"[EDL] CAUGHT by the tower at {_bodyName}  vUp={_vUp:F1} m/s "
             + $"contacts={contact?.ContactCount ?? 0} massKg={vessel.TotalMass:F0} "
-            + $"compressionM={contact?.Points.Max(p => p.PenetrationM):F3} "
-            + $"peakLoadN={contact?.Points.Max(p => p.NormalLoadN):F0} "
-            + $"overTravel={contact?.HasOverTravel} overload={contact?.HasOverload}");
+            + $"settledCompressionM={contact?.Points.Max(p => p.PenetrationM):F3} "
+            + $"settledPinLoadN={contact?.Points.Max(p => p.NormalLoadN):F0} "
+            + $"peakCompressionM={vessel.CatchPeakCompressionM:F3} "
+            + $"peakPinLoadN={vessel.CatchPeakPinLoadN:F0} "
+            + $"limitExceeded={vessel.CatchLimitExceeded}");
     }
 
     private void Deactivate()

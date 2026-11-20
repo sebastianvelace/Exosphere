@@ -3273,13 +3273,28 @@ public partial class Universe
         vessel.LastCatchEvaluationPassedGate = true;
 
         var input = vessel.GetContactInput(position, velocity);
-        Vector3d up = vessel.CatchTargetUpWorld;
-        Vector3d cradleVelocity = vessel.CatchTargetVelocityWorld;
         return Physics.SurfaceContactSolver.Evaluate(
             input,
             vessel.CatchContactPoints,
-            point => Physics.SurfaceSample.FromCatchCradle(
-                cradlePosition, up, cradleVelocity, TowerCatchPinGeometry.CaptureRadiusM, point));
+            CatchCradleSampler(vessel, cradlePosition, vessel.GetCatchAxisPointWorld(position, vessel.Orientation)));
+    }
+
+    /// <summary>
+    /// Cradle surface for one catch evaluation: the closing arm rails when the launch complex
+    /// declared them, otherwise the legacy capture disc.
+    /// </summary>
+    private static Func<Vector3d, Physics.SurfaceSample> CatchCradleSampler(
+        Vessel vessel, Vector3d cradlePosition, Vector3d axisPoint)
+    {
+        Vector3d up = vessel.CatchTargetUpWorld;
+        Vector3d cradleVelocity = vessel.CatchTargetVelocityWorld;
+        var rails = vessel.CatchTargetRails;
+        if (!rails.IsDefined)
+            return point => Physics.SurfaceSample.FromCatchCradle(
+                cradlePosition, up, cradleVelocity, TowerCatchPinGeometry.CaptureRadiusM, point);
+        double hullRadius = 0.5 * vessel.MaximumDiameter;
+        double pinRadius = vessel.CatchContactPoints.Count == 0 ? 0.0 : vessel.CatchContactPoints[0].ContactRadiusM;
+        return point => rails.Sample(cradlePosition, up, cradleVelocity, axisPoint, hullRadius, pinRadius, point);
     }
 
     private static Physics.ContactWrench? EvaluateCatchContact(
@@ -3302,12 +3317,7 @@ public partial class Universe
         return Physics.SurfaceContactSolver.Evaluate(
             input,
             vessel.CatchContactPoints,
-            point => Physics.SurfaceSample.FromCatchCradle(
-                cradlePosition,
-                vessel.CatchTargetUpWorld,
-                vessel.CatchTargetVelocityWorld,
-                TowerCatchPinGeometry.CaptureRadiusM,
-                point));
+            CatchCradleSampler(vessel, cradlePosition, vessel.GetCatchAxisPointWorld(datumPosition, state.Orientation)));
     }
 
     /// <summary>
@@ -3324,6 +3334,23 @@ public partial class Universe
         Vessel vessel, Physics.ContactWrench? contact, double dt)
     {
         vessel.LastCatchContact = contact;
+        if (contact == null)
+        {
+            // Outside the catch gate: the next approach starts a fresh load history.
+            vessel.CatchPeakCompressionM = 0.0;
+            vessel.CatchPeakPinLoadN = 0.0;
+            vessel.CatchLimitExceeded = false;
+        }
+        else
+        {
+            foreach (var point in contact.Points)
+            {
+                vessel.CatchPeakCompressionM = System.Math.Max(vessel.CatchPeakCompressionM, point.PenetrationM);
+                vessel.CatchPeakPinLoadN = System.Math.Max(vessel.CatchPeakPinLoadN, point.NormalLoadN);
+            }
+            vessel.CatchLimitExceeded |= contact.HasOverTravel || contact.HasOverload;
+        }
+
         if (contact == null || contact.ContactCount == 0)
         {
             vessel.CatchSettledDuration = 0.0;

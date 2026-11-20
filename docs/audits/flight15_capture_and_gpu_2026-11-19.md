@@ -17,17 +17,42 @@ The V3 preset declares 2.5 MN/m per pin as an estimated effective compliance. At
 0.60 m travel and 3 MN load limit per pin remain in effect.
 
 The nominal seed reached `CAUGHT` at all three render cadences with two contacts.
-Compression and the highest of the two pin loads below are from the settled sample.
+The settled sample understates the impact. `Vessel.CatchPeakCompressionM` and
+`CatchPeakPinLoadN` now keep the largest step-end values since the vessel entered
+the 500 m catch gate, and the `CAUGHT` log reports both.
 
-| Render cadence | Mass | Compression | Pin load |
-| --- | ---: | ---: | ---: |
-| 50 Hz headless | 208.1 t | 0.430 m | 1.029 MN |
-| 60 Hz with framebuffer | 198.2 t | 0.367 m | 0.921 MN |
-| 120 Hz headless | 207.0 t | 0.425 m | 1.062 MN |
-| 60 Hz, initial point 5 m farther upstream and north | 207.3 t | 0.394 m | 1.029 MN |
+| Render cadence | Mass | Settled compression | Peak compression | Peak pin load |
+| --- | ---: | ---: | ---: | ---: |
+| 50 Hz headless | 208.1 t | 0.430 m | 0.459 m | 1.25 MN |
+| 60 Hz headless | 198.2 t | 0.367 m | 0.591 m | 2.57 MN |
+| 120 Hz headless | 207.0 t | 0.425 m | 0.434 m | 2.16 MN |
 
-The runs took different amounts of propellant through the terminal phase.
-The measured settled loads do not establish real vehicle or tower limits.
+At 60 Hz the first compression used 98.5 % of the 0.60 m pin travel. The trace
+(`EXOSPHERE_TRACE_CATCH=1`) shows why: trace samples within 1 m of the pins read 2.5 to 5.5 m/s
+descending, with the three-engine cluster held at its 40 % floor, and that floor exceeds the
+weight. The cutoff then happens inside the compression (cutoff gap −0.35 to −0.56 m),
+not above the pins. Guidance holds three engines through the whole catch phase.
+The leg-landing path steps down to one Raptor in `FINAL_DESCENT`.
+
+Two trials that step the catch approach to one engine diverged. A one-engine floor
+for the whole phase lost the arrest at 56 m/s. A one-engine window below 20 m and
+3 m/s reached the pins at 9 to 14 m/s and failed the chapter at all three cadences. Both were reverted.
+A controlled engine-count handoff above the tower remains open work.
+
+The cutoff now goes through `TowerCatchCutoff.Decide`. It keeps the earlier speed
+and clearance gates, rejects angular rates above the 0.05 rad/s settle limit, keeps
+both pins 0.10 m plus the drift until contact inside the 5 m cradle, and predicts the
+first compression peak with `CatchImpactPredictor`. The predictor uses the contact
+solver's force law. It stays within 3 % of the rigid-body solver, and the cutoff
+requires the predicted peak within 90 % of the travel and load limits. On the
+nominal seed the gate reproduced the baseline trajectories at all three cadences.
+It cannot bound a powered impact that happens before cutoff.
+
+Both Super Heavy parts relied on the 1.2 MN/m default stiffness. At the 214 t dry
+part mass that deflects 0.87 m, beyond the 0.60 m travel, so the over-travel check in
+the settle criterion could never accept a booster. Both parts now declare
+4.2 MN/m (0.35 m static at 300 t), with provenance. `CatchImpactTests` checks every
+catch-pin part against its mass envelope.
 
 The entry state and compliance are engineering estimates. This chapter starts from
 its own 70 km state and uses the existing demonstration attitude guidance before
@@ -41,6 +66,229 @@ CAPTURE_MENU_MODAL=flight15catchverify "$GODOT_BIN" --headless --path .   --fixe
 
 Run the same command on a real framebuffer and set `CAPTURE_MENU_OUTPUT` to a PNG
 path to draw a frame after the physical `CAUGHT` event.
+
+## Flown Flight 15 catch versus the model
+
+Ship 42 was caught at Starbase Pad 2 on 2026-11-14 at about 21:20 UTC, roughly 22.5 h
+after liftoff. No primary telemetry is public: the SpaceX mission page did not render
+for text extraction, and the YouTube replays are video only. The following comes from
+secondary reporting of the SpaceX timeline and posts (Autonocion, Geekspin, Tesla
+Oracle, drohnen.de, Space.com, KeepTrack, EarthSky), read 2026-11-19.
+
+| T+ | Reported event |
+| --- | --- |
+| 22:32:16 | Three sea-level Raptors light out of the belly flop |
+| 22:32:26 | Two engines; the ship moves between the arms |
+| 22:32:33 | One engine, nearly hovering |
+| 22:32:34 | Arms close, last engine cut; catch |
+
+That is one ignition and about 18 s from ignition to catch, with a monotonic
+3 → 2 → 1 → 0 sequence. The ship stayed flat until it was low and the tower had it
+less than a minute after it came out of the clouds. The two catch fittings sit
+directly under the forward flaps and protrude about one foot (Eric Berger, Ars
+Technica, via Autonocion). After the catch the ship hung above the launch mount.
+Altitudes, speeds, mass and the catch height were not published.
+
+The model differed in three ways.
+
+- **Pins in the nose ogive.** `catch_pin_offset_y_m` was +5.0 m, inside the ogive,
+  where the hull radius is below the 4.4 m pin offset. The pins now sit just below the
+  modelled forward-flap hinge line (−9.5 m on the V3 nose, −9.25 m on the earlier nose)
+  and stand 0.3 m proud of the hull. `CatchGeometryTests` checks every catch-pin part.
+- **Fixed 55 m arms.** The cradle was the idle arm height for every vehicle, which left
+  the caught ship's tail 3 m above grade and below the 19.8 m mount top. The carriage now
+  rides to `LaunchComplexSpec.GetCatchCarriageHeightM`: the vehicle's pin height plus an
+  estimated 5 m clearance above the mount. That is about 62 m for the V3 ship and about
+  90 m for Super Heavy. The rendered arm assembly follows (`SetCatchCarriageHeightM`).
+- **Burn length.** The game flips at 4.5 km and follows a linear profile with a 28.6 s
+  time constant, about 140 s of powered descent. It also shuts every engine off whenever
+  the demand falls below one engine and relights later.
+
+With the raised cradle and the moved pins, the existing game guidance still reached
+`CAUGHT` at all three cadences, with the tail about 25.6 m above grade:
+
+| Render cadence | Mass | Peak compression | Peak pin load | Pin range at cutoff |
+| --- | ---: | ---: | ---: | ---: |
+| 50 Hz headless | 208.2 t | 0.452 m | 1.34 MN | 4.49 m |
+| 60 Hz headless | 208.5 t | 0.449 m | 1.55 MN | 4.48 m |
+| 120 Hz headless | 207.2 t | 0.516 m | 2.69 MN | 4.49 m |
+
+The 120 Hz peak load is at 90 % of the 3 MN pin limit. The approach still hits the pins
+under thrust before cutoff.
+
+### Single-burn controller
+
+`TowerCatchBurn` is the single burn as flown. It reuses the `Flight14LandingBurn`
+vector law, calibrated to the Flight 14 broadcast, and its monotonic engine selection,
+now shared as `MonotoneLandingEngineSelection`. The clearance is measured to the cradle,
+the horizontal channel homes onto it, the ship holds 3 m above the pins until centred,
+and the cutoff goes through `TowerCatchCutoff`. `ShouldIgnite` fires when the descent,
+carried through the flip, meets the profile. It is not yet wired into the game.
+
+The bench (`TowerCatchBurnTests`: 215 t, belly flop at 100 m/s with the long axis 80°
+from vertical) now flies a stable single burn. On the nominal approach, igniting 320 m
+short of the tower with the nose toward it, it lights at 1.12 km, flips in 5.3 s and
+steps 3 → 2 at 7.0 s and 2 → 1 at 21.2 s, with no relight. It still does not settle on
+the pins. Each change below came from a measured failure:
+
+- **Flip throw.** The three-engine flip pushes the ship 58 m/s and about 220 m along the
+  nose. The ignition point therefore has to be planned short of the tower along the
+  nose direction; 320 m ends the flip near the cradle. The flip may aim only 10° past
+  vertical. At 30° the rotation carried on to 40° and two engines then drove 20 m/s²
+  sideways.
+- **Irreversible shutdown.** An engine may shut down only if the remaining engines still
+  arrest the current descent within the clearance left. Without that check the ship
+  dropped to one engine at 140 m and 37 m/s and was lost.
+- **Lateral bandwidth.** One Raptor lags the commanded tilt by 2 to 3 s. The lateral loop
+  tracks a bounded closing speed with a gain scaled by the lit engines (0.15/s on one,
+  0.25/s on three). A velocity integral, active only on one engine, cancels the steady
+  side force of the off-axis engine. Higher gains limit-cycled at ±25 m/s and ±70 m.
+- **Two-engine window.** Two Raptors at their floor out-thrust the 215 t ship by about
+  3 m/s², so the two-engine phase lasts only as long as the descent: roughly 7 s from
+  20 m/s, the duration flown on Flight 15. The second engine stays lit while the ship
+  still descends faster than 0.5 m/s and is more than 5 m off or moving faster than 2 m/s
+  sideways. Holding it longer launched the ship upward.
+
+### Closing arm rails
+
+The 5 m capture disc is replaced by `CatchArmRails`. Each arm is a rail along the arm
+(east from the tower face). Closing arms stop against the hull, so each rail's inner
+edge sits one hull radius either side of the vehicle axis. A fitting rests on a rail
+while it stands proud of the hull over it, inside a ±9.5 m catch zone along the arm,
+with the axis inside the open arms (estimated 10 m half-gap). That bounds roll about
+the axis to about ±20°. A ship 5 m off the centreline is now caught, where the disc
+rejected 0.7 m (`CatchArmRailsTests`). Over-travel, load and settle limits are unchanged.
+With the rails, the cutoff accepts 1.5 m/s of sideways speed: the drift until contact
+is charged against rail slack, and pin friction stops the sliding.
+
+Both controllers roll the fittings across the arms. The bench burn also feeds forward
+the measured offset between the thrust and the axis: with one or two of the three ring
+Raptors lit, holding attitude turns the thrust off the axis by enough to push the ship
+about 0.8 m/s² sideways.
+
+Single-burn bench, 215 t, ignition 380 m short of the tower with the nose toward it:
+
+| Crossrange | Cutoff | Catch | Engines | Peak compression | Peak pin load |
+| ---: | ---: | ---: | --- | ---: | ---: |
+| 0 m | 36.2 s | 38.0 s | 3 → 2 (7.2 s) → 1 (21.1 s) → 0 | 0.46 m | 1.27 MN |
+| +15 m | 36.0 s | 37.1 s | 3 → 2 → 1 → 0 | 0.44 m | 1.21 MN |
+| −15 m | 38.5 s | 42.4 s | 3 → 2 → 1 → 0 | 0.45 m | 1.28 MN |
+
+No engine relit. The flown catch took 18 s; this controller still holds on one engine
+for 15 s instead of about 1 s, and the ship comes to rest near the end of the catch
+zone along the arm.
+
+### Game chapter with rails
+
+With the rails, the existing game guidance crashed at all three cadences: the pins
+passed through the cradle plane with no contact. The Flight 15 chapter is a scripted
+demonstration that writes the ship's orientation in the retro and catch phases
+(`IsTowerCatchDemonstration`). That is also why the log reports a flip completed in
+0.0 s. The imposed attitude carried an arbitrary roll. It now carries the fittings
+across the arms, and the chapter catches again:
+
+| Render cadence | Mass | Peak compression | Peak pin load |
+| --- | ---: | ---: | ---: |
+| 50 Hz headless | 208.4 t | 0.457 m | 1.24 MN |
+| 60 Hz headless | 208.8 t | 0.445 m | 1.72 MN |
+| 120 Hz headless | 207.2 t | 0.424 m | 2.23 MN |
+
+The game's flip and terminal attitude are still imposed, not flown, in the default
+chapter.
+
+### Single burn in the game (opt-in)
+
+`EXOSPHERE_SINGLE_BURN_CATCH=1` flies the chapter with `TowerCatchBurn`. The EDL lights
+it out of the belly flop when `ShouldIgnite` fires instead of at the fixed 4.5 km gate,
+and the simulation then flies the flip, engines and contact with no imposed attitude.
+The aero descent aims short of the tower by `IgnitionLeadDistanceM`: 380 m with no glide
+plus 13.4 s per m/s of glide. On the bench, 850 m with 35 m/s of glide caught in 42.8 s.
+
+The default chapter seeds a 12 % main-tank fill and reaches the flip at 313 t and
+142 m/s. At that mass and dynamic pressure the three-engine flip stalled between 35°
+and 60° of tilt and the ship struck the ground at 126 m/s. The pin stiffness is also
+sized for 225 t. The opt-in chapter therefore enters at 215 t from the `singleBurn`
+block of `starship_flight15_entry_estimate.json`, with its entry seed recalibrated for
+that lighter belly flop (171.7 km upstream, 2.1 km south).
+
+Measured at 60 Hz: ignition at 1,479 m pin clearance, 117.5 m/s down, 554 m from the
+tower; flip in 8.9 s; two engines at +15.0 s, one at +30.8 s; no relight. The burn
+then timed out about 1.6 km from the tower and diverted to a leg landing with no
+damage. Two causes remain:
+
+- The ship reaches ignition with 27.7 m/s of crossrange drift, so the nose, and the flip
+  throw with it, points about 48° away from the tower. The aero corridor has not removed
+  that drift by 1.5 km.
+- During braking the roll alignment saturates (roll command −0.77) while the ship is
+  tilted 25–36°, and the ship accelerates away from the tower to 81 m/s. Roll alignment
+  should wait for low tilt or the final metres.
+
+Both were then addressed. Roll alignment now runs only below 10° of tilt and within
+150 m of the cradle, with the added roll command capped at 0.3; the bench still catches
+in all three cases (38.0, 41.9 and 40.9 s). With the opt-in flag, the terminal entry
+corridor also tightens its crossrange deadband with altitude, as it already did for
+downrange; it had stayed at 20 km down to the flip.
+
+That was not enough. The ship still reached ignition 625 m from the tower and moving
+away from it at 9.9 m/s, with 29.7 m/s of horizontal speed. After the flip it carried
+88 m/s sideways, far more than the 30° tilt cone can remove before the ship is low,
+and the burn again timed out near 1.5 km and diverted to a safe leg landing. The
+belly flop cannot redirect its glide from 1.5 km. A catch needs the approach heading
+set high up: the glide must point at the tower, and the planned lead must follow the
+glide the flip will add to. That calls for an ignition-point planner that predicts the
+flip throw from the belly-flop state, used by the corridor guidance from the start of
+the terminal descent.
+
+### Ignition-point planner
+
+`TowerCatchApproachPlanner` sets the approach from 10 km down. Low in the belly flop the
+fall is nearly vertical, so the lift lies almost horizontal and turning the ship about
+the vertical points it at any heading. Below `terminalGlideAltitudeM` the lift tracks a
+closing speed toward an ignition point on the horizontal line of sight, short of the
+tower by the ignition lead. The corridor prediction targets the same point.
+
+At 60 Hz the ship then reached ignition 759 m from the tower, flying toward it at
+22.7 m/s with its nose 0.94 aligned with the line to the tower. Before the planner it
+was 625 m away and moving away from the tower. After the flip it passed 111 m from the
+cradle at 12 s, still carrying 75 m/s, and overshot by about 500 m. Raising the lead to
+match that overshoot (33 s per m/s of glide) made the glide loop swing ±25 m/s about
+its target. The ship then reached ignition moving away, the flip took 19.7 s, and it
+struck the ground at 10 m/s 1.9 km from the tower. The lead is back at 13.4 s per m/s.
+
+That crash exposed a gap: the burn flew to the pins, not the ground under them. A ship
+below 150 m of pin clearance and more than 150 m from the tower now abandons the catch
+(`missed-approach`) and the EDL lands it on its legs. The last run diverted that way
+at 16 s and landed intact.
+
+Five glide laws were then tried at 60 Hz; the first is the one kept:
+
+| Glide law | Nose to tower | Speed to tower | Outcome |
+| --- | ---: | ---: | --- |
+| Close on the ignition point, lead 380 m + 13.4 s × glide | 0.94 | +22.7 m/s | passed 111 m from the cradle, missed approach, leg landing |
+| Same, lead 33 s × glide | 0.64 | −5.9 m/s | ground impact at 10 m/s (before the missed-approach guard) |
+| Arrive at the point at ignition (range ÷ time to go) | 0.89 | +5.5 m/s | missed approach |
+| Same, without the entry vertical-lift floor | 0.36 | −12.0 m/s | missed approach |
+| Heading law cos θ = r² | 0.03 | −0.7 m/s | missed approach |
+| Heading law, lead from glide magnitude, 15 s turn margin | — | — | diverted at 5 km, 2.1 km off |
+
+What these runs show about the belly flop:
+
+- Its glide speed is nearly fixed (about 28–42 m/s, set by the angle of attack). Steering
+  only turns the glide; the ship cannot wait over a point. The arrival-time law passed
+  2 m from its point 3.4 km up and flew on.
+- It turns at roughly 0.1 rad/s (about 3 m/s² of lift on a 30 m/s glide), so 180° takes
+  about 30 s. Laws that ask for faster heading changes swing around their target.
+- A lead sized from the measured flip throw (61 m/s along the nose, 8.4 s flip, 5.1 m/s²
+  of post-flip braking) gives about 1.1 km at 22.7 m/s of glide. Flying to a point that
+  far out made the closing loop overshoot, and with a lead from the glide magnitude the
+  point ended up behind the ship.
+
+The profile inversions `IgnitionClearanceM` and `TimeToIgnitionS` are kept and tested.
+A catch from the opt-in chapter needs a planner that predicts the belly-flop turn and the
+flip throw together, for example by propagating the glide with its measured turn rate,
+rather than a feedback law on the current state.
+
+The default chapter is unchanged and still catches at 50, 60 and 120 Hz.
 
 ## Orbital return feasibility
 

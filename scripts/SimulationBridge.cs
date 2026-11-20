@@ -639,20 +639,30 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             // not only ActiveVessel — the booster return flies while Ship stays active.
             if (_launchSite != null)
             {
-                var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
-                    _launchSite, padEarth, time);
-                var cradleVel = padEarth.Velocity + padEarth.GetSurfaceVelocity(cradle);
+                double? carriageHeight = null;
                 for (int vesselIndex = 0;
                      vesselIndex < Universe.Vessels.Count;
                      vesselIndex++)
                 {
                     var vessel = Universe.Vessels[vesselIndex];
                     if (!vessel.IsAttemptingTowerCatch) continue;
+                    // The carriage rides to each vehicle's own catch height so the caught
+                    // vehicle hangs above the launch mount, as on the real catches.
+                    var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
+                        _launchSite, padEarth, time, vessel);
+                    var cradleVel = padEarth.Velocity + padEarth.GetSurfaceVelocity(cradle);
+                    if (carriageHeight == null || ReferenceEquals(vessel, ActiveVessel))
+                        carriageHeight = LaunchComplexSpec.StarbasePostDeluge
+                            .GetCatchCarriageHeightM(vessel.CatchPinContactHeightAboveDatumM);
                     vessel.CatchTargetPositionWorld = cradle;
                     vessel.CatchTargetUpWorld = up;
                     vessel.CatchTargetVelocityWorld = cradleVel;
+                    vessel.CatchTargetRails = LaunchComplexSpec.StarbasePostDeluge
+                        .GetCatchArmRails(_launchSite, padEarth, time);
                     vessel.CatchTargetEpochSeconds = time;
                 }
+                if (carriageHeight is double height)
+                    _launchPad.SetCatchCarriageHeightM(height);
             }
         }
     }
@@ -703,6 +713,26 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Sets the main-tank load so the vessel weighs <paramref name="massKg"/>, keeping the
+    /// tank mixture and every other store (header tanks included) as loaded.
+    /// </summary>
+    private static void FillMainTanksToMass(Vessel vessel, double massKg)
+    {
+        var tanks = vessel.Parts.Parts
+            .Where(p => p.Definition.FuelCapacityLF + p.Definition.FuelCapacityOx > 0.0).ToList();
+        foreach (var tank in tanks) { tank.LiquidFuel = 0.0; tank.Oxidizer = 0.0; }
+        double capacity = tanks.Sum(t => t.Definition.FuelCapacityLF + t.Definition.FuelCapacityOx);
+        if (capacity <= 0.0) return;
+        double fill = System.Math.Clamp((massKg - vessel.TotalMass) / capacity, 0.0, 1.0);
+        foreach (var tank in tanks)
+        {
+            tank.LiquidFuel = tank.Definition.FuelCapacityLF * fill;
+            tank.Oxidizer = tank.Definition.FuelCapacityOx * fill;
+        }
+        GD.Print($"[DEMO] entry mass {vessel.TotalMass:F0} kg (main tanks {fill:P1})");
     }
 
     /// <summary>
@@ -1641,6 +1671,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
         var earth = Universe.GetBody("earth");
         var vessel = ActiveVessel;
         if (earth == null || vessel == null || vessel.IsDestroyed) return false;
+        double catchEntryMassKg = 0.0;
 
         // The launch scene begins as a full stack. Separate first so EDL controls the Ship
         // engine cluster and aerodynamic body rather than an impossible attached booster.
@@ -1717,6 +1748,7 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             var flight15Approach = ActiveFlightProfileId == Flight15Mission.CatchProfileId
                 ? Flight15Mission.LoadEntryApproach(GameDataPath.Resolve(DataDirectory))
                 : null;
+            catchEntryMassKg = flight15Approach?.CatchEntryMassKg ?? 0.0;
             var targetCradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
                 _launchSite, earth, Universe.CurrentTime);
             var targetUp = (targetCradle - earth.Position).Normalized;
@@ -1825,6 +1857,8 @@ public partial class SimulationBridge : Node, IPhysicsStepController
             part.LiquidFuel = target * mixtureCapacity;
             part.Oxidizer = target * (1.0 - mixtureCapacity);
         }
+        if (catchEntryMassKg > 0.0)
+            FillMainTanksToMass(vessel, catchEntryMassKg);
 
         SetWarpIndex(0);
         MissionManager.Instance?.EnterPhase(MissionPhase.ORBIT);

@@ -307,10 +307,12 @@ public partial class BoosterReturnController : Node
         var site = bridge.LaunchSiteOrNull;
         if (site == null) return;
         var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
-            site, body, bridge.Universe.CurrentTime);
+            site, body, bridge.Universe.CurrentTime, booster);
         var frame = site.GetLocalFrame(body, bridge.Universe.CurrentTime);
         booster.CatchTargetPositionWorld = cradle;
         booster.CatchTargetUpWorld = frame.Up;
+        booster.CatchTargetRails = LaunchComplexSpec.StarbasePostDeluge
+            .GetCatchArmRails(site, body, bridge.Universe.CurrentTime);
         booster.CatchTargetVelocityWorld =
             body.Velocity + body.GetSurfaceVelocity(cradle);
     }

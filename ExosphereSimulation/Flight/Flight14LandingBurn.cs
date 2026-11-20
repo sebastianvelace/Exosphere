@@ -221,27 +221,9 @@ public sealed class Flight14LandingBurn
     /// </summary>
     private void SelectEngines(double force, double pressure, double gimbalRangeDeg)
     {
-        int authorityCount = 1;
-        _engines.SelectEngineCount(1);
-        double perEngineMinimumThrust = _engines.GetFullThrottleThrustMagnitude(pressure)*_engines.Definition.MinThrottle;
-        if (_ship.Parts.TryGetPartLocalPosition(_engines, out var engineStation))
-        {
-            double arm = System.Math.Abs(_ship.CenterOfMassOffsetLocal.Y - engineStation.Y);
-            double perEngineMoment = perEngineMinimumThrust*System.Math.Sin(gimbalRangeDeg*MathUtils.DEG_TO_RAD)*arm;
-            var aero = _ship.PredictStaticAerodynamicTorqueBody(_body);
-            double transverse = System.Math.Sqrt(aero.X*aero.X + aero.Z*aero.Z);
-            if (perEngineMoment > 0)
-                authorityCount = (int)System.Math.Ceiling(ControlAuthorityMargin*transverse/perEngineMoment);
-        }
-        int selected = _engineCount;
-        for (int count = 1; count <= _engineCount; count++)
-        {
-            _engines.SelectEngineCount(count);
-            if (count >= authorityCount && force <= ThrottleHeadroom*_engines.GetFullThrottleThrustMagnitude(pressure))
-            { selected = count; break; }
-        }
-        _engineCount = selected; _engines.SelectEngineCount(selected);
-        MinimumSelectedEngineCount = System.Math.Min(MinimumSelectedEngineCount, selected);
+        _engineCount = MonotoneLandingEngineSelection.Select(_ship, _body, _engines, _engineCount,
+            force, pressure, gimbalRangeDeg, ThrottleHeadroom, ControlAuthorityMargin);
+        MinimumSelectedEngineCount = System.Math.Min(MinimumSelectedEngineCount, _engineCount);
     }
 
     /// <summary>

@@ -36,6 +36,7 @@
   "catch_pin_lateral_offset_m": 4.4,
   "catch_pin_offset_y_m": 30.0,
   "catch_pin_radius_m": 0.4,
+  "catch_pin_spring_stiffness_n_m": 4200000,
   "rcs_thrusters": [
     {"id": "top_0_lateral", "position": [4.6, 29.75, 0.0], "direction": [-1.0, 0.0, 0.0], "thrust_n": 1500, "isp_s": 60},
     {"id": "top_0_roll_a", "position": [4.6, 29.75, 0.0], "direction": [0.0, 0.0, 1.0], "thrust_n": 1500, "isp_s": 60},

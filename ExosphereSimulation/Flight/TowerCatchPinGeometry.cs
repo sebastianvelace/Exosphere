@@ -5,11 +5,41 @@ using Exosphere.Simulation.Physics;
 
 /// <summary>Contact geometry measured in the same inertial cradle plane as the pin solver.</summary>
 public readonly record struct TowerCatchPinGeometry(
-    int EnabledPins, double FirstPinGapM, double LastPinGapM, double FarthestPinRangeM)
+    int EnabledPins, double FirstPinGapM, double LastPinGapM, double FarthestPinRangeM,
+    double RailSlackM = double.NaN)
 {
+    /// <summary>True when the slack was measured against closing arm rails.</summary>
+    public bool UsesRails => double.IsFinite(RailSlackM);
+
     public const double CaptureRadiusM = 5.0;
 
-    public bool BothPinsFit => EnabledPins == 2 && FarthestPinRangeM <= CaptureRadiusM;
+    public bool BothPinsFit => EnabledPins == 2
+        && (UsesRails ? RailSlackM >= 0.0 : FarthestPinRangeM <= CaptureRadiusM);
+
+    /// <summary>
+    /// Same measurement against closing arm rails: <see cref="RailSlackM"/> is the smallest
+    /// slack of any enabled pin on its rail (see <see cref="CatchArmRails.PinSlackM"/>).
+    /// </summary>
+    public static TowerCatchPinGeometry Measure(IReadOnlyList<ContactPointDefinition> pins,
+        Vector3d datumFromCradle, Quaterniond orientation, Vector3d cradleUp,
+        CatchArmRails rails, double hullRadiusM)
+    {
+        var geometry = Measure(pins, datumFromCradle, orientation, cradleUp);
+        if (!rails.IsDefined || geometry.EnabledPins == 0) return geometry;
+        double axisY = 0.0; int count = 0;
+        for (int i = 0; i < pins.Count; i++)
+            if (pins[i].Enabled) { axisY += pins[i].LocalPositionFromDatum.Y; count++; }
+        var axisPoint = datumFromCradle + orientation.Rotate(new Vector3d(0.0, axisY / count, 0.0));
+        double slack = double.PositiveInfinity;
+        for (int i = 0; i < pins.Count; i++)
+        {
+            if (!pins[i].Enabled) continue;
+            var pin = datumFromCradle + orientation.Rotate(pins[i].LocalPositionFromDatum);
+            slack = System.Math.Min(slack, rails.PinSlackM(Vector3d.Zero, cradleUp, axisPoint,
+                hullRadiusM, pins[i].ContactRadiusM, pin));
+        }
+        return geometry with { RailSlackM = slack };
+    }
 
     public static TowerCatchPinGeometry Measure(IReadOnlyList<ContactPointDefinition> pins,
         Vector3d datumFromCradle, Quaterniond orientation, Vector3d cradleUp)
