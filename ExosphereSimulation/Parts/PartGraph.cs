@@ -1181,10 +1181,19 @@ public partial class PartGraph
         double pitchYawTorque = 0.0;
         double rollTorque = 0.0;
 
+        // Roll needs differential gimbal across at least two lit, gimballed engines: one engine's
+        // two gimbal axes cannot hold pitch, yaw and roll at once. Count what is lit, not what
+        // the cluster declares; a six-engine cluster down to one Raptor has no roll authority,
+        // so its roll must fall to the thrusters (as the S-IVB APS flew the single J-2's roll).
+        int litGimballed = 0;
+        foreach (var engine in ActiveEngineList)
+            if (positions.ContainsKey(engine))
+                litGimballed += engine.GetEngineInstanceGimbalAuthoritySnapshot(ambientPressure).Count;
+        bool countsForRoll = litGimballed >= 2;
+
         foreach (var engine in ActiveEngineList)
         {
             if (!positions.TryGetValue(engine, out var partPosition)) continue;
-            bool countsForRoll = engine.Definition.EngineCount >= 2;
             var authority = engine.GetEngineInstanceGimbalAuthoritySnapshot(ambientPressure);
             for (int i = 0; i < authority.Count; i++)
             {
