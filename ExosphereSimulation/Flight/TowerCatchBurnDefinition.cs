@@ -43,6 +43,8 @@ public sealed class TowerCatchBurnDefinition
     [JsonPropertyName("alignmentHoldClearanceM")] public double AlignmentHoldClearanceM { get; set; }
     /// <summary>Horizontal miss below which the ship may descend past the hold clearance (m).</summary>
     [JsonPropertyName("alignedMissM")] public double AlignedMissM { get; set; }
+    /// <summary>Rail slack (m) at which the ship counts as centred enough to descend onto the arms.</summary>
+    [JsonPropertyName("railDescentSlackM")] public double RailDescentSlackM { get; set; } = 0.5;
     /// <summary>Lowest pin clearance per metre of horizontal miss while translating to the arms.</summary>
     [JsonPropertyName("approachSlope")] public double ApproachSlope { get; set; }
     /// <summary>Gain from clearance error to descent speed while holding (1/s).</summary>

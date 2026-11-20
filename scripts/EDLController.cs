@@ -1284,7 +1284,8 @@ public partial class EDLController : Control
                 + $"gate={burn.LastCutoffDecision.Reason} slack={burn.LastCutoffDecision.RequiredRangeM:F2} "
                 + $"rates={TowerCatchBurn.SplitAngularRate(vessel)} "
                 + $"rcs={vessel.Parts.Parts.Count(p => p.RcsAttitudeEnabled && p.Definition.RcsThrusters.Count > 0)}"
-                + $"/{vessel.Parts.Parts.Count(p => p.Definition.RcsThrusters.Count > 0)} rollCmd={vessel.PitchYawRoll.Z:F2}");
+                + $"/{vessel.Parts.Parts.Count(p => p.Definition.RcsThrusters.Count > 0)} rollCmd={vessel.PitchYawRoll.Z:F2} "
+                + $"mono={vessel.Parts.Parts.Sum(p => p.Monopropellant):F0}/{vessel.Parts.Parts.Sum(p => p.Definition.FuelCapacityMono):F0}");
         }
         if (phaseBefore == TowerCatchBurnPhase.Flip && burn.Phase != TowerCatchBurnPhase.Flip)
         {

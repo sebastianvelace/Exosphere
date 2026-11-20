@@ -370,6 +370,32 @@ justified and kept.
 Next: the roll authority. The 1.5 kN Starship V3 RCS thrust is an estimate, and the
 drain spin-up torque on this return is not yet quantified.
 
+### Single-engine roll authority (physics fix)
+
+The 0.064 rad/s roll was not a lack of thruster force. The RCS never fired: monopropellant
+stayed at 4,000 of 4,000 kg while the roll command reached 0.69. `Vessel` leaves an axis to
+the gimbals whenever the differential-TVC envelope covers it, and
+`PartGraph.GetDifferentialTVCAngularAccelerationEnvelope` credited roll authority whenever
+the cluster declared two or more engines (`Definition.EngineCount`). The ship's cluster
+declares six, so one lit Raptor still counted. One engine's two gimbal axes cannot hold
+pitch, yaw and roll at once. Roll now counts only with two or more lit, gimballed
+engines, which is the case the code comment cites (the S-IVB APS flying the single J-2's
+roll). `SingleEngineRollAuthorityTests` imposes the game's 0.064 rad/s on the one-engine
+bench: without the fix 24 armed thrusters fire nothing; with it they bring the roll
+under 0.02 rad/s within 5 s.
+
+No published figure was found for Starship's RCS thrust (forum reports only: ullage-gas
+thrusters, 24 jets unconfirmed). The modelled 1.5 kN per thruster stays an estimate. It
+suffices for this roll once the thrusters may fire.
+
+The full suite passes with the fix (1,762 tests, including the slow Flight 14 chains).
+The opt-in single-burn chapter now catches at 60 Hz (79.6 s, 162 t, peak 0.414 m and
+1.22 MN) and 120 Hz (83.7 s, 161 t, peak 0.447 m and 1.33 MN), with no relight and
+engines 3 → 2 → 1 → 0. At 50 Hz it reaches a hold 8 m across the arms (outside their
+5.5 m reach) and closes too slowly on one engine before the 120 s budget, then lands on
+its legs. The descent hold now uses rail slack instead of a fixed 4 m radius, since the
+catch zone runs 9.5 m along the arms. It did not change these runs.
+
 The default chapter is unchanged and still catches at 50, 60 and 120 Hz.
 
 ## Orbital return feasibility

@@ -154,7 +154,17 @@ public sealed class TowerCatchBurn
             && clearance < _definition.MissedApproachClearanceM
             && horizontalOffset.Magnitude > _definition.MissedApproachRadiusM)
         { Block("missed-approach"); return; }
-        double targetDown = _definition.TargetDescentSpeedMps(clearance, horizontalOffset.Magnitude);
+        // With rails, "centred enough to descend" is where both fittings would land on their rails
+        // with margin, not a fixed radius: the catch zone runs ±9.5 m along the arms.
+        double missForHold = horizontalOffset.Magnitude;
+        if (_ship.CatchTargetRails.IsDefined && Phase == TowerCatchBurnPhase.Braking)
+        {
+            var railGeometry = TowerCatchPinGeometry.Measure(_ship.CatchContactPoints, offset, _ship.Orientation, up,
+                _ship.CatchTargetRails, 0.5 * _ship.MaximumDiameter);
+            if (railGeometry.UsesRails && railGeometry.RailSlackM >= _definition.RailDescentSlackM)
+                missForHold = 0.0;
+        }
+        double targetDown = _definition.TargetDescentSpeedMps(clearance, missForHold);
         double feedForward = targetDown > 0.0
             ? _definition.TargetDecelerationMps2(clearance)
                 * System.Math.Max(0, -verticalSpeed) / System.Math.Max(1, targetDown)

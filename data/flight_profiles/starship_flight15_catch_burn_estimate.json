@@ -18,6 +18,7 @@
   "contactDescentSpeedMps": 0.4,
   "alignmentHoldClearanceM": 3.0,
   "alignedMissM": 4.0,
+  "railDescentSlackM": 0.5,
   "holdClearanceGainPerSecond": 0.5,
   "approachSlope": 1.0,
   "flipMaximumTiltDegrees": 10.0,
