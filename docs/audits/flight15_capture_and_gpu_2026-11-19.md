@@ -788,6 +788,40 @@ It also requires a catch within 50 s, with a first count of three, monotone engi
 and no relight. The bench catches these states in 41–47 s. It steps control and physics
 once per frame, so it is not bit-for-bit with the game.
 
+### Where the 38 s go, and what did not shorten them (2026-11-23)
+
+The game run at 60 Hz spends its time in three parts:
+
+| Phase | Span | What happens |
+| --- | ---: | --- |
+| Flip | 0–7 s | The ship ends with 86 m/s toward the tower and 630 m to go. |
+| Three and two engines | 7–22 s | The ship crosses the cradle at about 30 m/s and overshoots by 50–90 m. |
+| One engine | 22–38 s | The ship walks back and descends 130 m. |
+
+**The side channel is at its physical limit from flip end.** Stopping 86 m/s in 630 m needs
+5.8 m/s². The ship achieves about 5.6 m/s², close to `vertical·tan 30°`, so the overshoot
+is not a planner defect. The commands shown are plant inputs, and with K ≈ 1.4 they deliver
+that acceleration. The horizontal speed to stop is the glide toward the tower (33 m/s) plus
+the flip throw (about 55 m/s).
+
+**Tried on the replay and reverted:**
+
+- *Planning the flip on its predicted throw.* The throw is (a/ω)(1 − cos θ) along the
+  leaning axis. On the replay it cut the 50 Hz catch from 46.8 to 41 s. In the game it
+  left 50 and 120 Hz at 39 s and made 60 Hz worse, at 50.6 s.
+- *A shorter side horizon* (0.6–0.9 of the time to the gate) and *less plan smoothing*
+  (0.03–0.3 s²). Neither changed the command profile or the catch time; 0.6 missed.
+- *Less glide at ignition.* Editing the ignition state's velocity leaves the belly flop
+  trimmed for the old glide. With a near-vertical airflow the flip then stalls near 50° for
+  about 5 s. That makes the edit invalid as a test, not evidence against less glide.
+
+**What would shorten it.** Arrive with less horizontal speed to stop at flip end, or ignite
+lower. The vertical alone needs about 25 s from 1425 m at 115 m/s with uniform braking.
+Flight 15's 18 s implies a lower or faster-braking ignition. Both quantities are set upstream
+by the glide guidance (`glideMaximumClosingSpeedMps`, the ignition lead and clearance). They
+must be swept by flying the terminal glide and the burn together, not by editing the
+ignition state.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km
