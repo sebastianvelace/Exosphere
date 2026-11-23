@@ -822,6 +822,34 @@ by the glide guidance (`glideMaximumClosingSpeedMps`, the ignition lead and clea
 must be swept by flying the terminal glide and the burn together, not by editing the
 ignition state.
 
+### Glide-and-burn bench, and the kinematic glide attitude (2026-11-23)
+
+**One law for the game and the bench.** The catch glide's lift guidance now lives in the
+simulation as `TowerCatchGlideGuidance`. The belly-flop attitude reference filter now lives
+there as `BellyFlopAttitudeReference`. Both moved verbatim out of `EDLController`, which now
+calls them. A 60 Hz game run after the move reproduced the earlier run exactly:
+
+- ignition 1124 m out;
+- engine steps at 14.2, 21.5 and 38.3 s;
+- peak pin load 1 321 067 N.
+
+The EDL can now save a terminal-glide state (`EXOSPHERE_CATCH_GLIDE_SAVE`, below
+`EXOSPHERE_CATCH_GLIDE_SAVE_ALT_M`, default 4 km). `Flight15CatchBench` restores a game save
+and flies the glide, the ignition test and `TowerCatchBurn`. It uses
+`IPhysicsStepController`, so control runs at the universe's 0.02 s period, as in the game,
+whatever the frame rate. The 60 Hz ignition replay now matches the game's engine steps
+within 0.3 s.
+
+**The game's glide attitude is not flown.** The Flight 15 catch chapter starts from the
+reentry demonstration setup, which sets `IsTowerCatchDemonstration`. Through the aero
+phases the EDL then writes the reference orientation onto the vessel each step, with zero
+rate and zero torque command, and drives only the flaps. The game trace shows `pyr=0`, an
+attitude error of 0.1° and ω = 0 for the whole glide. Flown physically from the same 4 km
+state with the same law, the bench ship does not hold that reference. With pitch saturated,
+the error grows at the reference slew rate (6°/s) and the ship ignites with its nose away
+from the tower. The single-burn burn itself is physical, because `TowerCatchBurn` runs
+before that override. The glide that sets up its ignition is not.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km

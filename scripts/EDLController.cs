@@ -74,8 +74,8 @@ public partial class EDLController : Control
     private readonly bool _traceCatch = Godot.OS.GetEnvironment("EXOSPHERE_TRACE_CATCH") == "1";
     private double _nextCatchTraceEpoch;
     private double _nextGlideTraceEpoch;
-    private double _nextGlidePlanEpoch;
-    private GlidePlan _glidePlan;
+    private readonly TowerCatchGlideGuidance _glideGuidance = new();
+    private bool _glideStateSaved;
 
 
     // ── Trigger thresholds ────────────────────────────────────────────────────
@@ -116,42 +116,23 @@ public partial class EDLController : Control
     private double _aeroWindwardFactor;
     private Vector3d _aeroAttitudeCommand;
     private Vector3d _aeroLiftReference;
-    private Vector3d _filteredAeroAxis;
-    private Vector3d _filteredAeroFlow;
-    private Quaterniond _filteredAeroAttitude;
-    private bool _aeroReferenceInitialized;
+    private readonly BellyFlopAttitudeReference _aeroReference = new();
 
-    // The real vehicle's aerodynamic reference cannot jump with one noisy guidance sample.
-    // This is a reference filter only: the vessel still follows it through physical flap/torque
-    // authority in Vessel.Tick.
-    private const double AeroReferenceTimeConstantSeconds = 0.75;
-    private const double AeroReferenceSlewRateRadPerSecond =
-        6.0 * MathUtils.DEG_TO_RAD;
     // The reduced-order footprint predictor may lower periapsis with only a shallow
     // down-lift component. Full lift reversal produced a measured 26-28 g plunge;
     // zero vertical lift preserved the ~77 km periapsis and produced a skip-entry.
     // cos(bank) = -0.15 corresponds to a bounded bank of about 98.6 degrees.
-    private const double ReducedOrderMinimumVerticalLiftFraction = -0.15;
+    private const double ReducedOrderMinimumVerticalLiftFraction =
+        TowerCatchGlideGuidance.ReducedOrderMinimumVerticalLiftFraction;
 
     /// <summary>Measured aerodynamic entry diagnostics for the visual harness and HUD QA.</summary>
     public double AeroAngleOfAttackDegrees => _aeroAngleOfAttackDeg;
     public double AeroWindwardFactor => _aeroWindwardFactor;
     public double AeroAttitudeErrorDegrees => _attitudeErrorDeg;
-    public double AeroReferenceAngleOfAttackDegrees
-    {
-        get
-        {
-            if (!_aeroReferenceInitialized || _filteredAeroFlow.MagnitudeSquared < 1e-12)
-                return 0.0;
-            var axis = _filteredAeroAttitude.Rotate(Vector3d.Up).Normalized;
-            return System.Math.Acos(System.Math.Clamp(
-                axis.Dot(_filteredAeroFlow.Normalized), -1.0, 1.0)) * MathUtils.RAD_TO_DEG;
-        }
-    }
+    public double AeroReferenceAngleOfAttackDegrees => _aeroReference.AngleOfAttackDegrees;
     public Vector3d AeroAttitudeCommand => _aeroAttitudeCommand;
     public Vector3d AeroLiftReference => _aeroLiftReference;
-    private readonly EntryPredictionRefresh _entryPredictionRefresh = new();
-    public ulong CorridorPredictionCount => _entryPredictionRefresh.SampleCount;
+    public ulong CorridorPredictionCount => _glideGuidance.PredictionCount;
     public ulong GuidanceUpdateCount { get; private set; }
     public double GuidanceUpdatePeriodSeconds { get; private set; } = double.NaN;
     public double LastGuidanceSimulationTimeSeconds { get; private set; } = double.NaN;
@@ -283,8 +264,8 @@ public partial class EDLController : Control
                 _catchCutoffCommitted = false;
                 _catchBurn = null;
                 _catchBurnLoggedSteps = 0;
-                _nextGlidePlanEpoch = 0.0;
-                _glidePlan = default;
+                _glideGuidance.Reset();
+                _glideStateSaved = false;
                 // Normal Earth Starbase returns use the same physical two-pin catch
                 // path as the deterministic reentry demo. The policy is deliberately
                 // narrow; Mars/Venus, other launch sites and non-Starship vehicles keep
@@ -444,6 +425,16 @@ public partial class EDLController : Control
             && vessel.IsAttemptingTowerCatch && vessel.HasCatchPins
             && vessel.CatchTargetRails.IsDefined && shipEngines != null
             && CatchBurnDefinition() != null;
+        // Diagnostic: a state in the terminal glide, for flying the glide and the burn together
+        // on the bench (EXOSPHERE_CATCH_GLIDE_SAVE, below EXOSPHERE_CATCH_GLIDE_SAVE_ALT_M).
+        if (singleBurnCatch && !_glideStateSaved
+            && _alt <= (double.TryParse(Godot.OS.GetEnvironment("EXOSPHERE_CATCH_GLIDE_SAVE_ALT_M"),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+                out double glideSaveAltitude) ? glideSaveAltitude : 4_000.0))
+        {
+            _glideStateSaved = true;
+            SaveDiagnosticState("EXOSPHERE_CATCH_GLIDE_SAVE", universe, body, delta, "glide");
+        }
         if (singleBurnCatch)
         {
             var cradleUp = vessel.CatchTargetUpWorld.Normalized;
@@ -469,28 +460,7 @@ public partial class EDLController : Control
                     + $"bellyRollDeg={TowerCatchBurn.BellyRollFromVerticalRad(vessel.Orientation, cradleUp) * MathUtils.RAD_TO_DEG:F1} "
                     + $"massKg={vessel.TotalMass:F0}");
                 // Diagnostic: the exact ignition state, for replaying the game's burn on the bench.
-                string ignitionSave = Godot.OS.GetEnvironment("EXOSPHERE_CATCH_IGNITION_SAVE");
-                if (!string.IsNullOrEmpty(ignitionSave))
-                {
-                    System.IO.File.WriteAllText(ignitionSave, Exosphere.Simulation.Persistence.SaveGameV2Json.Serialize(
-                        Exosphere.Simulation.Persistence.SaveGameV2Codec.Capture(universe)));
-                    System.IO.File.WriteAllText(ignitionSave + ".env.json", System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        body = body.Id,
-                        bodyPosition = new[] { body.Position.X, body.Position.Y, body.Position.Z },
-                        bodyVelocity = new[] { body.Velocity.X, body.Velocity.Y, body.Velocity.Z },
-                        universe.SchedulerBudgetEnabled,
-                        universe.DeferredPhysicsCandidateEnabled,
-                        universe.DistributedAerodynamicsEnabled,
-                        universe.PhysicalBodyFlapsEnabled,
-                        universe.GravityGradientEnabled,
-                        universe.VariableMassTransportEnabled,
-                        universe.PropellantSloshEnabled,
-                        ephemeris = universe.Environment.Ephemeris.Id,
-                        controlDelta = delta,
-                    }));
-                    GD.Print($"[EDL] ignition state saved to {ignitionSave}");
-                }
+                SaveDiagnosticState("EXOSPHERE_CATCH_IGNITION_SAVE", universe, body, delta, "ignition");
                 RunCatchBurn(vessel, body, mission, universe, delta);
                 return;
             }
@@ -641,178 +611,19 @@ public partial class EDLController : Control
             // Starship-like L/D. Catch guidance may adjust it inside a bounded corridor.
             if (vessel.IsAttemptingTowerCatch && vessel.HasCatchPins)
             {
-                // A catch return needs a bounded cross-range lift bias. Keep lift-up as the
-                // neutral state that shapes the deceleration pulse, bank it toward crossrange,
-                // and reverse it only for a predicted downrange overflight. The normal
-                // aerodynamic integrator remains authoritative.
-                Vector3d targetOffset = catchTargetPosition - vessel.Position;
-                // The single burn lights short of the tower along the approach: the flip throws
-                // the ship along its leading nose and the braking carries it on to the cradle.
-                var leadDefinition = vessel.CatchTargetRails.IsDefined && Flight15Mission.SingleBurnCatchEnabled
-                    ? CatchBurnDefinition() : null;
-                Vector3d ignitionPoint = catchTargetPosition;
-                Vector3d glideHorizontalVelocity = Vector3d.Zero;
-                if (leadDefinition != null)
+                var steering = _glideGuidance.Steer(vessel, body, universe.CurrentTime, catchTargetPosition,
+                    up, velDir, surfVel, _alt, _vUp, g, _gForce, priorLiftReference,
+                    Flight15Mission.SingleBurnCatchEnabled ? CatchBurnDefinition() : null);
+                _aeroLiftReference = steering.LiftReference;
+                aimAxis = steering.AimAxis;
+                if (_traceCatch && steering.Trace is { } glide && universe.CurrentTime >= _nextGlideTraceEpoch)
                 {
-                    var cradleUp = vessel.CatchTargetUpWorld.Normalized;
-                    var relative = vessel.Velocity - vessel.CatchTargetVelocityWorld;
-                    glideHorizontalVelocity = relative - cradleUp * relative.Dot(cradleUp);
-                    var lineOfSight = catchTargetPosition - vessel.Position;
-                    lineOfSight -= cradleUp * lineOfSight.Dot(cradleUp);
-                    double glideTowardTower = lineOfSight.MagnitudeSquared > 1e-6
-                        ? glideHorizontalVelocity.Dot(lineOfSight.Normalized) : 0.0;
-                    ignitionPoint = TowerCatchApproachPlanner.IgnitionPoint(catchTargetPosition, cradleUp,
-                        vessel.Position, leadDefinition.IgnitionLeadDistanceM(glideTowardTower));
-                    targetOffset = ignitionPoint - vessel.Position;
-                }
-                // Match the vehicle's surface-velocity frame. The cradle velocity is
-                // inertial, while surfVel is relative to the body's local rotation at
-                // the vehicle position. Subtract the cradle's local rotational velocity
-                // before comparing the two; mixing these frames creates a false
-                // cross-range command of several hundred metres per second.
-                Vector3d targetSurfaceVelocity = vessel.CatchTargetVelocityWorld
-                    - body.Velocity
-                    - body.GetSurfaceVelocity(catchTargetPosition);
-                Vector3d bodyLiftUp = up - velDir * up.Dot(velDir);
-                if (bodyLiftUp.Magnitude > 1e-6)
-                {
-                    double predictionTime = SimulationBridge.Instance!.Universe.CurrentTime;
-                    Vector3d relativePosition = vessel.Position - body.Position;
-                    if (_entryPredictionRefresh.NeedsRefresh(predictionTime, _alt,
-                            vessel.Id, body.Id, relativePosition))
-                    {
-                        var refreshed = EntryCorridorGuidance.Predict(
-                            targetOffset,
-                            surfVel,
-                            targetSurfaceVelocity,
-                            up,
-                            _alt,
-                            -_vUp,
-                            g,
-                            dynamics: EntryCorridorPropagation.ForVessel(vessel, body));
-                        _entryPredictionRefresh.Store(predictionTime, vessel.Id, body.Id,
-                            relativePosition, refreshed);
-                    }
-                    var prediction = _entryPredictionRefresh.Prediction;
-                    if (prediction.LiftDirection.MagnitudeSquared > 1e-12
-                        || System.Math.Abs(prediction.PredictedDownrangeM) > 1e-6)
-                    {
-                        // Crossrange chooses the bank side while the predicted downrange
-                        // miss controls flight-path energy. Long-range entry guidance uses
-                        // a deliberately wide deadband to avoid banking at hypersonic speed;
-                        // once the Starbase return is inside the terminal corridor, that same
-                        // deadband would ignore a 1-2 km error and hand it to the powered burn.
-                        // Tighten the corridor progressively below 25 km, while keeping both
-                        // limits bounded so this remains a physical lift command rather than
-                        // a direct position correction.
-                        bool terminalCatchCorridor = _alt < 25_000.0;
-                        double downrangeCorridorMeters = terminalCatchCorridor
-                            ? System.Math.Clamp(_alt * 0.01, 5.0, 250.0)
-                            : 20_000.0;
-                        double downrangeAuthorityMeters = terminalCatchCorridor
-                            ? System.Math.Clamp(_alt * 0.12, 1_500.0, 4_000.0)
-                            : 180_000.0;
-                        // The single burn needs the crossrange closed as well before ignition: the
-                        // flip throws the ship along its nose, which follows the glide.
-                        bool tightCrossrange = terminalCatchCorridor && Flight15Mission.SingleBurnCatchEnabled;
-                        Vector3d guidedLift = EntryCorridorGuidance.SelectLiftDirection(
-                            prediction,
-                            bodyLiftUp,
-                            corridorMeters: tightCrossrange ? downrangeCorridorMeters : 20_000.0,
-                            authorityMeters: tightCrossrange ? downrangeAuthorityMeters : 180_000.0,
-                            downrangeCorridorMeters: downrangeCorridorMeters,
-                            downrangeAuthorityMeters: downrangeAuthorityMeters);
-                        // Low in the descent the single burn steers the glide itself: the fall is
-                        // nearly vertical, so the lift lies almost horizontal and turning the belly
-                        // flop points it at any heading. Close on the ignition point from here.
-                        if (leadDefinition != null && _alt < leadDefinition.TerminalGlideAltitudeM)
-                        {
-                            var glideUp = vessel.CatchTargetUpWorld.Normalized;
-                            double glideDescent = -(vessel.Velocity - vessel.CatchTargetVelocityWorld).Dot(glideUp);
-                            double timeToIgnition = TowerCatchApproachPlanner.TimeToIgnitionS(
-                                TowerCatchBurn.UprightPinClearanceM(vessel, SimulationBridge.Instance!.Universe.CurrentTime),
-                                glideDescent, leadDefinition);
-                            // Predict the manoeuvre to ignition and fly its present turn. Re-plan
-                            // at 2 Hz: the belly flop turns at about 0.1 rad/s, far slower than that.
-                            double now = SimulationBridge.Instance!.Universe.CurrentTime;
-                            if (now >= _nextGlidePlanEpoch)
-                            {
-                                _nextGlidePlanEpoch = now + 0.5;
-                                var offsetFromTower = vessel.Position - catchTargetPosition;
-                                offsetFromTower -= glideUp * offsetFromTower.Dot(glideUp);
-                                _glidePlan = TowerCatchGlidePredictor.Plan(offsetFromTower, glideHorizontalVelocity,
-                                    glideUp, timeToIgnition,
-                                    leadDefinition.IgnitionLeadDistanceM(glideHorizontalVelocity.Magnitude),
-                                    leadDefinition.GlidePlanningTurnRateRadPerS);
-                            }
-                            var glideCommand = TowerCatchGlidePredictor.TurnAcceleration(
-                                glideHorizontalVelocity, glideUp, _glidePlan.TurnRateRadPerS);
-                            double sideFraction = System.Math.Clamp(
-                                glideCommand.Magnitude / leadDefinition.GlideLiftAccelerationMps2, 0.0, 1.0);
-                            var sideLift = TowerCatchApproachPlanner.LiftDirection(velDir, glideCommand, guidedLift);
-                            guidedLift = sideFraction > 1e-3
-                                ? (guidedLift.Normalized * System.Math.Sqrt(1.0 - sideFraction * sideFraction)
-                                    + sideLift * sideFraction).Normalized
-                                : guidedLift;
-                            // Just before ignition, lift along the line to the tower: the nose leans
-                            // toward the lift, and the flip throws the ship along the nose.
-                            double alignment = TowerCatchApproachPlanner.FinalAlignmentWeight(
-                                timeToIgnition, leadDefinition.GlideFinalAlignmentSeconds);
-                            if (alignment > 0.0)
-                                guidedLift = (guidedLift.Normalized * (1.0 - alignment)
-                                    + TowerCatchApproachPlanner.TowerLineLift(velDir, glideUp, vessel.Position,
-                                        catchTargetPosition, guidedLift) * alignment).Normalized;
-                            if (_traceCatch && SimulationBridge.Instance!.Universe.CurrentTime >= _nextGlideTraceEpoch)
-                            {
-                                _nextGlideTraceEpoch = SimulationBridge.Instance.Universe.CurrentTime + 2.0;
-                                var toPoint = ignitionPoint - vessel.Position;
-                                var cradleUp = vessel.CatchTargetUpWorld.Normalized;
-                                toPoint -= cradleUp * toPoint.Dot(cradleUp);
-                                var toTower = catchTargetPosition - vessel.Position;
-                                toTower -= cradleUp * toTower.Dot(cradleUp);
-                                GD.Print($"GLIDE_TRACE alt={_alt:F0} toPoint={toPoint.Magnitude:F0} toTower={toTower.Magnitude:F0} "
-                                    + $"vh={glideHorizontalVelocity.Magnitude:F1} towardPoint={(toPoint.MagnitudeSquared > 1 ? glideHorizontalVelocity.Dot(toPoint.Normalized) : 0):F1} "
-                                    + $"turn={_glidePlan.TurnRateRadPerS:F3} planRange={_glidePlan.PredictedRangeAtIgnitionM:F0} "
-                                    + $"planHeading={_glidePlan.PredictedHeadingErrorRad * MathUtils.RAD_TO_DEG:F0} vDown={-_vUp:F1} tgo={timeToIgnition:F1}");
-                            }
-                        }
-                        // The footprint now carries drag, lift and energy at the nominal entry
-                        // angle of attack. The vertical floor remains a load guard: a true
-                        // overflight may bank toward the body, but a saturated down-lift
-                        // command becomes a 90-degree bank on the established side instead
-                        // of a full lift-up skip or a plunge. Sign noise inside the cross-range
-                        // deadband must not reverse that bank.
-                        Vector3d neutralBankSide = EntryCorridorGuidance.ComputeBankSide(
-                            velDir, up, priorLiftReference);
-                        double verticalLiftFloor = EntryCorridorGuidance
-                            .ComputeLoadReliefVerticalFloor(
-                                _gForce,
-                                ReducedOrderMinimumVerticalLiftFraction);
-                        guidedLift = EntryCorridorGuidance.ConstrainVerticalLift(
-                            guidedLift,
-                            bodyLiftUp,
-                            minimumVerticalFraction: verticalLiftFloor,
-                            lateralFallback: neutralBankSide);
-                        guidedLift = EntryCorridorGuidance.BlendForAerodynamicAuthority(
-                            guidedLift,
-                            bodyLiftUp,
-                            vessel.GetDynamicPressure(body));
-                        _aeroLiftReference = guidedLift;
-                        aimAxis = AerodynamicsModel.ComputeEntryAxisForLift(
-                            velDir, guidedLift);
-                    }
-                    else
-                    {
-                        _aeroLiftReference = bodyLiftUp.Normalized;
-                        aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(
-                            up, velDir);
-                    }
-                }
-                else
-                {
-                    _aeroLiftReference = bodyLiftUp.Normalized;
-                    aimAxis = AerodynamicsModel.ComputeLiftUpEntryAxis(
-                        up, velDir);
+                    _nextGlideTraceEpoch = universe.CurrentTime + 2.0;
+                    GD.Print($"GLIDE_TRACE alt={_alt:F0} toPoint={glide.ToIgnitionPointM:F0} toTower={glide.ToTowerM:F0} "
+                        + $"vh={glide.HorizontalSpeedMps:F1} towardPoint={glide.TowardPointMps:F1} "
+                        + $"turn={glide.Plan.TurnRateRadPerS:F3} planRange={glide.Plan.PredictedRangeAtIgnitionM:F0} "
+                        + $"planHeading={glide.Plan.PredictedHeadingErrorRad * MathUtils.RAD_TO_DEG:F0} vDown={-_vUp:F1} tgo={glide.TimeToIgnitionS:F1} "
+                        + $"pyr={vessel.PitchYawRoll.X:F2},{vessel.PitchYawRoll.Y:F2},{vessel.PitchYawRoll.Z:F2} err={_attitudeErrorDeg:F1} w={vessel.AngularVelocity.Magnitude:F2}");
                 }
             }
             else
@@ -948,49 +759,11 @@ public partial class EDLController : Control
         Quaterniond desiredAttitude;
         if (aeroAttitude)
         {
-            double filterDelta = System.Math.Clamp(delta, 0.0, 0.20);
-            if (!_aeroReferenceInitialized)
-            {
-                // Seed from the physical vehicle state. The orbital return has already
-                // prepared a belly-first attitude during coast; seeding from aimAxis here
-                // would introduce an artificial 90–180° roll step when corridor guidance
-                // selects a different lift side on the first atmospheric frame.
-                _filteredAeroAxis = vessel.Orientation.Rotate(Vector3d.Up).Normalized;
-                _filteredAeroFlow = velDir.Normalized;
-                _filteredAeroAttitude = vessel.Orientation;
-                _aeroReferenceInitialized = true;
-            }
-            else
-            {
-                _filteredAeroAxis = AttitudeGuidance.SmoothDirection(
-                    _filteredAeroAxis, aimAxis, filterDelta, AeroReferenceTimeConstantSeconds);
-                _filteredAeroFlow = AttitudeGuidance.SmoothDirection(
-                    _filteredAeroFlow, velDir, filterDelta, AeroReferenceTimeConstantSeconds);
-            }
-
-            // Independent reference filters can change the mutual angle between the axis and
-            // flow. Rebuild the axis from its filtered lift side so alpha remains the nominal
-            // physical entry target instead of collapsing into a nose-first dive.
-            var constrainedAeroAxis = AerodynamicsModel.ConstrainEntryAxisToAngle(
-                _filteredAeroFlow, _filteredAeroAxis);
-            var targetAeroAttitude = AerodynamicsModel.ComputeBellyFirstOrientation(
-                constrainedAeroAxis, _filteredAeroFlow);
-            var slewedAeroAttitude = AttitudeGuidance.SlewQuaternion(
-                _filteredAeroAttitude,
-                targetAeroAttitude,
-                filterDelta,
-                AeroReferenceSlewRateRadPerSecond);
-            // Slerp smooths roll and lift-side changes, but its intermediate axis can
-            // temporarily leave the nominal entry cone. Re-project that axis before the
-            // command is published; otherwise a corridor correction silently turns the
-            // filtered reference into a nose-first dive even while attitude error is small.
-            _filteredAeroAttitude = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(
-                slewedAeroAttitude, _filteredAeroFlow);
-            desiredAttitude = _filteredAeroAttitude;
+            desiredAttitude = _aeroReference.Update(vessel.Orientation, aimAxis, velDir, delta);
         }
         else
         {
-            _aeroReferenceInitialized = false;
+            _aeroReference.Reset();
             desiredAttitude = ShortestArc(Vector3d.Up, aimAxis);
         }
         bool catchAero = vessel.IsAttemptingTowerCatch && vessel.HasCatchPins
@@ -1294,6 +1067,33 @@ public partial class EDLController : Control
         return _catchBurnDefinition;
     }
 
+    // Writes SaveGameV2 and the universe switches to the path in environment variable
+    // <paramref name="variable"/>, if set, so the bench can replay the game from this state.
+    private static void SaveDiagnosticState(string variable, Universe universe, CelestialBody body,
+        double delta, string label)
+    {
+        string path = Godot.OS.GetEnvironment(variable);
+        if (string.IsNullOrEmpty(path)) return;
+        System.IO.File.WriteAllText(path, Exosphere.Simulation.Persistence.SaveGameV2Json.Serialize(
+            Exosphere.Simulation.Persistence.SaveGameV2Codec.Capture(universe)));
+        System.IO.File.WriteAllText(path + ".env.json", System.Text.Json.JsonSerializer.Serialize(new
+        {
+            body = body.Id,
+            bodyPosition = new[] { body.Position.X, body.Position.Y, body.Position.Z },
+            bodyVelocity = new[] { body.Velocity.X, body.Velocity.Y, body.Velocity.Z },
+            universe.SchedulerBudgetEnabled,
+            universe.DeferredPhysicsCandidateEnabled,
+            universe.DistributedAerodynamicsEnabled,
+            universe.PhysicalBodyFlapsEnabled,
+            universe.GravityGradientEnabled,
+            universe.VariableMassTransportEnabled,
+            universe.PropellantSloshEnabled,
+            ephemeris = universe.Environment.Ephemeris.Id,
+            controlDelta = delta,
+        }));
+        GD.Print($"[EDL] {label} state saved to {path}");
+    }
+
     private void RunCatchBurn(Vessel vessel, CelestialBody body, MissionManager? mission,
         Universe universe, double delta)
     {
@@ -1396,7 +1196,7 @@ public partial class EDLController : Control
             _landingBurnCoast = false;
             _landingBurnRelit = false;
             _landingEngineCount = 0;
-            _aeroReferenceInitialized = false;
+            _aeroReference.Reset();
             Visible = false;
         }
     }
