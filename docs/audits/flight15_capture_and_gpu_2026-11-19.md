@@ -850,6 +850,55 @@ the error grows at the reference slew rate (6°/s) and the ship ignites with its
 from the tower. The single-burn burn itself is physical, because `TowerCatchBurn` runs
 before that override. The glide that sets up its ignition is not.
 
+### Physical belly flop: trim limit, roll mode and glide authority (2026-11-23)
+
+These measurements come from the 4 km glide state, at catch mass (215 t), with the ship's
+own distributed hull and plate-flap model.
+
+**The 70° entry angle is not trimmable here.** The body-flap moment about the
+angle-of-attack axis, holding the flow each step:
+
+| Flap setting | Trim angle of attack |
+| --- | ---: |
+| Forward flaps out, aft flaps in | ≈ 77° |
+| Neutral (45°) | ≈ 92° |
+| Forward flaps in, aft flaps out | > 100° |
+
+The trim is statically stable. Flown physically at 70°, the aft flaps sat at 90° and the
+forward ones at 0–4° on trim alone, with nothing left to steer.
+
+**The belly flop has a lightly damped roll mode.** Rolling about the long axis at a belly
+flop is sideslip. Sideslip loads the two flap pairs unequally, which gives a restoring
+2.2 rad/s² per radian. The mode has a natural frequency of 1.47 rad/s and a period of
+4.3 s. With the EDL's catch gains (5.5/2.4 on a normalised command), the roll command
+banged between its limits and the rates reached about 1 rad/s.
+
+**A correction.** An earlier sweep in this investigation pinned the orientation built from
+the initial flow for 5 s. The trajectory turned under it by 3.5° of sideslip. The roll it
+measured with symmetric flaps, and the 1.2 rad/s² roll attributed to the flap allocator,
+came from that sideslip, not from the model. With the flow tracked each step, symmetric
+flaps give zero roll and the allocator returns symmetric deflections.
+
+**The physical descent law holds it.** The Flight 14/15 descent attitude law,
+`Flight14DescentController.ComputeGuidanceCommand` (here with the catch glide's lift
+reference), does three things:
+
+- it limits the angle of attack to a trim-feasible value, with the 80° Flight 15 terminal
+  angle and a 15° trim margin;
+- it slew- and lead-limits the belly-first reference;
+- it commands through `Flight14AerodynamicAttitude`.
+
+With it, the angle of attack settles at 80° and the peak rate falls from 1.4 to 0.33 rad/s.
+`Flight15PhysicalGlideTests` gates this.
+
+**What it exposes next.** The terminal glide guidance assumes 3 m/s² of side lift
+(`glideLiftAccelerationMps2`) and turns of 0.08 rad/s. Both were measured on the
+kinematic 70° attitude. At a physically trimmed 80° there is far less lift. The guidance
+keeps commanding turns the ship cannot make, the nose heading turns at about 0.25 rad/s,
+and the ship ignites facing away from the tower. The glide authority, the glide planner
+and the ignition lead must be re-identified on the physical belly flop. Only then can the
+game chapter drop the demonstration attitude.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km

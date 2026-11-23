@@ -30,6 +30,11 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
     private readonly BellyFlopAttitudeReference _attitude = new();
     private Vector3d _liftReference;
 
+    /// <summary>When set, the glide flies the physical Flight 14/15 belly-flop attitude law.</summary>
+    public Flight14DescentDefinition? PhysicalDescent { get; set; }
+    public double LastGlideAngleOfAttackDeg { get; private set; }
+    private Quaterniond _descentReference;
+    private bool _descentReferenceInitialized;
     public Universe Universe { get; }
     public Vessel Ship { get; }
     public TowerCatchBurnDefinition Definition { get; }
@@ -52,6 +57,10 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
     }
 
     /// <summary>Restores fixture <paramref name="capture"/> (SaveGameV2 plus its universe switches).</summary>
+    public static Flight14DescentDefinition Flight15Descent() =>
+        Flight14DescentDefinition.LoadFromJson(Path.Combine(DataDirectory(), "flight_profiles",
+            "starship_flight15_descent_estimate.json"));
+
     public static Flight15CatchBench Restore(string capture, TowerCatchBurnDefinition? definition = null)
     {
         string data = DataDirectory();
@@ -144,6 +153,28 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
             altitude, verticalSpeed, _earth.GetSurfaceGravity(), gForce, _liftReference, Definition);
         _liftReference = steering.LiftReference;
         var desired = _attitude.Update(Ship.Orientation, steering.AimAxis, velDir, interval);
+        if (PhysicalDescent != null)
+        {
+            // The physical belly-flop attitude stack of the Flight 14/15 descent: trim-feasible
+            // angle of attack, slew- and lead-limited belly-first reference, trimmed command.
+            var d = PhysicalDescent;
+            var flow = surfVel.Normalized;
+            if (!_descentReferenceInitialized) { _descentReference = Ship.Orientation; _descentReferenceInitialized = true; }
+            double angle = Flight14DescentController.TrimFeasibleAngleOfAttack(Ship, _earth, altitude, surfVel,
+                steering.LiftReference, d.TerminalAngleOfAttackDegrees, d.TrimMarginDegrees * MathUtils.DEG_TO_RAD);
+            LastGlideAngleOfAttackDeg = angle;
+            var axisReference = AerodynamicsModel.ComputeEntryAxisForLift(flow, steering.LiftReference, angle);
+            var target = AerodynamicsModel.ComputeBellyFirstOrientation(axisReference, flow);
+            _descentReference = AttitudeGuidance.SlewQuaternion(_descentReference, target, interval, d.ReferenceSlewRateRadPerSecond);
+            _descentReference = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(_descentReference, flow, angle);
+            double lead = AttitudeGuidance.ErrorAngleRadians(Ship.Orientation, _descentReference);
+            double leadLimit = d.MaximumReferenceLeadDegrees * MathUtils.DEG_TO_RAD;
+            if (lead > leadLimit) _descentReference = Ship.Orientation.Slerp(_descentReference, leadLimit / lead).Normalize();
+            Ship.PilotRateEnvelopeEnabled = false;
+            Ship.PitchYawRoll = Flight14AerodynamicAttitude.ComputeCommand(Ship, _earth, _descentReference,
+                d.TrimOnsetDynamicPressurePa, d.TrimFullDynamicPressurePa);
+            return;
+        }
         Ship.PitchYawRoll = AttitudeGuidance.ComputeCommand(Ship.Orientation, desired, Ship.AngularVelocity,
             proportionalGain: CatchAeroProportionalGain, dampingGain: CatchAeroDampingGain, allowRoll: true);
     }
