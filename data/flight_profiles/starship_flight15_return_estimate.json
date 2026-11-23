@@ -1,0 +1,22 @@
+{
+  "id": "starship-flight15-orbital-return-engineering-estimate",
+  "status": "engineering-estimate",
+  "assumptions": "Initial finite-burn diagnostic after the simulated Flight 15 payload deployment. The earliest ignition command precedes the analytical impulse epoch to allow for startup and finite burn duration. Periapsis and bank are initial commands from the reduced-order targeting study, with the bank sign converted to a rotation about the velocity. Retain the remaining main-tank propellant. The descending 70 km geodetic witness measures atmospheric entry without prescribing location or inserting a new state.",
+  "earliestDeorbitMissionSeconds": 78549,
+  "alignmentLeadSeconds": 120,
+  "targetPeriapsisAltitudeM": 53333,
+  "maximumTargetPeriapsisAltitudeM": 110000,
+  "minimumBurnAltitudeM": 180000,
+  "maximumBurnSeconds": 120,
+  "maximumShutdownSeconds": 10,
+  "minimumRemainingPropellantKg": 15000,
+  "entryInterfaceAltitudeM": 120000,
+  "diagnosticEndAltitudeM": 70000,
+  "minimumEntrySpeedMps": 6500,
+  "maximumMissionSeconds": 82549,
+  "entryReferenceRateRadPerSecond": 0.025,
+  "deorbitReferenceRateRadPerSecond": 0.04,
+  "mainTankVentRateKgPerS": 0,
+  "entryAngleOfAttackDegrees": 70,
+  "entryBankDegrees": -62.89
+}

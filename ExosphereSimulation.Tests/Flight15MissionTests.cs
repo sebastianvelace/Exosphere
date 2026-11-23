@@ -1,0 +1,52 @@
+namespace ExosphereSimulation.Tests;
+
+using Exosphere.Simulation.Flight;
+using Xunit;
+using Xunit.Abstractions;
+
+public sealed class Flight15MissionTests(ITestOutputHelper output)
+{
+    [Fact]
+    public void ReturnEstimateAcceptsSignedBankWithinOneHalfTurn()
+    {
+        var definition = Flight15Mission.LoadReturnEstimate(SaturnVAscentFlight.DataDirectory());
+        Assert.InRange(definition.EntryBankDegrees, -180, -1);
+        definition.EntryBankDegrees = -181;
+        Assert.Throws<InvalidDataException>(definition.Validate);
+    }
+
+    [Fact]
+    public void DescentEstimateHasAValidBankAndFollowsTheReturnWitness()
+    {
+        var data = SaturnVAscentFlight.DataDirectory();
+        var descent = Flight15Mission.LoadDescentEstimate(data);
+        var returning = Flight15Mission.LoadReturnEstimate(data);
+        Assert.True(descent.DiagnosticEndAltitudeM < returning.DiagnosticEndAltitudeM);
+        Assert.InRange(descent.NominalBankDegrees, -180, 180);
+        descent.NominalBankDegrees = 181;
+        Assert.Throws<InvalidDataException>(descent.Validate);
+    }
+
+    [Fact]
+    public void GuidedFlightFromPadTwoDeploysTheFullManifest()
+    {
+        var run = Flight15Mission.CreateAscent(SaturnVAscentFlight.DataDirectory());
+        var exploration = new Flight14Exploration(run, Flight15Mission.AscentProfileId);
+        Assert.True(run.Ship.IsGroundHeld);
+        Assert.False(run.Guidance.InjectAscentFaults);
+
+        run.Universe.TimeScale = 100;
+        while (!exploration.IsStopped && run.Universe.CurrentTime <= run.PayloadDefinition.MaximumMissionSeconds + 5)
+            exploration.AdvanceFrame(1.0, 100);
+
+        output.WriteLine($"launch={run.Controller.Phase} deployment={run.PayloadController.Phase} "
+            + $"separation={run.Controller.StagingElapsedSeconds:F2}s insertion={run.Controller.OrbitElapsedSeconds:F2}s");
+        Assert.Null(exploration.BlockReason);
+        Assert.True(exploration.IsTerminal);
+        Assert.NotNull(run.Controller.DetachedBooster);
+        Assert.Equal(Flight14LaunchPhase.OrbitReady, run.Controller.Phase);
+        Assert.Equal(Flight15Mission.PayloadCount, run.PayloadController.Releases.Count);
+        Assert.All(run.PayloadController.Releases, release =>
+            Assert.True(release.PeriapsisAltitudeM >= run.PayloadDefinition.MinimumPeriapsisAltitudeM));
+    }
+}

@@ -13,6 +13,8 @@ rg -q 'float effectiveHeight = Size.Y;' "$menu" || fail "layout is not height aw
 rg -q 'Name = "HomeScroll"' "$menu" || fail "short windows cannot scroll navigation"
 rg -q 'Name = "ModalScroll"' "$menu" || fail "mission lists cannot scroll"
 rg -q 'SuspendBackgroundFocus\(\);' "$menu" || fail "modal keyboard isolation missing"
+rg -q 'FlightProfileId = Flight15Mission.AscentProfileId' "$menu" || fail "Flight 15 ascent route is missing"
+rg -q 'Flight15Mission.CatchProfileId' "$menu" || fail "Flight 15 entry route is missing"
 rg -q 'flight14_launch_preview' "$menu" || fail "Flight 14 preview launch is missing"
 rg -q 'FlightProfileId = Flight14Exploration.ProfileId' "$menu" || fail "Flight 14 exploration route is missing"
 rg -q 'vehicle.SiteId, "manual", "sandbox"' "$menu" || fail "free flight bypasses vehicle selection"

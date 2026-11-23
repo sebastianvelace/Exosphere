@@ -142,7 +142,7 @@ public sealed class Flight14LaunchController : IPhysicsStepController
         if (elapsed > _guidance.MaximumMissionSeconds) { Block("launch-duration-envelope"); return; }
         if (Phase is Flight14LaunchPhase.BoosterAscent or Flight14LaunchPhase.HotStage)
         {
-            if (!_boosterFault && elapsed >= _guidance.BoosterFaultSeconds)
+            if (_guidance.InjectAscentFaults && !_boosterFault && elapsed >= _guidance.BoosterFaultSeconds)
             {
                 // Synthetic failed outer mount, not a claimed Flight 14 fault identity.
                 _booster.FailEngine(_booster.EngineStates[^1].InstanceId, "F14_ESTIMATED_ASCENT_OUT");
@@ -177,7 +177,7 @@ public sealed class Flight14LaunchController : IPhysicsStepController
         double apo = orbit.Apoapsis-_body.Radius, pe = orbit.Periapsis-_body.Radius;
         if (Phase == Flight14LaunchPhase.ShipAscent)
         {
-            if (!_vacuumFault && elapsed >= _guidance.VacuumFaultSeconds)
+            if (_guidance.InjectAscentFaults && !_vacuumFault && elapsed >= _guidance.VacuumFaultSeconds)
             {
                 _engines.FailEngine(_engines.EngineStates[3].InstanceId, "F14_ESTIMATED_VAC_OUT");
                 _vacuumFault = true;

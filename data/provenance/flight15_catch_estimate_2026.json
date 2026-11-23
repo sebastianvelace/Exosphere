@@ -1,0 +1,93 @@
+{
+  "manifestId": "flight15-catch-estimate-2026",
+  "records": [
+    {
+      "dataId": "starship_v3_command_flight12",
+      "field": "catchPinOffsetYM",
+      "status": "derived",
+      "value": -9.5,
+      "source": "SpaceX Flight 15 return plan as reported by Autonocion and Tesla Oracle (Nov 2026): two catch fittings directly under the forward flaps, each protruding about one foot (Eric Berger, Ars Technica)",
+      "accessedDate": "2026-11-19",
+      "variant": "Starship V3 simulation",
+      "conditions": "Pin centre 0.4 m below the lower end of the modelled forward-flap hinge line (hinge_y_m −6.25, length 5.7 m), on the same ±Z sides as the flaps. With a 4.4 m lateral offset and 0.4 m radius the pin stands 0.3 m proud of the 4.5 m hull. The former +5.0 m station sat in the ogive, where the hull radius is below the pin offset.",
+      "uncertainty": "Station along the axis is inferred from the description; SpaceX published no dimensions."
+    },
+    {
+      "dataId": "starship_command",
+      "field": "catchPinOffsetYM",
+      "status": "derived",
+      "value": -9.25,
+      "source": "Same Flight 15 fitting description, applied to the earlier ship nose",
+      "accessedDate": "2026-11-19",
+      "variant": "Starship simulation",
+      "conditions": "Pin centre just below the lower end of the modelled forward-flap hinge line (hinge_y_m −6.0, length 5.7 m).",
+      "uncertainty": "Inferred station; SpaceX published no dimensions."
+    },
+    {
+      "dataId": "starship_v3_command_flight12",
+      "field": "catchPinSpringStiffnessNPerM",
+      "status": "estimated",
+      "value": 2500000,
+      "source": "Exosphere two-pin static load budget for the Flight 15 entry chapter",
+      "accessedDate": "2026-11-19",
+      "variant": "Starship V3 simulation",
+      "conditions": "At 225 t and 9.81 m/s², two matched supports deflect about 0.44 m each. The existing 0.60 m travel, 3 MN load and 5 m cradle radius limits apply. Guidance cuts the engines only when the predicted first compression peak stays within 90 % of the travel and load limits.",
+      "uncertainty": "Effective compliance chosen for the simulated mass envelope. Actual pin, arm and vehicle stiffness and loads are unpublished in the mission material."
+    },
+    {
+      "dataId": "super_heavy_v3_booster_flight12",
+      "field": "catchPinSpringStiffnessNPerM",
+      "status": "estimated",
+      "value": 4200000,
+      "source": "Exosphere two-pin static load budget for a Super Heavy catch",
+      "accessedDate": "2026-11-19",
+      "variant": "Super Heavy V3 simulation",
+      "conditions": "Sized for a 300 t catch envelope (214 t dry part plus landing reserve): two matched supports deflect 0.35 m each under 9.81 m/s². The former 1.2 MN/m default deflected 0.87 m at the 214 t dry mass, beyond the 0.60 m travel, so a settle that rejects over-travel could never accept a booster.",
+      "uncertainty": "Effective compliance chosen for the simulated mass envelope. Actual pin, arm and vehicle stiffness and loads are unpublished."
+    },
+    {
+      "dataId": "super_heavy_booster",
+      "field": "catchPinSpringStiffnessNPerM",
+      "status": "estimated",
+      "value": 4200000,
+      "source": "Exosphere two-pin static load budget for a Super Heavy catch",
+      "accessedDate": "2026-11-19",
+      "variant": "Super Heavy simulation",
+      "conditions": "Same 300 t catch envelope and 0.35 m static deflection as the V3 booster.",
+      "uncertainty": "Effective compliance chosen for the simulated mass envelope. Actual pin, arm and vehicle stiffness and loads are unpublished."
+    },
+    {
+      "dataId": "starbase_post_deluge",
+      "field": "catchTailClearanceM",
+      "status": "estimated",
+      "value": 5.0,
+      "source": "Flight 5 booster and Flight 15 ship catch coverage: the caught vehicle hangs above Orbital Launch Pad 2's mount",
+      "accessedDate": "2026-11-19",
+      "variant": "Starbase Pad 2 simulation",
+      "conditions": "The carriage rides to the vehicle's pin height plus this clearance above the 19.8 m mount top. The Flight 15 ship then catches at about 62 m, the Super Heavy near 90 m, instead of the former fixed 55 m that left the ship's tail 3 m above grade.",
+      "uncertainty": "No published catch height or clearance; reports only state that the ship hung above the mount."
+    },
+    {
+      "dataId": "starbase_post_deluge",
+      "field": "armOpenHalfGapM",
+      "status": "estimated",
+      "value": 10.0,
+      "source": "Flight 15 coverage: the ship descended between open arms that then closed onto its two fittings",
+      "accessedDate": "2026-11-19",
+      "variant": "Starbase Pad 2 simulation",
+      "conditions": "Half the open gap from the cradle centreline. With a 4.5 m hull the axis may be up to 5.5 m to either side and the closing arms still stop against the hull under the fittings. Replaces the 5 m capture disc, which accepted only ±0.6 m along the pin axis.",
+      "uncertainty": "Pad 2 arm opening is unpublished; SpaceX states only that the arms were shortened and made faster."
+    },
+    {
+      "dataId": "starbase_post_deluge",
+      "field": "armRailWidthM",
+      "status": "estimated",
+      "value": 1.5,
+      "source": "Image-derived arm proportions; catch fittings protrude about one foot (Eric Berger, Ars Technica, via Autonocion)",
+      "accessedDate": "2026-11-19",
+      "variant": "Starbase Pad 2 simulation",
+      "conditions": "Rail on top of each arm from the hull outward. A fitting rests on it while it stands proud of the hull over the rail, which bounds roll about the axis to roughly ±20°.",
+      "uncertainty": "Arm cross-section is unpublished."
+    }
+  ]
+}

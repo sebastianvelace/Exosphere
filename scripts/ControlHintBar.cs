@@ -5,8 +5,8 @@ using Exosphere.Simulation.Flight;
 using Godot;
 
 /// <summary>
-/// Always-visible strip of the keys that matter right now, above the bottom band (the
-/// F1 sheet hides at ignition and lists everything). It follows the flight: pad, ascent,
+/// Always-visible strip of the keys that matter right now, above the bottom band
+/// (F1 opens the paused controls reference). It follows the flight: pad, ascent,
 /// orbit, near a docking target, descent, Mission Control flying.
 /// </summary>
 public partial class ControlHintBar : Control
@@ -54,6 +54,12 @@ public partial class ControlHintBar : Control
             && bridge.ActiveFlightProfileId != "manual";
         var hints = new List<string>();
 
+        if (bridge.IsGuidedStarshipExploration)
+        {
+            hints.Add(T(", .  TIME ACCELERATION", ", .  ACELERAR TIEMPO"));
+            hints.Add(T("DRAG / SCROLL  CAMERA", "ARRASTRAR / RUEDA  CÁMARA"));
+            return hints;
+        }
         if (HistoricalFlightProfileController.Instance?.IsEngaged == true)
         {
             hints.Add(T("K  TAKE CONTROL", "K  TOMAR EL CONTROL"));

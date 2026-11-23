@@ -190,6 +190,16 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
             dataDirectory, "flight_profiles/starship_flight14_guidance_estimate.json"));
         var reference = Flight14MissionDefinition.LoadFromJson(Path.Combine(
             dataDirectory, "flight_profiles/starship_flight14_2026.json"));
+        var payload = Flight14PayloadDefinition.LoadFromJson(Path.Combine(dataDirectory,
+            "flight_profiles/starship_flight14_payload_estimate.json"));
+        return CreateLaunch(dataDirectory, universe, guidance, payload, reference.PayloadCount,
+            reference.LaunchSiteId, "Flight 14 engineering launch diagnostic");
+    }
+
+    internal static Flight14LaunchDiagnostic CreateLaunch(string dataDirectory, Universe? universe,
+        Flight14LaunchGuidanceDefinition guidance, Flight14PayloadDefinition payloadDefinition,
+        int referencePayloadCount, string launchSiteId, string vesselName)
+    {
         CelestialBody earth;
         if (universe == null)
         {
@@ -203,20 +213,17 @@ public sealed record Flight14LaunchDiagnostic(Universe Universe, CelestialBody E
         else
         {
             if (universe.Vessels.Count != 0 || universe.PhysicsStepController != null)
-                throw new InvalidOperationException("Flight 14 requires an unowned, empty launch universe.");
+                throw new InvalidOperationException("A guided launch requires an unowned, empty launch universe.");
             earth = universe.GetBody("earth")
-                ?? throw new InvalidOperationException("Flight 14 requires Earth.");
+                ?? throw new InvalidOperationException("A guided launch requires Earth.");
         }
         var ship = VehicleVariantDefinition.LoadFromJson(Path.Combine(dataDirectory,
             "vehicles", guidance.BaselineVehicleFile)).Build(PartCatalog.LoadFromDirectory(
-                Path.Combine(dataDirectory, "parts"))).ToVessel("Flight 14 engineering launch diagnostic");
-        var payloadDefinition = Flight14PayloadDefinition.LoadFromJson(Path.Combine(dataDirectory,
-            "flight_profiles/starship_flight14_payload_estimate.json"));
-        if (payloadDefinition.Count != reference.PayloadCount)
+                Path.Combine(dataDirectory, "parts"))).ToVessel(vesselName);
+        if (payloadDefinition.Count != referencePayloadCount)
             throw new InvalidDataException("Estimated manifest count differs from the source-backed reference.");
         var payloadIds = payloadDefinition.AttachTo(ship, dataDirectory);
-        var site = LaunchSite.LoadFromJson(Path.Combine(dataDirectory,
-            "launch_sites", reference.LaunchSiteId+".json"));
+        var site = LaunchSite.LoadFromJson(Path.Combine(dataDirectory, "launch_sites", launchSiteId + ".json"));
         var pad = site.GetPosition(earth, universe.CurrentTime);
         var up = earth.GetGeodeticUp(pad);
         double offset = LaunchComplexSpec.StarbasePostDeluge.VehicleInterfaceElevation;

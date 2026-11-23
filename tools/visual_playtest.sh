@@ -841,7 +841,6 @@ public partial class _PlaytestShot : Node
     };
     int _kennedyFarCaseIndex = -1;
     bool _kennedyFarCaptureQueued;
-    bool _hudHelpDismissed;
     double _edlScenarioStart, _retroStart = -1.0, _nextEdlTelemetry;
     double _nextFullTelemetry;
     double _lastApproachSpeed = double.NaN;
@@ -1042,15 +1041,6 @@ public partial class _PlaytestShot : Node
         // Dismiss before the first rendered frame that can become a milestone. Calling this
         // only inside CaptureNow is one frame too late because the viewport texture still
         // contains the previous draw with the production help sheet visible.
-        if (!_hudHelpDismissed)
-        {
-            var hud = GetTree().Root.FindChild("HUDController", true, false) as HUDController;
-            if (hud != null)
-            {
-                hud.DismissPadHelp();
-                _hudHelpDismissed = true;
-            }
-        }
         _frame++;
 
         double nowWallSeconds = Time.GetTicksMsec() / 1000.0;
@@ -4495,12 +4485,6 @@ public partial class _PlaytestShot : Node
 
     private void CaptureNow(string slug)
     {
-        // The production HUD intentionally opens the mission-controls sheet on the pad.
-        // A visual milestone must show the launch complex, not the instructional overlay;
-        // dismiss only that sheet through the public HUD API and leave all flight HUD data
-        // intact for the capture.
-        var hud = GetTree().Root.FindChild("HUDController", true, false) as HUDController;
-        hud?.DismissPadHelp();
           LogHotStageVisualTelemetry(slug);
           LogReentryVisualTelemetry(slug);
           LogLaunchComplexVisualTelemetry(slug);

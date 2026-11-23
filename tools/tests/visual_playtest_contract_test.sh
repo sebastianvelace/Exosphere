@@ -132,10 +132,6 @@ if ! grep -q 'SUMMARY reason=SMOKE_OK' "$HARNESS_SCRIPT" \
   echo "FAIL smoke mode does not prove the single hero launch complex" >&2
   exit 1
 fi
-if ! grep -q 'DismissPadHelp()' "$HARNESS_SCRIPT"; then
-  echo "FAIL visual captures can be contaminated by the production mission-controls overlay" >&2
-  exit 1
-fi
 if ! grep -q 'simultaneous delivered Super Heavy and Ship plume output' "$HARNESS_SCRIPT" \
   || ! grep -q 'VISUAL_PLUME ' "$HARNESS_SCRIPT"; then
   echo "FAIL hot-stage gate does not verify dual delivered plume telemetry" >&2

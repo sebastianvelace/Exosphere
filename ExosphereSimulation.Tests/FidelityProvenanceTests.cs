@@ -59,6 +59,9 @@ public sealed class FidelityProvenanceTests
         { "body-flap-aerodynamics", "newtonianMachOnset", BodyFlapAerodynamics.NewtonianMachOnset },
         { "mercury-atlas6-pitch-tape", "boosterCutoffElevationDeg", MercuryAtlasFlightProfile.BoosterCutoffElevationDegrees },
         { "mercury-atlas6-pitch-tape", "insertionElevationDeg", MercuryAtlasFlightProfile.InsertionElevationDegrees },
+        { "starbase_post_deluge", "catchTailClearanceM", LaunchComplexSpec.StarbaseCatchTailClearanceM },
+        { "starbase_post_deluge", "armOpenHalfGapM", LaunchComplexSpec.StarbaseArmOpenHalfGapM },
+        { "starbase_post_deluge", "armRailWidthM", LaunchComplexSpec.StarbaseArmRailWidthM },
     };
 
     [Theory]

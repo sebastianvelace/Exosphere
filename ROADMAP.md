@@ -28,8 +28,20 @@ Base tecnica cerrada en `main`:
   isolation and Escape return are covered by real-framebuffer menu checks.
   Home content is centered horizontally and vertically; mission information lives
   in its briefing rather than a side panel.
-  Flight 14 now exposes an automatic engineering exploration from the featured
-  briefing: loaded ascent, insertion, 26 payload releases and estimated ship water entry.
+  Flight 15 is now featured with a modeled ascent and 26 satellite deployments,
+  plus a separate experimental entry and tower approach from a modeled 70 km state.
+  The V3 vehicle and controls use engineering estimates. The nominal entry chapter
+  now settles on both tower pins within the modeled travel and load limits.
+  A continuous probe validates the finite deorbit and actuator-controlled descent
+  through 2.5 km from the original deployment state. The full-world trial reaches
+  the Starbase area with stable attitude. The opt-in single-burn catch
+  (`EXOSPHERE_SINGLE_BURN_CATCH=1`) now catches in about 38 s at 50/60/120 Hz with
+  three, two, then one Raptor and no relight (Flight 15 flew about 18 s). The powered handoff into the catch
+  corridor, in-game continuous mission, and booster diversion remain open.
+  See the [Flight 15 verification](docs/audits/flight15_capture_and_gpu_2026-11-19.md).
+  Flight 14 remains available from the Flight 15 briefing and exposes an automatic
+  engineering exploration: loaded ascent, insertion, 26 payload releases and estimated
+  ship water entry.
   A presentation shortcut becomes available after all 26 payload releases: **SKIP TO
   ENTRY** advances the continuous physical mission and pauses at its entry interface.
   Bounded work keeps cancel/menu usable; the 3D view hides during advancement and
@@ -296,7 +308,7 @@ hacer.
    estructurales".
    Plan original: Volver al inicio de la fase, quickload visible, asistencias
    opcionales (propelente infinito, sin fallas estructurales) puntuadas aparte.
-8. ✅ **Entrenamiento.** (2026-10-23) Cuatro ejercicios en Escenarios → Entrenamiento
+8. ✅ **Entrenamiento.** (2026-10-23) Cuatro ejercicios en Entrenamiento desde el menú principal
    (circularizar, acoplar desde 200 m, LOI, alunizar desde 15 km), cada uno con instrucciones,
    estado sembrado una sola vez y meta evaluada. Jugando el de acople se corrigió la
    "deriva" falsa de 0,23 m/s (se medía en el marco inercial; ahora en el orbital del

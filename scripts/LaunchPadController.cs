@@ -61,6 +61,9 @@ public partial class LaunchPadController : Node3D
     private bool? _lastNightFloodlightsState;
     private double _catchStateTimer;
     private float _lastChopstickScale = float.NaN;
+    // Every arm-assembly node with its Y at the idle carriage height (Spec.ArmHeightM).
+    private readonly List<(Node3D node, float idleY)> _carriageNodes = new();
+    private double _carriageHeightM = double.NaN;
 
     private const double CatchPresentationPeriodSeconds = 1.0 / 20.0;
     // The launch complex is a local-scene presentation. Once the active vessel is more
@@ -131,6 +134,24 @@ public partial class LaunchPadController : Node3D
             RefreshCatchState();
         }
         UpdateChopstickCatchFeedback(safeDelta);
+    }
+
+    /// <summary>
+    /// Raises the chopstick carriage to the simulation's catch height for the vehicle being
+    /// caught. The physical cradle already moved (<c>LaunchComplexSpec.GetCatchCarriageHeightM</c>);
+    /// this keeps the rendered arms on the same plane as the pins.
+    /// </summary>
+    public void SetCatchCarriageHeightM(double heightM)
+    {
+        if (!double.IsFinite(heightM) || System.Math.Abs(heightM - _carriageHeightM) < 0.01) return;
+        _carriageHeightM = heightM;
+        float dy = (float)((heightM - Spec.ArmHeightM) * U);
+        foreach (var (node, idleY) in _carriageNodes)
+        {
+            var pos = node.Position;
+            pos.Y = idleY + dy;
+            node.Position = pos;
+        }
     }
 
     /// <summary>
@@ -1305,9 +1326,13 @@ public partial class LaunchPadController : Node3D
             new Vector3(towerX, baseY + towerH + rodHeight * 0.5f, towerZ));
 
         // ── Chopstick catch arms (two horizontal arms partway up) ─────────
-        // Real arms sit ~40–70 m up; here ~55 m so they're above the OLM table
-        // and read as the catch hardware. They point toward the OLM (+X side).
+        // Built at the idle carriage height; SetCatchCarriageHeightM rides the assembly
+        // up to the catch height of the vehicle being caught. They point toward the OLM (+X).
+        int carriageFirstChild = GetChildCount();
         BuildChopstickArms(towerX, towerZ, halfW, baseY, darkSteel, steel);
+        for (int i = carriageFirstChild; i < GetChildCount(); i++)
+            if (GetChild(i) is Node3D carriageNode)
+                _carriageNodes.Add((carriageNode, carriageNode.Position.Y));
 
         BuildTowerServiceDetails(towerX, towerZ, halfW, baseY, towerH, steel, darkSteel);
 

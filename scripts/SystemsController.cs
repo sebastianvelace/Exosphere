@@ -130,7 +130,7 @@ public partial class SystemsController : Node
         bool systemsAlert = (isActive && ControlLimited)
             || runtime.HasSystemsAlert
             || (!runtime.Comms.HasSignal && !runtime.Comms.PlasmaBlackout);
-        int crewCount = bridge?.IsFlight14Exploration == true ? vessel.Crew.Count
+        int crewCount = bridge?.IsGuidedStarshipExploration == true ? vessel.Crew.Count
             : vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
         double? systemsDeadline = runtime.GetNextAlertDeadlineSeconds(crewCount);
 
@@ -471,7 +471,7 @@ public partial class SystemsController : Node
         double processedSimDelta = bridge.LastProcessedSimulationSeconds;
         if (processedSimDelta > 0.0)
         {
-            int crewCount = bridge.IsFlight14Exploration ? vessel.Crew.Count
+            int crewCount = bridge.IsGuidedStarshipExploration ? vessel.Crew.Count
                 : vessel.Crew.Count > 0 ? vessel.Crew.Count : 4;
             CurrentSystemsPhase = MapMissionPhase(
                 MissionManager.Instance?.Phase ?? MissionPhase.PRE_LAUNCH);

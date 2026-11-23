@@ -25,7 +25,8 @@ public sealed class Flight14ReturnDefinition
     public double MainTankVentRateKgPerS { get; set; }
     /// <summary>
     /// Entry attitude between the coast and the diagnostic endpoint: angle of attack (deg; 0
-    /// keeps the nominal lift-up entry axis) and bank of the lift vector from local up (deg).
+    /// keeps the nominal lift-up entry axis) and signed rotation about the air-relative
+    /// velocity from lift-up (deg).
     /// </summary>
     public double EntryAngleOfAttackDegrees { get; set; }
     public double EntryBankDegrees { get; set; }
@@ -50,7 +51,7 @@ public sealed class Flight14ReturnDefinition
     public void Validate()
     {
         if (!double.IsFinite(EntryAngleOfAttackDegrees) || EntryAngleOfAttackDegrees < 0 || EntryAngleOfAttackDegrees > 90
-            || !double.IsFinite(EntryBankDegrees) || EntryBankDegrees < 0 || EntryBankDegrees > 180)
+            || !double.IsFinite(EntryBankDegrees) || System.Math.Abs(EntryBankDegrees) > 180)
             throw new InvalidDataException("Invalid Flight 14 entry attitude.");
         double[] values = [EarliestDeorbitMissionSeconds, AlignmentLeadSeconds,
             TargetPeriapsisAltitudeM, MaximumTargetPeriapsisAltitudeM, MinimumBurnAltitudeM, MaximumBurnSeconds,

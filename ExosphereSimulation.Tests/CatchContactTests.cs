@@ -1,6 +1,7 @@
 namespace ExosphereSimulation.Tests;
 
 using Exosphere.Simulation;
+using Exosphere.Simulation.Flight;
 using Exosphere.Simulation.Math;
 using Exosphere.Simulation.Parts;
 using Exosphere.Simulation.Physics;
@@ -8,6 +9,42 @@ using Xunit;
 
 public sealed class CatchContactTests
 {
+    [Fact]
+    public void TwoPinsCannotSettleWhenTheirStaticCompressionExceedsTheTravelLimit()
+    {
+        var (universe, vessel) = CreateCatchCase(verticalSpeed: 0.0, lateralOffset: 0.0,
+            massKg: 200_000.0, gm: 3.986e14);
+        var pin = vessel.CatchContactPoints[0];
+        var body = universe.GetDominantBody(vessel.Position);
+        var cradle = vessel.CatchTargetPositionWorld;
+        double gravity = body.GetGravityAt(cradle).Magnitude;
+        double staticCompression = vessel.TotalMass * gravity / (2.0 * pin.SpringStiffnessNPerM);
+        vessel.Position = cradle + Vector3d.Up * (pin.ContactRadiusM - pin.LocalPositionFromDatum.Y - staticCompression);
+        for (int i = 0; i < 35; i++) universe.Tick(0.02);
+
+        var contact = Assert.IsType<ContactWrench>(vessel.LastCatchContact);
+        Assert.Equal(2, contact.ContactCount);
+        Assert.True(contact.HasOverTravel);
+        Assert.False(vessel.IsCaught);
+    }
+
+    [Theory]
+    [InlineData(0.3, true)]
+    [InlineData(0.7, false)]
+    public void TowerApproachRequiresBothPinsInsideTheContactEnvelope(double sidewaysOffset, bool bothFit)
+    {
+        var (_, vessel) = CreateCatchCase(verticalSpeed: 0.0, lateralOffset: 0.0);
+        var pins = vessel.CatchContactPoints;
+        var datumOffset = new Vector3d(0.0,
+            pins[0].ContactRadiusM + 0.25 - pins[0].LocalPositionFromDatum.Y, sidewaysOffset);
+
+        var geometry = TowerCatchPinGeometry.Measure(pins, datumOffset, Quaterniond.Identity, Vector3d.Up);
+
+        Assert.Equal(bothFit, geometry.BothPinsFit);
+        Assert.Equal(0.25, geometry.FirstPinGapM, 10);
+        Assert.Equal(0.25, geometry.LastPinGapM, 10);
+    }
+
     [Fact]
     public void QueryWithinCaptureRadiusLocksToCradleHeight()
     {
@@ -219,7 +256,7 @@ public sealed class CatchContactTests
     }
 
     private static (Universe universe, Vessel vessel) CreateCatchCase(
-        double verticalSpeed, double lateralOffset)
+        double verticalSpeed, double lateralOffset, double massKg = 38_000.0, double gm = 0.0)
     {
         // A synthetic, non-rotating, atmosphere-free body: this test's scope is the
         // contact/settle logic, not aerodynamics or thermal loads. Reusing real earth.json
@@ -231,13 +268,14 @@ public sealed class CatchContactTests
             Id = "catch-test-body",
             Mass = 5.972e24,
             Radius = 6.371e6,
+            GM = gm,
         };
         var vessel = new Vessel { ReferenceBodyId = body.Id, SASEnabled = false };
         var nose = new Part(new PartDefinition
         {
             Id = "catch-test-nose",
             CategoryStr = "command",
-            MassDry = 38_000.0,
+            MassDry = massKg,
             LengthM = 19.0,
             DiameterM = 9.0,
             CatchPinLateralOffsetM = 4.4,

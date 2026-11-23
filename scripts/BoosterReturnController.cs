@@ -59,7 +59,7 @@ public partial class BoosterReturnController : Node
     {
         if (!_wired) TryWire();
         var bridge = SimulationBridge.Instance;
-        if (bridge?.Universe == null || bridge.IsFlight14Exploration) return;
+        if (bridge?.Universe == null || bridge.IsGuidedStarshipExploration) return;
 
         if (Booster == null)
         {
@@ -140,7 +140,7 @@ public partial class BoosterReturnController : Node
     private void OnVesselStaged(string detachedVesselId)
     {
         var bridge = SimulationBridge.Instance;
-        if (bridge?.Universe == null || bridge.IsFlight14Exploration) return;
+        if (bridge?.Universe == null || bridge.IsGuidedStarshipExploration) return;
 
         var debris = bridge.Universe.Vessels.FirstOrDefault(v => v.Id == detachedVesselId);
         if (debris == null || !BoosterReturnGuidance.IsStarshipBooster(debris))
@@ -307,10 +307,12 @@ public partial class BoosterReturnController : Node
         var site = bridge.LaunchSiteOrNull;
         if (site == null) return;
         var cradle = LaunchComplexSpec.StarbasePostDeluge.GetCatchCradlePosition(
-            site, body, bridge.Universe.CurrentTime);
+            site, body, bridge.Universe.CurrentTime, booster);
         var frame = site.GetLocalFrame(body, bridge.Universe.CurrentTime);
         booster.CatchTargetPositionWorld = cradle;
         booster.CatchTargetUpWorld = frame.Up;
+        booster.CatchTargetRails = LaunchComplexSpec.StarbasePostDeluge
+            .GetCatchArmRails(site, body, bridge.Universe.CurrentTime);
         booster.CatchTargetVelocityWorld =
             body.Velocity + body.GetSurfaceVelocity(cradle);
     }

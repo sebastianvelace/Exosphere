@@ -1,0 +1,22 @@
+{
+  "id": "starship-flight15-payload-engineering-estimate",
+  "status": "engineering-estimate",
+  "partFile": "starlink_v3_flight14_estimate.json",
+  "count": 26,
+  "sourceUrl": "https://www.spacex.com/launches/starship-flight-15/",
+  "assumptions": "SpaceX published 26 satellites and a planned deployment window from T+35:01 to T+01:17:40. Uniform spacing between those bounds is a simulation estimate. Mass, stowage and opening impulse use the existing V3 engineering model.",
+  "firstReleaseMissionSeconds": 2101,
+  "releaseIntervalSeconds": 102.36,
+  "maximumMissionSeconds": 5400,
+  "minimumPeriapsisAltitudeM": 220000,
+  "minimumAltitudeM": 180000,
+  "maximumReleaseAngularRateRadPerSecond": 0.02,
+  "settleAfterInsertionSeconds": 5,
+  "stowageFirstYM": -7.5,
+  "stowageSpacingM": 0.6,
+  "openingVelocityLocalMps": [
+    1,
+    0,
+    0
+  ]
+}

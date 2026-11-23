@@ -7,9 +7,16 @@ using Exosphere.Simulation.Flight;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 if (args.Length == 3 && args[2] == "--booster")
     return Flight14BoosterProbe.Execute(args[0], args[1]);
+if (args.Length == 3 && args[2] == "--flight15-return")
+    return Flight15ReturnProbe.Execute(args[0], args[1]);
+if (args.Length == 3 && args[2] == "--flight15-descent")
+    return Flight15ReturnProbe.Execute(args[0], args[1], includeDescent: true);
+if (args.Length == 3 && args[2] == "--flight15-descent-world")
+    return Flight15ReturnProbe.Execute(args[0], args[1], includeDescent: true, useFullUniverse: true);
 if (args.Length is < 2 or > 4)
 {
     Console.Error.WriteLine("Usage: Flight14TrajectoryProbe <data-directory> <output-directory> [frames-per-second] [--return|--descent|--landing]; or <data-directory> <output-directory> --booster");
+    Console.Error.WriteLine("       Flight14TrajectoryProbe <data-directory> <output-directory> --flight15-return|--flight15-descent|--flight15-descent-world");
     return 2;
 }
 string data = Path.GetFullPath(args[0]);

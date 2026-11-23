@@ -1,0 +1,11 @@
+{
+  "upstreamDistanceM": 178353,
+  "northOffsetM": 3066,
+  "singleBurn": {
+    "upstreamDistanceM": 171708.0,
+    "northOffsetM": -2065.0,
+    "catchEntryMassKg": 215000
+  },
+  "status": "engineering-estimate",
+  "assumptions": "Independent 70 km V3 entry scenario. Initial position estimated against the existing physics and controls. The modeled chapter supports a two-pin tower catch. A miss can divert to a landing. SpaceX did not publish the state used here. The default chapter enters with a 12 % main-tank fill and flies the legacy powered descent. The singleBurn block (EXOSPHERE_SINGLE_BURN_CATCH=1) enters at 215 t, the single-burn bench mass, because the flown catch used one 18 s landing burn instead of a long powered descent; its seed is recalibrated for that lighter belly flop."
+}
