@@ -606,6 +606,69 @@ predictor that picks the ignition point and time for an aligned arrival, validat
 the full-physics bench, which now includes the game chapter's flown ignition state.
 
 
+### Flip and ignition sweep on the full-physics bench (2026-11-23)
+
+A temporary sweep flew the 215 t bench from the game chapter's ignition state (31 m/s glide
+toward the tower, 116 m/s descent) and varied the lead and the ignition height. It is kept
+with the experiments in the stash
+`wip(flight): gate-synchronized catch guidance and flip sweep bench (not converged)`.
+
+**The flip is nearly translation invariant.** With the committed controller, the flip took
+5.1 s and lost 555 m of height. It moved the ship 294 m toward the tower and ended at
+77.6 m/s horizontal and 94 m/s descending, whatever the lead. The throw depends on the glide:
+
+| Glide (m/s) | Flip displacement (m) | Horizontal speed at flip end (m/s) |
+| ---: | ---: | ---: |
+| 0 | 170 | 58.8 |
+| 15 | 242 | 69.0 |
+| 31 | 294 | 77.6 |
+| 45 | 336 | 84.3 |
+
+The descent speed changes little at flip end: 89–100 m/s between 100 and 130 m/s at ignition.
+
+**The committed controller with a better lead.** Lead 900–1000 m caught in 53.5 s. The
+game's 1142 m lead caught in 79 s, and 1300 m lost the vehicle. The game lights about 140 m
+too far out for this controller. The remaining time is one engine hovering about 30 s to
+close the miss, because the closing law is capped at 15 m/s and 0.5 m/s².
+
+**An aligned arrival in physical terms.** A uniform deceleration of both channels to rest at
+the cradle needs `r = v_h·T/2` at flip end, with `T` the vertical time to go. For the game
+state this gives about 1015 m of lead with the 7 m/s² profile.
+
+**What the trials showed:**
+
+- *The vertical profile must start from the post-flip state.* The ship leaves the flip
+  slower than the 7 m/s² profile. The profile then commands zero vertical thrust, and three
+  Raptors at their floor over-brake at about 4.8 m/s². The vertical clock stops: time to go
+  stayed near 19–20 s for six seconds. Braking uniformly from the actual state onto a 30 m
+  terminal gate fixes this, and time to go then falls about 1 s per second.
+- *The engine drop takes the lateral authority.* Two Raptors at their floor (10.2 m/s²
+  near 200 t) leave about 2 m/s² sideways while holding the descent. Dropping from three to
+  two with 45 m/s of lateral speed left made every trial overshoot the cradle.
+- *The flip ending vertical costs about 200 m.* The gimbals turn the ship at about
+  0.18 rad/s², so it takes 2–3 s after the flip to tilt back and brake, at about 75 m/s.
+  Letting the flip aim at the braking tilt (30° instead of 10°) did not yet improve the catch.
+- *Lateral feasibility bounds the burn.* Igniting at 950 m with the lead matched to it
+  reached the gate 12 s after ignition but needed about 12 m/s² sideways. That is at the
+  30° tilt limit, and the ship overshot. A feasible design point of 5–6 m/s² sideways
+  needs about 13 s from flip end to the gate. With the terminal segment, that is about 25 s
+  from ignition, against the 18 s flown.
+- *The lateral loop is lag-limited, and the lag is not first order.* Every law tried reached
+  the cradle with 10–13 m/s of lateral speed left and drifted 40–60 m past it:
+
+  | Law | Result |
+  | --- | --- |
+  | Cone (velocity command `r·d/h`) | Overshoot |
+  | Gate-time cone with a lag-consistent error | Overshoot |
+  | Capped closing rate | Overshoot |
+  | Pole placement for a first-order lag | Oscillated (pole factors 0.45–0.7) |
+
+**Next step.** Identify the lateral plant on the bench, from commanded side acceleration to
+measured side acceleration, through the attitude loop and the gimbals. Then design the
+lateral law against it. A predictor that chooses ignition height and lead comes after that,
+because the lead that works depends on the in-burn law: about 1000 m for the committed law,
+about 800 m for the gate law at 1.25 km ignition.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km
