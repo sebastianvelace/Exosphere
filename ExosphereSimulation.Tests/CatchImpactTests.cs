@@ -46,6 +46,47 @@ public sealed class CatchImpactTests
     }
 
     [Fact]
+    public void RigidPairWithLevelPinsMatchesTheSymmetricPrediction()
+    {
+        var pair = new CatchPinPair(0.10, 0.10, -4.4, 4.4, 0.4, 0.4, 5.0e6);
+
+        var rigid = CatchImpactPredictor.Predict(220_000.0, 9.81, 4.2e6, 1.0e5, pair);
+        var symmetric = CatchImpactPredictor.Predict(220_000.0, 9.81, 4.2e6, 1.0e5, 2, 0.10, 0.4);
+
+        Assert.Equal(symmetric.PeakCompressionM, rigid.PeakCompressionM, 6);
+        Assert.Equal(symmetric.PeakPinLoadN, rigid.PeakPinLoadN, 0);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    [InlineData(-1.5)]
+    public void TiltedDropMatchesTheContactSolverWhereTheSymmetricFormUnderstatesIt(double tiltDegrees)
+    {
+        const double mass = 220_000.0, k = 4.2e6, closing = 0.4;
+        var (universe, vessel) = CreateDrop(mass, k, 0.0, closing, tiltDegrees);
+        var cradle = vessel.CatchTargetPositionWorld;
+        var pair = CatchPinPair.Measure(vessel, cradle, Vector3d.Zero, Vector3d.Up);
+        var pin = vessel.CatchContactPoints[0];
+        double lowestGap = System.Math.Min(pair.GapAM, pair.GapBM);
+        double peakCompression = 0.0;
+        for (int i = 0; i < 600; i++)
+        {
+            universe.Tick(0.002);
+            if (vessel.LastCatchContact is { } c && c.Points.Count > 0)
+                peakCompression = System.Math.Max(peakCompression, c.Points.Max(p => p.PenetrationM));
+        }
+
+        var rigid = CatchImpactPredictor.Predict(mass, Gravity, k, pin.DampingNsPerM, pair);
+        var symmetric = CatchImpactPredictor.Predict(mass, Gravity, k, pin.DampingNsPerM, 2, lowestGap, closing);
+
+        Assert.True(System.Math.Abs(pair.GapBM - pair.GapAM) > 0.1, "the tilt must stagger the pins");
+        Assert.InRange(rigid.PeakCompressionM / peakCompression, 0.97, 1.05);
+        Assert.True(symmetric.PeakCompressionM < 0.95 * peakCompression,
+            $"symmetric {symmetric.PeakCompressionM:F3} m vs solver {peakCompression:F3} m");
+    }
+
+    [Fact]
     public void CutoffWaitsWhenTheDropWouldReachThePinTravelLimit()
     {
         var pins = Pins(2.5e6);
@@ -119,7 +160,8 @@ public sealed class CatchImpactTests
         return vessel.CatchContactPoints.ToArray();
     }
 
-    private static (Universe universe, Vessel vessel) CreateDrop(double massKg, double k, double gap, double closing)
+    private static (Universe universe, Vessel vessel) CreateDrop(double massKg, double k, double gap, double closing,
+        double tiltDegrees = 0.0)
     {
         var body = new CelestialBody { Id = "catch-drop-body", Mass = 5.972e24, Radius = 6.371e6, GM = 3.986e14 };
         var vessel = new Vessel { ReferenceBodyId = body.Id, SASEnabled = false };
@@ -134,10 +176,13 @@ public sealed class CatchImpactTests
         vessel.ConfigureCatchContactsFromParts();
         var up = Vector3d.Up;
         var cradle = body.Position + up * (body.Radius + 500.0);
-        var pin = vessel.CatchContactPoints[0];
-        vessel.Position = cradle + up * (pin.ContactRadiusM - pin.LocalPositionFromDatum.Y + gap);
+        // Tilt about the axis across the pin line, so the pins (body ±Z) reach the cradle
+        // at different heights; the lowest pin starts at the requested gap.
+        vessel.Orientation = Quaterniond.FromAxisAngle(Vector3d.Right, tiltDegrees * System.Math.PI / 180.0);
+        double lowest = vessel.CatchContactPoints.Min(p =>
+            vessel.Orientation.Rotate(p.LocalPositionFromDatum).Dot(up) - p.ContactRadiusM);
+        vessel.Position = cradle + up * (gap - lowest);
         vessel.Velocity = -up * closing;
-        vessel.Orientation = Quaterniond.Identity;
         vessel.IsAttemptingTowerCatch = true;
         vessel.CatchTargetPositionWorld = cradle;
         vessel.CatchTargetUpWorld = up;

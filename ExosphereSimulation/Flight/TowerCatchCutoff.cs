@@ -41,11 +41,12 @@ public static class TowerCatchCutoff
 
     /// <param name="angularRateRadPerS">Pitch and yaw rate, about axes across the vehicle.</param>
     /// <param name="rollRateRadPerS">Roll rate about the vehicle axis.</param>
+    /// <param name="pinPair">Measured rigid pin pair; when defined the impact is predicted for the tilted ship.</param>
     /// <param name="verticalSpeedUpMps">Cradle-relative speed along the cradle normal, positive up.</param>
     public static TowerCatchCutoffDecision Decide(
         in TowerCatchPinGeometry geometry, IReadOnlyList<ContactPointDefinition> pins,
         double massKg, double gravityMps2, double verticalSpeedUpMps, double lateralSpeedMps,
-        double angularRateRadPerS, double rollRateRadPerS = 0.0)
+        double angularRateRadPerS, double rollRateRadPerS = 0.0, CatchPinPair pinPair = default)
     {
         if (geometry.EnabledPins != 2)
             return Reject("two pins required");
@@ -72,8 +73,12 @@ public static class TowerCatchCutoff
             return new(false, "pin range", requiredRange, default);
 
         var pin = FirstEnabled(pins);
-        var prediction = CatchImpactPredictor.Predict(massKg, gravityMps2, pin.SpringStiffnessNPerM,
-            pin.DampingNsPerM, geometry.EnabledPins, geometry.FirstPinGapM, closing);
+        // A measured pair carries the tilt: the first pin takes the drop until the ship rotates
+        // onto the second, which a symmetric estimate from the lowest gap understates.
+        var prediction = pinPair.IsDefined
+            ? CatchImpactPredictor.Predict(massKg, gravityMps2, pin.SpringStiffnessNPerM, pin.DampingNsPerM, pinPair)
+            : CatchImpactPredictor.Predict(massKg, gravityMps2, pin.SpringStiffnessNPerM,
+                pin.DampingNsPerM, geometry.EnabledPins, geometry.FirstPinGapM, closing);
         if (pin.MaxCompressionM > 0.0
             && prediction.PeakCompressionM > LimitUtilization * pin.MaxCompressionM)
             return new(false, "predicted travel", requiredRange, prediction);

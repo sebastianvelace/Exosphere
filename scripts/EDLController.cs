@@ -1170,7 +1170,8 @@ public partial class EDLController : Control
                 var cutoff = TowerCatchCutoff.Decide(pinGeometry, vessel.CatchContactPoints,
                     vessel.TotalMass, body.GetGravityAt(catchTargetPosition).Magnitude,
                     verticalSpeed, lateralSpeed, TowerCatchBurn.SplitAngularRate(vessel).Transverse,
-                    TowerCatchBurn.SplitAngularRate(vessel).Roll);
+                    TowerCatchBurn.SplitAngularRate(vessel).Roll,
+                    CatchPinPair.Measure(vessel, catchTargetPosition, vessel.CatchTargetVelocityWorld, cradleUp));
                 if (cutoff.Commit)
                 {
                     _catchCutoffCommitted = true;

@@ -40,9 +40,6 @@
     0.5,
     0.3
   ],
-  "lateralIntegralGainPerS2": 0.03,
-  "lateralIntegralRadiusM": 40.0,
-  "lateralIntegralLimitMps2": 0.6,
   "verticalDampingPerSecond": 1.2,
   "proportionalAttitudeGain": 2.2,
   "attitudeDampingGain": 6.0,

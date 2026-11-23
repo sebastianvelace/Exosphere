@@ -53,13 +53,18 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
 
         output.WriteLine($"phase={burn.Phase} {burn.BlockReason} cutoff={burn.CutoffTimeS:F1}s caught={burn.CaughtTimeS:F1}s "
             + $"steps={string.Join(" ", burn.EngineSteps.Select(s => $"{s.EngineCount}@{s.TimeS:F1}"))} "
-            + $"peak={bench.Ship.CatchPeakCompressionM:F2}m/{bench.Ship.CatchPeakPinLoadN / 1e6:F2}MN");
+            + $"peak={bench.Ship.CatchPeakCompressionM:F2}m/{bench.Ship.CatchPeakPinLoadN / 1e6:F2}MN "
+            + $"predicted={burn.LastCutoffDecision.Prediction.PeakCompressionM:F2}m");
         Assert.Equal(TowerCatchBurnPhase.Caught, burn.Phase);
         Assert.Equal(0, burn.Relights);
         Assert.Equal([3, 2, 1, 0], burn.EngineSteps.Select(s => s.EngineCount).ToArray());
         Assert.False(bench.Ship.CatchLimitExceeded);
         var pin = bench.Ship.CatchContactPoints[0];
         Assert.True(bench.Ship.CatchPeakCompressionM <= TowerCatchCutoff.LimitUtilization * pin.MaxCompressionM);
+        // The ship lands tilted on one off-axis Raptor; the rigid two-pin prediction made at
+        // cutoff must bound the peak the contact solver then produced.
+        Assert.True(bench.Ship.CatchPeakCompressionM <= burn.LastCutoffDecision.Prediction.PeakCompressionM + 0.005,
+            $"actual {bench.Ship.CatchPeakCompressionM:F3} m > predicted {burn.LastCutoffDecision.Prediction.PeakCompressionM:F3} m");
         // Flight 15 caught 18 s after ignition; this controller still hovers on one engine for
         // much longer, inside its 120 s burn budget.
         Assert.InRange(burn.CaughtTimeS, 14.0, 120.0);

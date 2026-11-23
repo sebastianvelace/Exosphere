@@ -72,12 +72,6 @@ public sealed class TowerCatchBurnDefinition
 
     /// <summary>Lag for a lit engine count, clamped to the declared table; zero when none is declared.</summary>
     public double LateralLagSeconds(int litEngines) => Lookup(LateralLagSecondsByEngines, litEngines);
-    /// <summary>Integral gain on the horizontal velocity error inside <see cref="LateralIntegralRadiusM"/> (1/s²).</summary>
-    [JsonPropertyName("lateralIntegralGainPerS2")] public double LateralIntegralGainPerS3 { get; set; }
-    /// <summary>Miss below which the integral term accumulates (m).</summary>
-    [JsonPropertyName("lateralIntegralRadiusM")] public double LateralIntegralRadiusM { get; set; }
-    /// <summary>Largest horizontal acceleration the integral term may command (m/s²).</summary>
-    [JsonPropertyName("lateralIntegralLimitMps2")] public double LateralIntegralLimitMps2 { get; set; }
     /// <summary>
     /// Share of the remaining engines' rated thrust that must still arrest the current descent
     /// within the remaining clearance before one more engine may shut down.
@@ -178,7 +172,6 @@ public sealed class TowerCatchBurnDefinition
             IgnitionLeadMaximumGlideMps, FlipLeadSeconds, BrakingDecelerationMps2, TerminalProfileClearanceM,
             TerminalDecelerationMps2, ContactDescentSpeedMps, AlignmentHoldClearanceM, AlignedMissM,
             HoldClearanceGainPerSecond, ApproachSlope, FlipMaximumTiltDegrees, MaximumTiltDegrees, ClosingDecelerationMps2, MaximumClosingSpeedMps, ArrestThrottleHeadroom,
-            LateralIntegralGainPerS3, LateralIntegralRadiusM, LateralIntegralLimitMps2,
             VerticalDampingPerSecond, ProportionalAttitudeGain, AttitudeDampingGain, RollDampingGain, RollAlignmentGain, RollAlignmentMaximumTiltDegrees, RollAlignmentClearanceM, RollAlignmentCommandLimit,
             FlipAttitudeDampingGain, SingleEngineMaximumLateralSpeedMps, SingleEngineMaximumMissM, ThrottleHeadroom, ControlAuthorityMargin, MissedApproachClearanceM, MissedApproachRadiusM, MaximumBurnSeconds];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"

@@ -426,9 +426,86 @@ A blind check at cadences never used for tuning: 75 Hz was caught at 97.7 s
 about 3 m of clearance, with 1–2.5 m/s of undamped tangential speed, until the 120 s
 budget ran out, then landed on its legs. The likely cause is the lateral velocity
 integral sustaining an orbit (a proportional-plus-integral velocity loop can limit-cycle
-around a point). That is the next item.
+around a point). See the next section.
 
 The default chapter is unchanged and still catches at 50, 60 and 120 Hz.
+
+### Lateral integral removed and rigid two-pin impact prediction
+
+The 100 Hz trace did not show a pure orbit. With one engine the ship crossed the cradle at
+about 1.7 m/s, ran out to 10 m, and came back. The lateral velocity integral had been added
+to cancel the steady side force of an off-axis Raptor, before the thrust trim did the same.
+Integrating a velocity error integrates position (∫v dt = r), so the term acts as a spring
+on position. It wound up over the slow one-engine approach and pushed the ship past the
+cradle. The integral, its three JSON fields and its validation are removed. On the bench
+the +15 m crossrange case caught in 24.6 s instead of about 40 s; the 0 and −15 m cases
+are unchanged at about 41 s.
+
+That faster catch exposed a separate fault: the predicted peak compression was too low
+in all three bench cases.
+
+| Crossrange | Pin gaps at cutoff | Symmetric prediction | Solver peak |
+| --- | --- | ---: | ---: |
+| 0 m | 0.035 / 0.247 m | 0.424 m | 0.494 m |
+| −15 m | 0.042 / 0.244 m | 0.427 m | 0.493 m |
+| +15 m | −0.065 / 0.246 m | 0.431 m | 0.547 m (over the 0.54 m limit) |
+
+One off-axis Raptor needs about 1.3° of axis tilt to keep its thrust vertical, so the pins
+reach the cradle about 0.2 m apart. The first pin carries the drop until the ship rotates
+onto the second. The symmetric model assumed both pins landed together from the lowest
+gap, and its documentation wrongly called that conservative.
+
+`CatchPinPair` now measures each pin's gap and closing speed, its lever along the
+horizontal pin line from the centre of mass, and the transverse inertia. The rigid form of
+`CatchImpactPredictor.Predict` integrates heave plus rotation about the axis across the pin
+line, with the solver's force law on each pin. Both cutoff paths, the burn and the game's
+EDL catch phase, use it.
+
+| Crossrange | Rigid prediction | Solver peak |
+| --- | ---: | ---: |
+| 0 m | 0.511 m | 0.494 m |
+| −15 m | 0.510 m | 0.493 m |
+| +15 m | 0.539 m | 0.528 m |
+
+Gates in `CatchImpactTests`:
+
+- A level pair reproduces the symmetric prediction.
+- Drops tilted 1°, 2° and −1.5° through the contact solver land within −3 %/+5 % of the
+  rigid prediction.
+- The symmetric form understates those drops by more than 5 %.
+
+The bench now asserts that the solver peak stays within the prediction made at cutoff.
+
+Opt-in single-burn chapter, final code:
+
+| Render cadence | Catch | Mass | Peak compression | Peak pin load |
+| --- | ---: | ---: | ---: | ---: |
+| 50 Hz | 89.3 s | 157.1 t | 0.427 m | 1.29 MN |
+| 60 Hz | 81.9 s | 161.1 t | 0.429 m | 1.29 MN |
+| 75 Hz | 87.9 s | 157.7 t | 0.428 m | 1.30 MN |
+| 100 Hz | 79.9 s | 162.1 t | 0.439 m | 1.32 MN |
+| 120 Hz | 78.3 s | 162.6 t | 0.438 m | 1.31 MN |
+
+All five cadences catch, including 100 Hz, which previously landed on its legs. In every
+run there was no relight and the engines stepped 3 → 2 → 1 → 0.
+
+The default chapter still catches (`FLIGHT15_CATCH_VERIFIED`) at 50, 60 and 120 Hz, and its
+predicted compression bounds the peak:
+
+| Render cadence | Predicted compression | Peak compression |
+| --- | ---: | ---: |
+| 50 Hz | 0.459 m | 0.457 m |
+| 60 Hz | 0.446 m | 0.445 m |
+| 120 Hz | 0.460 m | 0.424 m |
+
+One fault remains open, and it predates this change. In the default chapter the peak *pin
+load* exceeds the predicted load: 1.72 MN against 1.18 MN at 60 Hz (identical before this
+change), and 2.23 MN against 1.25 MN at 120 Hz. Both stay inside the 3 MN pin limit. The
+pins are already compressed when the cutoff decides (gap −0.17 to −0.39 m), so the peak
+probably comes from the powered touchdown before cutoff, which the post-cutoff predictor
+does not cover. This has not been verified.
+
+The single burn still takes 78–89 s, against 18 s on Flight 15.
 
 ## Orbital return feasibility
 

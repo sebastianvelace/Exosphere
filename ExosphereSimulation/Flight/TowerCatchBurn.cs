@@ -29,7 +29,6 @@ public sealed class TowerCatchBurn
     private readonly Dictionary<string, int> _startsAtIgnition = [];
     private int _engineCount = 3;
     private double _ignitionTime = double.NaN;
-    private Vector3d _lateralIntegral;
     private Vector3d _thrustTrim;
     private Vector3d _previousHorizontalVelocity;
     private Vector3d _lateralAcceleration;
@@ -59,8 +58,6 @@ public sealed class TowerCatchBurn
     public double RollErrorRad { get; private set; }
     /// <summary>Thrust axis the last step commanded, in world axes.</summary>
     public Vector3d LastAimWorld { get; private set; }
-    /// <summary>Velocity-integral term of the last step (m/s²).</summary>
-    public Vector3d LastLateralIntegral => _lateralIntegral;
     /// <summary>Horizontal acceleration the last step asked for (m/s²).</summary>
     public Vector3d LastHorizontalAccelerationCommand { get; private set; }
 
@@ -138,7 +135,8 @@ public sealed class TowerCatchBurn
             {
                 var (transverseRate, rollRate) = SplitAngularRate(_ship);
                 LastCutoffDecision = TowerCatchCutoff.Decide(geometry, _ship.CatchContactPoints, _ship.TotalMass,
-                    gravity, verticalSpeed, horizontalVelocity.Magnitude, transverseRate, rollRate);
+                    gravity, verticalSpeed, horizontalVelocity.Magnitude, transverseRate, rollRate,
+                    CatchPinPair.Measure(_ship, cradle, _ship.CatchTargetVelocityWorld, up));
                 if (LastCutoffDecision.Commit)
                 {
                     Phase = TowerCatchBurnPhase.Cutoff;
@@ -218,17 +216,9 @@ public sealed class TowerCatchBurn
             ? horizontalVelocity + _lateralAcceleration * _definition.LateralLagSeconds(lit)
             : horizontalVelocity;
         var homing = (closing - predictedVelocity) * lateralGain;
-        // Integral on the velocity error: one or two of the three ring Raptors put the thrust
-        // off the axis and push sideways steadily; a velocity integral cancels that without
-        // winding up on the position error. It restarts at each engine change.
-        if (Phase == TowerCatchBurnPhase.Braking && _engineCount <= 2
-            && horizontalOffset.Magnitude <= _definition.LateralIntegralRadiusM)
-        {
-            _lateralIntegral += (closing - horizontalVelocity) * (_definition.LateralIntegralGainPerS3 * interval);
-            if (_lateralIntegral.Magnitude > _definition.LateralIntegralLimitMps2)
-                _lateralIntegral = _lateralIntegral.Normalized * _definition.LateralIntegralLimitMps2;
-            homing += _lateralIntegral;
-        }
+        // No integral term: the thrust trim below already removes the steady side force of an
+        // off-axis Raptor, and a velocity integral is a spring on position (∫v dt = r) that
+        // wound up over the slow one-engine approach and carried the ship past the cradle.
         var horizontalAcceleration = homing;
         if (horizontalAcceleration.Magnitude > verticalAcceleration * tanTilt)
             horizontalAcceleration = horizontalAcceleration.Normalized * (verticalAcceleration * tanTilt);
@@ -261,10 +251,7 @@ public sealed class TowerCatchBurn
                 _engines.SelectEngineCount(2);
             }
             if (selected != _engineCount)
-            {
                 RecordEngines(universe, selected);
-                _lateralIntegral = Vector3d.Zero;
-            }
             _engineCount = selected;
         }
 
