@@ -543,6 +543,69 @@ the default chapter's terminal approach with the actuator-controlled single-burn
 
 The single burn still takes 78–89 s, against 18 s on Flight 15.
 
+### Burn-time investigation: physical constraints (work in progress, not merged)
+
+Goal: shorten the single burn (78–89 s in the game, 18 s flown) with an ignition time
+computed from physics. The work is stashed as
+`wip(flight): ZEM/ZEV catch guidance, physical attitude lag, profile engine guard`
+because it caught on the bench but broke the game chapter (missed approach at 60 and
+120 Hz). Five physical constraints came out of it.
+
+**Where the time goes.** In the traced 60 Hz game burn:
+
+| Interval | What happens |
+| --- | --- |
+| 0–7 s | Flip. |
+| 7–29 s | The approach-slope hold stops the descent about 340 m up while the ship crosses about 700 m sideways. |
+| 29–45 s | One engine falls to 37 m/s, then brakes. |
+| 45–80 s | One engine hovers 4–8 m up, closing a 12 m miss. |
+
+**1. Two engines cannot stop.** Two Raptors at their 40 % floor (2.04 MN) out-thrust the
+ship near 185 t (1.81 MN). Without relights, a ship that stops high on two engines climbs:
+the bench case went past 3 km. The descent must keep decelerating, without stopping, until
+the last metres on one engine, which is the flown 3 → 2 → 1 shape. The approach-slope hold
+(stop high, then translate) is incompatible with that.
+
+**2. An engine may go out only if the rest can fly the remaining profile.** The selector
+compared the instantaneous demand, so a ship nearly stopped 385 m up dropped to one engine.
+It then fell to 37 m/s and braked at 3.8 m/s², because one Raptor cannot fly the 7 m/s²
+segment. The fix requires `m·(g + profile deceleration)` within the headroom of the engines
+that remain.
+
+**3. Attitude lag comes from gimbal authority, not engine count.** The live envelope
+(`GetDifferentialTVCAngularAccelerationEnvelope`) measured these α values:
+
+| Lit engines | Throttle | α |
+| --- | --- | --- |
+| 3 | floor | 0.18 rad/s² |
+| 2 | floor | 0.12 rad/s² |
+| 1 | near hover | 0.10 rad/s² |
+
+The lag table [2.5, 0.5, 0.3] s therefore made the two-engine loop five times too fast.
+The trace shows it: at 14–20 m the command reversed, yet the ship stayed tilted 20° toward
+the tower for about 2 s, accelerated to 26 m/s and overshot by 100 m. A lag of √(θ/α)
+calibrated to 2.5 s for one engine gives about 2.3 s for two engines at their floor.
+Lateral loops faster than about 8× that lag limit-cycle (a 6× trial diverged).
+
+**4. Lateral and vertical need one clock.** Zero-effort-miss / zero-effort-velocity
+guidance (`a = −6r/t² − 4v/t`) on the profile's time-to-go nulls offset and velocity
+together. It passed its analytic gates. With the measured lag, however, the lateral loop
+can only remove small errors during the burn.
+
+**5. The flip throws the ship about 50 m/s toward the tower.** The three engines push
+along the nose while it rotates. For the time-to-go guidance, the ideal ignition lead is
+the distance flown during the flip plus `v_flip·t_go/2`, which gives a constant-deceleration
+lateral arrival. For the game's flown ignition state that is about 1139 m, against the
+1142 m it actually flew. A reduced flip model fitted to the full-physics bench left
+residuals up to 18 m and 9 m/s.
+
+Consequence: an 18 s burn is possible only if the ship arrives nearly aligned. The ignition
+point and the flip have to put it there, as entry guidance does on the real vehicle,
+because a long correction on low-authority gimbals cannot. Next step: a flip and burn
+predictor that picks the ignition point and time for an aligned arrival, validated against
+the full-physics bench, which now includes the game chapter's flown ignition state.
+
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km
