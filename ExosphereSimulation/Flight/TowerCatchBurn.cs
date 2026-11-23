@@ -35,6 +35,9 @@ public sealed class TowerCatchBurn
     private Vector3d _lateralAcceleration;
     private bool _hasPreviousHorizontalVelocity;
     private const double LateralAccelerationFilterS = 0.5;
+    private bool _settlingOnPins;
+    /// <summary>Miss, as a multiple of the alignment tolerance, that abandons the settle onto the pins.</summary>
+    private const double SettleReleaseFactor = 1.5;
     private const double ThrustTrimTimeConstantS = 1.0;
 
     public TowerCatchBurnPhase Phase { get; private set; } = TowerCatchBurnPhase.Flip;
@@ -163,6 +166,17 @@ public sealed class TowerCatchBurn
                 _ship.CatchTargetRails, 0.5 * _ship.MaximumDiameter);
             if (railGeometry.UsesRails && railGeometry.RailSlackM >= _definition.RailDescentSlackM)
                 missForHold = 0.0;
+        }
+        // Hysteresis: once the ship is centred and below the hold clearance it keeps settling
+        // onto the pins unless the miss grows well past the tolerance. Without it a drift that
+        // crosses the threshold in the last half metre sent the ship back up to the hold.
+        if (Phase == TowerCatchBurnPhase.Braking)
+        {
+            if (missForHold <= _definition.AlignedMissM && clearance < _definition.AlignmentHoldClearanceM)
+                _settlingOnPins = true;
+            else if (horizontalOffset.Magnitude > _definition.AlignedMissM * SettleReleaseFactor)
+                _settlingOnPins = false;
+            if (_settlingOnPins) missForHold = 0.0;
         }
         double targetDown = _definition.TargetDescentSpeedMps(clearance, missForHold);
         double feedForward = targetDown > 0.0

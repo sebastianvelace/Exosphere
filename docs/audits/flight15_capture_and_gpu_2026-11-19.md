@@ -396,6 +396,38 @@ engines 3 → 2 → 1 → 0. At 50 Hz it reaches a hold 8 m across the arms (out
 its legs. The descent hold now uses rail slack instead of a fixed 4 m radius, since the
 catch zone runs 9.5 m along the arms. It did not change these runs.
 
+### One-engine closure and settle hysteresis
+
+At 50 Hz the approach slope stopped the two-engine descent about 270 m up (two engines
+cannot hover), so the ship stepped to one engine 185 m off. The one-engine closing gain
+of 0.03 /s then gave about 1.35 m/s at 45 m, too slow for the burn budget. That gain was
+set to keep the loop overdamped before the attitude lag was modelled. With the lag
+compensated, the one-engine gains are now 0.15 /s (velocity) and 0.06 /s (closing).
+The bench catch times fell from 59–71 s to about 40 s for all three crossranges.
+
+That alone broke 60 Hz. There, the ship drifted tangentially at 1.5 m/s about 4 m
+from the centre and crossed the 4 m alignment threshold in the last half metre, so the
+hold sent it back up to 3 m. Once centred and below the hold clearance, the settle now
+continues unless the miss exceeds 1.5 × the tolerance (6 m).
+
+Opt-in single-burn chapter:
+
+| Render cadence | Catch | Mass | Peak compression | Peak pin load |
+| --- | ---: | ---: | ---: | ---: |
+| 50 Hz | 97.8 s | 153.7 t | 0.385 m | 1.05 MN |
+| 60 Hz | 79.0 s | 162.4 t | 0.375 m | 1.06 MN |
+| 120 Hz | 77.9 s | 163.0 t | 0.456 m | 1.35 MN |
+
+No relight; engines 3 → 2 → 1 → 0 in all three. The flown catch still took 18 s with one
+engine for about 1 s. Here one engine runs for 45–65 s and the burn uses 52–61 t.
+
+A blind check at cadences never used for tuning: 75 Hz was caught at 97.7 s
+(153.7 t, peak 0.386 m and 1.06 MN). At 100 Hz the ship circled the cradle 4–10 m out at
+about 3 m of clearance, with 1–2.5 m/s of undamped tangential speed, until the 120 s
+budget ran out, then landed on its legs. The likely cause is the lateral velocity
+integral sustaining an orbit (a proportional-plus-integral velocity loop can limit-cycle
+around a point). That is the next item.
+
 The default chapter is unchanged and still catches at 50, 60 and 120 Hz.
 
 ## Orbital return feasibility

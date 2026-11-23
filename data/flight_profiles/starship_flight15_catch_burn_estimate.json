@@ -24,14 +24,14 @@
   "flipMaximumTiltDegrees": 10.0,
   "maximumTiltDegrees": 30.0,
   "lateralClosingGainByEngines": [
-    0.03,
+    0.06,
     0.08,
     0.1
   ],
   "closingDecelerationMps2": 0.5,
   "maximumClosingSpeedMps": 15.0,
   "lateralGainByEngines": [
-    0.12,
+    0.15,
     0.3,
     0.4
   ],
