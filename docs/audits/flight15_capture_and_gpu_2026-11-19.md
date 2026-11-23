@@ -669,6 +669,77 @@ lateral law against it. A predictor that chooses ignition height and lead comes 
 because the lead that works depends on the in-burn law: about 1000 m for the committed law,
 about 800 m for the gate law at 1.25 km ignition.
 
+### Lateral plant identification and a receding-horizon planner (2026-11-23)
+
+Stashed as `wip(flight): identified lateral plant, receding-horizon planner, game ignition
+replay (game chapter still misses)`. The stash includes the bench fixtures and the fit
+script under `ExosphereSimulation.Tests/Fixtures/flight15_catch/`.
+
+**The lateral plant has a reversal zero.** An upright ship on one, two or three Raptors
+received side-acceleration steps through the burn's own actuation path: axis pointing,
+then throttle. In every case the side acceleration first goes the wrong way. A 3 m/s²
+command on two engines gives −2.1 m/s² before it turns: to tilt the ship the gimbals
+push the tail away. Joint fits of `K(1 − T_z s)/(T²s² + 2ζTs + 1)` near the throttle floor:
+
+| Lit | K | T_z (s) | T (s) | ζ | Relative RMS |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.26 | 1.81 | 1.02 | 0.96 | 0.10 |
+| 2 | 1.15 | 1.68 | 0.90 | 0.91 | 0.13 |
+| 3 | 1.38 | 1.24 | 0.79 | 0.85 | 0.32 |
+
+T_z shrinks as thrust grows (0.85 s for three Raptors at half throttle), as expected for
+TVC. The right-half-plane zero caps feedback bandwidth near `1/(2T_z)`, 0.3–0.4 rad/s,
+so about 10 s to correct an error. That explains every overshoot of the earlier laws.
+
+**Planner.** `TowerCatchLateralPlanner` solves, at each step, the smoothest
+piecewise-constant command sequence that brings offset, velocity and plant state to zero
+at the end of the horizon through the identified model. It returns the first command,
+which is linear in `[r, v, z₁, z₂]`. An internal model is driven by the applied command,
+started from the measured acceleration at flip end, and pulled toward the measurement
+with a 1 s observer. The horizon is the time to a 30 m terminal gate. Above the gate the
+vertical channel brakes uniformly onto it. The horizon never drops below 5·T_z: at 4·T_z
+the one-engine terminal regulator oscillated, and at 7·T_z the catch was slower.
+
+Three more physical corrections came with it:
+
+- *Throttle.* The throttle holds the vertical through the actual tilt, so the tilt carries
+  the side force. Dividing the total by the alignment had turned a 36° overshoot into
+  20 m/s² of side braking on two engines.
+- *Engine drops.* They count the planned side acceleration, unclipped.
+- *Two at their floor.* Two Raptors at their floor may stay lit only while that floor is
+  below the vertical need. Otherwise the ship hovers 120 m up.
+
+Results on the 215 t bench:
+
+| Case | Committed | Planner |
+| --- | ---: | ---: |
+| Nominal (380 m lead, no glide) | 41 s | 31 s |
+| Game ignition state (1142 m, 31 m/s glide) | 79 s | 40 s |
+| Eight leads between 660 and 1100 m, ignition 1.09–1.40 km | 53–79 s | 33–41 s, all caught |
+
+Engines go 3 → 2 → 1 → 0 with no relight, and the rigid two-pin prediction still bounds
+the pin peak. `LateralPlantIdentificationTests` ties the declared model to the bench.
+
+**In the game it still misses.** The 50, 60 and 120 Hz runs all ended in a missed
+approach, against catches at 78–98 s with the committed law. The exact ignition state is
+now captured (`EXOSPHERE_CATCH_IGNITION_SAVE`, SaveGameV2 plus the environment switches)
+and replayed on the bench in seconds. The replay reproduces the game: a 9.3 s flip and a
+missed approach.
+
+- *Heading.* The nose arrives 18° off the line to the tower (`noseTowardTower` 0.95); the
+  belly roll is only 3–4°. The flip aim then mixes in a side command outside the nose's
+  pitch plane, so the ship flips partly in yaw on the gimbals alone. Rotating the same
+  state to point at the tower caught in 46.5 s with a 6.5 s flip. Restricting the flip's
+  side command to the pitch plane brings the game flip back to 6.1–6.4 s.
+- *What still fails.* Three Raptors at their floor over-brake the vertical, so the time
+  to the gate stalls (15.7 s to 13.9 s over 5 s) while the side channel runs on. The ship
+  then crosses the cradle at 13–20 m/s. On the aligned replay, the 2 → 1 drop at 160 m
+  left a 40 m crossrange that one Raptor could not close.
+
+**Next.** Plan the side channel on the vertical time the engines can actually fly, with
+the floor included. Keep the second engine until the side plan is done. Then promote the
+game-ignition replay to a permanent gate.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km
