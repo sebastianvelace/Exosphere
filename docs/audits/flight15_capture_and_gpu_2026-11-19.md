@@ -671,9 +671,8 @@ about 800 m for the gate law at 1.25 km ignition.
 
 ### Lateral plant identification and a receding-horizon planner (2026-11-23)
 
-Stashed as `wip(flight): identified lateral plant, receding-horizon planner, game ignition
-replay (game chapter still misses)`. The stash includes the bench fixtures and the fit
-script under `ExosphereSimulation.Tests/Fixtures/flight15_catch/`.
+Landed with the glide alignment below. The bench fixtures and the fit script live under
+`ExosphereSimulation.Tests/Fixtures/flight15_catch/`.
 
 **The lateral plant has a reversal zero.** An upright ship on one, two or three Raptors
 received side-acceleration steps through the burn's own actuation path: axis pointing,
@@ -739,6 +738,55 @@ missed approach.
 **Next.** Plan the side channel on the vertical time the engines can actually fly, with
 the floor included. Keep the second engine until the side plan is done. Then promote the
 game-ignition replay to a permanent gate.
+
+### Glide heading aligned before ignition: the game catches (2026-11-23)
+
+**Diagnosis on the replay.** Measured in a horizontal frame fixed at flip end, the aero
+residual (measured acceleration less thrust and gravity) stays at 1–5 m/s², almost all
+drag. The miss came from the flip:
+
+- The flip left the ship 114 m off the tower line and drifting out at 20 m/s. Its thrust,
+  14 m/s² horizontal along the nose, was 18° off that line. The braking then had 85 m/s
+  to stop in 670 m.
+- With a 30° tilt limit, the attitude loop lost the ship once the angle of attack passed
+  45°. The gimbals pinned at 8.5° and the pointing error grew from 20° to 74°.
+- With 15°, attitude held but the side authority could not stop the ship before the tower.
+
+**Cause.** Falling at 115 m/s with 31 m/s of glide, the airflow is nearly vertical and
+the belly-flop lift lies almost horizontal. The axis leans toward the lift, so the nose
+points where the glide guidance asks to accelerate, not where the ship is going. At
+ignition the glide planner was still turning (velocity 7° off, nose 18° off).
+
+**Fix.** Over the last `glideFinalAlignmentSeconds` (8 s) before ignition, the glide lift
+blends onto the line of sight to the tower (`TowerCatchApproachPlanner.TowerLineLift`).
+The blend is full over the last half of the window (`FinalAlignmentWeight`). The nose,
+and with it the flip throw, then points at the cradle. Only the single-burn chapter
+(`EXOSPHERE_SINGLE_BURN_CATCH=1`) uses it.
+
+**Game results.**
+
+| Rate | `noseTowardTower` at ignition | Engines | Cutoff | Result |
+| ---: | ---: | --- | ---: | --- |
+| 60 Hz | 1.00 (was 0.95) | 3 → 2 @14.2 s → 1 @21.5 s | 38.3 s | caught |
+| 50 Hz | 1.00 | 3 → 2 @13.9 s → 1 @21.5 s | 38.9 s | caught |
+| 120 Hz | — | 3 → 2 @14.1 s → 1 @21.7 s | 38.3 s | caught |
+
+The committed law took 78–98 s. Every run settles on two pins with no relight:
+
+| Rate | Peak pin load | Peak compression |
+| ---: | ---: | ---: |
+| 60 Hz | 1.32 MN | 0.46 m |
+| 50 Hz | 1.28 MN | 0.45 m |
+| 120 Hz | 1.36 MN | 0.48 m |
+
+No run exceeds the travel or load limits. Flight 15 flew about 18 s, so the remaining
+gap is the braking itself.
+
+**Gate.** `Flight15CatchIgnitionReplayTests` replays the aligned ignition captures at
+50 and 60 Hz. It requires a belly roll within 5° and a nose toward the tower above 0.99.
+It also requires a catch within 50 s, with a first count of three, monotone engine drops
+and no relight. The bench catches these states in 41–47 s. It steps control and physics
+once per frame, so it is not bit-for-bit with the game.
 
 ## Orbital return feasibility
 

@@ -77,4 +77,34 @@ public sealed class TowerCatchApproachPlannerTests
         Assert.True(lift.Z > 0.99);
         Assert.Equal(neutral, TowerCatchApproachPlanner.LiftDirection(flow, Vector3d.Zero, neutral));
     }
+
+    [Theory]
+    [InlineData(20.0, 0.0)]
+    [InlineData(8.0, 0.0)]
+    [InlineData(6.0, 0.5)]
+    [InlineData(4.0, 1.0)]
+    [InlineData(0.0, 1.0)]
+    public void FinalAlignmentRampsOnBeforeIgnition(double timeToIgnition, double expected) =>
+        Assert.Equal(expected, TowerCatchApproachPlanner.FinalAlignmentWeight(timeToIgnition, 8.0), 9);
+
+    [Fact]
+    public void FinalAlignmentIgnoresAnUnknownIgnitionTime() =>
+        Assert.Equal(0.0, TowerCatchApproachPlanner.FinalAlignmentWeight(double.PositiveInfinity, 8.0));
+
+    [Fact]
+    public void TowerLineLiftPointsAtTheCradleAcrossTheFlow()
+    {
+        // Falling nearly straight down while gliding 18 degrees off the tower line: the lift
+        // that aims the nose lies on the line of sight, not along the glide.
+        var flow = new Vector3d(0.25, -1.0, 0.08).Normalized;
+        var ship = new Vector3d(-1000.0, 1500.0, 0.0);
+        var cradle = new Vector3d(0.0, 0.0, 0.0);
+
+        var lift = TowerCatchApproachPlanner.TowerLineLift(flow, Up, ship, cradle, Up);
+
+        Assert.Equal(0.0, lift.Dot(flow), 9);
+        var horizontal = lift - Up * lift.Dot(Up);
+        Assert.True(horizontal.Normalized.X > 0.999, $"lift {lift}");
+        Assert.Equal(Up, TowerCatchApproachPlanner.TowerLineLift(flow, Up, cradle + Up * 10.0, cradle, Up));
+    }
 }

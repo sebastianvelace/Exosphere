@@ -466,7 +466,31 @@ public partial class EDLController : Control
                     + $"miss={horizontalOffset.Magnitude:F0} m horizontal={horizontalVelocity.Magnitude:F1} m/s "
                     + $"noseTowardTower={(noseHorizontal.MagnitudeSquared > 1e-9 && horizontalOffset.MagnitudeSquared > 1e-9 ? -noseHorizontal.Normalized.Dot(horizontalOffset.Normalized) : 0.0):F2} "
                     + $"velocityTowardTower={(horizontalOffset.MagnitudeSquared > 1e-9 ? -horizontalVelocity.Dot(horizontalOffset.Normalized) : 0.0):F1} m/s "
+                    + $"bellyRollDeg={TowerCatchBurn.BellyRollFromVerticalRad(vessel.Orientation, cradleUp) * MathUtils.RAD_TO_DEG:F1} "
                     + $"massKg={vessel.TotalMass:F0}");
+                // Diagnostic: the exact ignition state, for replaying the game's burn on the bench.
+                string ignitionSave = Godot.OS.GetEnvironment("EXOSPHERE_CATCH_IGNITION_SAVE");
+                if (!string.IsNullOrEmpty(ignitionSave))
+                {
+                    System.IO.File.WriteAllText(ignitionSave, Exosphere.Simulation.Persistence.SaveGameV2Json.Serialize(
+                        Exosphere.Simulation.Persistence.SaveGameV2Codec.Capture(universe)));
+                    System.IO.File.WriteAllText(ignitionSave + ".env.json", System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        body = body.Id,
+                        bodyPosition = new[] { body.Position.X, body.Position.Y, body.Position.Z },
+                        bodyVelocity = new[] { body.Velocity.X, body.Velocity.Y, body.Velocity.Z },
+                        universe.SchedulerBudgetEnabled,
+                        universe.DeferredPhysicsCandidateEnabled,
+                        universe.DistributedAerodynamicsEnabled,
+                        universe.PhysicalBodyFlapsEnabled,
+                        universe.GravityGradientEnabled,
+                        universe.VariableMassTransportEnabled,
+                        universe.PropellantSloshEnabled,
+                        ephemeris = universe.Environment.Ephemeris.Id,
+                        controlDelta = delta,
+                    }));
+                    GD.Print($"[EDL] ignition state saved to {ignitionSave}");
+                }
                 RunCatchBurn(vessel, body, mission, universe, delta);
                 return;
             }
@@ -730,6 +754,14 @@ public partial class EDLController : Control
                                 ? (guidedLift.Normalized * System.Math.Sqrt(1.0 - sideFraction * sideFraction)
                                     + sideLift * sideFraction).Normalized
                                 : guidedLift;
+                            // Just before ignition, lift along the line to the tower: the nose leans
+                            // toward the lift, and the flip throws the ship along the nose.
+                            double alignment = TowerCatchApproachPlanner.FinalAlignmentWeight(
+                                timeToIgnition, leadDefinition.GlideFinalAlignmentSeconds);
+                            if (alignment > 0.0)
+                                guidedLift = (guidedLift.Normalized * (1.0 - alignment)
+                                    + TowerCatchApproachPlanner.TowerLineLift(velDir, glideUp, vessel.Position,
+                                        catchTargetPosition, guidedLift) * alignment).Normalized;
                             if (_traceCatch && SimulationBridge.Instance!.Universe.CurrentTime >= _nextGlideTraceEpoch)
                             {
                                 _nextGlideTraceEpoch = SimulationBridge.Instance.Universe.CurrentTime + 2.0;

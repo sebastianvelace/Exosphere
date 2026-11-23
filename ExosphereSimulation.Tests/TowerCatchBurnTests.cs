@@ -35,7 +35,7 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
         var counts = burn.EngineSteps.Select(s => s.EngineCount).ToArray();
         Assert.Equal(3, counts[0]);
         Assert.True(counts.Zip(counts.Skip(1)).All(p => p.Second < p.First), string.Join(",", counts));
-        Assert.Equal(1, counts[^1]);
+        Assert.Equal([3, 2, 1], counts.Take(3).ToArray());
     }
 
     [Theory]
@@ -44,9 +44,24 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
     [InlineData(15.0)]
     public void SingleBurnFlipsBrakesAndSettlesOnThePins(double crossrangeM) => FlyToCatch(crossrangeM);
 
-    private void FlyToCatch(double crossrangeM)
+    /// <summary>
+    /// The ignition state the game's Flight 15 chapter actually reaches: 1142 m short of the
+    /// tower, gliding toward it at 31 m/s, descending at 116 m/s with 215 t.
+    /// </summary>
+    /// <remarks>The planned side acceleration makes the catch insensitive to the lead: igniting
+    /// 140 m closer catches as quickly.</remarks>
+    [Theory]
+    [InlineData(1142.0)]
+    [InlineData(1000.0)]
+    public void SingleBurnCatchesFromTheGameChapterIgnitionState(double upstreamM) =>
+        FlyToCatch(0.0, upstreamM: upstreamM, glideMps: 31.0, descentMps: 116.0, massKg: 215_000.0,
+            maximumCatchS: 50.0);
+
+    private void FlyToCatch(double crossrangeM, double upstreamM = NominalUpstreamM, double glideMps = 0.0,
+        double descentMps = 100.0, double massKg = CatchMassKg, double maximumCatchS = 40.0)
     {
-        var bench = Bench.Create(upstreamM: NominalUpstreamM, glideMps: 0.0, crossrangeM: crossrangeM);
+        var bench = Bench.Create(upstreamM: upstreamM, glideMps: glideMps, crossrangeM: crossrangeM,
+            descentMps: descentMps, massKg: massKg);
         var burn = bench.Burn;
         for (int i = 0; i < 7000 && burn.Phase is not (TowerCatchBurnPhase.Caught or TowerCatchBurnPhase.Blocked); i++)
             bench.Step(0.02);
@@ -65,9 +80,9 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
         // cutoff must bound the peak the contact solver then produced.
         Assert.True(bench.Ship.CatchPeakCompressionM <= burn.LastCutoffDecision.Prediction.PeakCompressionM + 0.005,
             $"actual {bench.Ship.CatchPeakCompressionM:F3} m > predicted {burn.LastCutoffDecision.Prediction.PeakCompressionM:F3} m");
-        // Flight 15 caught 18 s after ignition; this controller still hovers on one engine for
-        // much longer, inside its 120 s burn budget.
-        Assert.InRange(burn.CaughtTimeS, 14.0, 120.0);
+        // Flight 15 caught 18 s after ignition. The flip, the uniform braking onto the terminal
+        // gate and the planned side acceleration now take about 30 s from the nominal state.
+        Assert.InRange(burn.CaughtTimeS, 14.0, maximumCatchS);
     }
 
     [Fact]
@@ -108,7 +123,8 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
         /// toward the tower at <paramref name="glideMps"/>.
         /// </summary>
         public static Bench Create(double upstreamM, double glideMps, double crossrangeM,
-            bool noseTowardTower = true, double descentMps = 100.0)
+            bool noseTowardTower = true, double descentMps = 100.0, double massKg = CatchMassKg,
+            double? ignitionClearanceM = null, double tiltDeg = BellyFlopTiltDeg, double rollDeg = 0.0)
         {
             string data = Data();
             var earth = CelestialBody.LoadFromJson(Path.Combine(data, "bodies/earth.json"));
@@ -121,7 +137,7 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
             // The game's catch chapter arrives with about 200 t; fill the main tank to that mass.
             tank.LiquidFuel = 0; tank.Oxidizer = 0;
             double capacity = tank.Definition.FuelCapacityLF + tank.Definition.FuelCapacityOx;
-            double fill = System.Math.Clamp((CatchMassKg - ship.TotalMass) / capacity, 0.0, 1.0);
+            double fill = System.Math.Clamp((massKg - ship.TotalMass) / capacity, 0.0, 1.0);
             tank.LiquidFuel = tank.Definition.FuelCapacityLF * fill;
             tank.Oxidizer = tank.Definition.FuelCapacityOx * fill;
             ship.ConfigureCatchContactsFromParts();
@@ -133,6 +149,7 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
             var definition = Definition();
             double clearance = 3_000.0;
             while (!definition.ShouldIgnite(clearance, descentMps)) clearance -= 1.0;
+            if (ignitionClearanceM is double chosen) clearance = chosen;
             var up = ship.CatchTargetUpWorld;
             var east = earth.RotationAxis.Cross(up).Normalized;
             var north = up.Cross(east).Normalized;
@@ -143,9 +160,10 @@ public sealed class TowerCatchBurnTests(ITestOutputHelper output)
             var velocity = -up * descentMps + east * glideMps;
             ship.Velocity = ship.CatchTargetVelocityWorld + velocity;
             var nose = noseTowardTower ? east : -east;
-            double tilt = BellyFlopTiltDeg * MathUtils.DEG_TO_RAD;
+            double tilt = tiltDeg * MathUtils.DEG_TO_RAD;
             var axis = (up * System.Math.Cos(tilt) + nose * System.Math.Sin(tilt)).Normalized;
-            ship.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(axis, -up);
+            ship.Orientation = Quaterniond.FromAxisAngle(axis, rollDeg * MathUtils.DEG_TO_RAD)
+                * AerodynamicsModel.ComputeBellyFirstOrientation(axis, -up);
             var burn = new TowerCatchBurn(ship, earth, definition, SeaLevelModel);
             return new Bench { Universe = universe, Ship = ship, Earth = earth, Site = site, Burn = burn, East = east };
         }

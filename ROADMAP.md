@@ -34,7 +34,9 @@ Base tecnica cerrada en `main`:
   now settles on both tower pins within the modeled travel and load limits.
   A continuous probe validates the finite deorbit and actuator-controlled descent
   through 2.5 km from the original deployment state. The full-world trial reaches
-  the Starbase area with stable attitude. The powered handoff into the catch
+  the Starbase area with stable attitude. The opt-in single-burn catch
+  (`EXOSPHERE_SINGLE_BURN_CATCH=1`) now catches in about 38 s at 50/60/120 Hz with
+  three, two, then one Raptor and no relight (Flight 15 flew about 18 s). The powered handoff into the catch
   corridor, in-game continuous mission, and booster diversion remain open.
   See the [Flight 15 verification](docs/audits/flight15_capture_and_gpu_2026-11-19.md).
   Flight 14 remains available from the Flight 15 briefing and exposes an automatic

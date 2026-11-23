@@ -67,4 +67,30 @@ public static class TowerCatchApproachPlanner
         var perpendicular = horizontalAcceleration - flow * horizontalAcceleration.Dot(flow);
         return perpendicular.Magnitude > deadbandMps2 ? perpendicular.Normalized : neutralLift.Normalized;
     }
+
+    /// <summary>
+    /// Weight (0..1) of the tower line in the glide lift: zero until
+    /// <paramref name="windowS"/> before ignition, full over the last half of the window so the
+    /// attitude has settled on it when the engines light.
+    /// </summary>
+    public static double FinalAlignmentWeight(double timeToIgnitionS, double windowS)
+    {
+        if (!(windowS > 0.0) || !double.IsFinite(timeToIgnitionS)) return 0.0;
+        return System.Math.Clamp((windowS - timeToIgnitionS) / (0.5 * windowS), 0.0, 1.0);
+    }
+
+    /// <summary>
+    /// Lift that points the belly flop at the tower: the horizontal line of sight, less its
+    /// component along the airflow. Falling nearly vertically, the nose leans toward the lift,
+    /// so this aims the nose, and the flip that thrusts along it, at the cradle.
+    /// </summary>
+    public static Vector3d TowerLineLift(Vector3d airflowDirection, Vector3d upWorld, Vector3d shipWorld,
+        Vector3d cradleWorld, Vector3d neutralLift)
+    {
+        var up = upWorld.Normalized;
+        var lineOfSight = cradleWorld - shipWorld;
+        lineOfSight -= up * lineOfSight.Dot(up);
+        if (lineOfSight.MagnitudeSquared < 1e-6) return neutralLift.Normalized;
+        return LiftDirection(airflowDirection, lineOfSight.Normalized, neutralLift, 1e-3);
+    }
 }

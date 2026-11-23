@@ -35,6 +35,9 @@ public sealed class TowerCatchBurn
     private bool _hasPreviousHorizontalVelocity;
     private const double LateralAccelerationFilterS = 0.5;
     private bool _settlingOnPins;
+    private TowerCatchLateralPlanner? _lateralPlanner;
+    private int _lateralPlannerEngines;
+    private const double LateralObserverTimeConstantS = 1.0;
     /// <summary>Miss, as a multiple of the alignment tolerance, that abandons the settle onto the pins.</summary>
     private const double SettleReleaseFactor = 1.5;
     private const double ThrustTrimTimeConstantS = 1.0;
@@ -58,6 +61,8 @@ public sealed class TowerCatchBurn
     public double RollErrorRad { get; private set; }
     /// <summary>Thrust axis the last step commanded, in world axes.</summary>
     public Vector3d LastAimWorld { get; private set; }
+    /// <summary>Horizon of the last side-acceleration plan (s).</summary>
+    public double LastTimeToGoS { get; private set; }
     /// <summary>Horizontal acceleration the last step asked for (m/s²).</summary>
     public Vector3d LastHorizontalAccelerationCommand { get; private set; }
 
@@ -183,22 +188,16 @@ public sealed class TowerCatchBurn
             : 0.0;
         double verticalAcceleration = System.Math.Max(0, gravity + feedForward
             + _definition.VerticalDampingPerSecond * (-verticalSpeed - targetDown));
+        // Above the terminal gate brake uniformly from the state the flip left onto the gate,
+        // not onto a fixed-shape profile: a ship below that profile would otherwise be told
+        // to fall faster, ride the throttle floor and arrive early on the horizontal clock.
+        if (Phase == TowerCatchBurnPhase.Braking && clearance > _definition.TerminalProfileClearanceM
+            && -verticalSpeed > _definition.TargetDescentSpeedMps(_definition.TerminalProfileClearanceM))
+            verticalAcceleration = gravity
+                + TowerCatchTerminalGuidance.GateDecelerationMps2(_definition, clearance, -verticalSpeed);
         double tiltLimit = Phase == TowerCatchBurnPhase.Flip
             ? _definition.FlipMaximumTiltDegrees : _definition.MaximumTiltDegrees;
         double tanTilt = System.Math.Tan(tiltLimit * MathUtils.DEG_TO_RAD);
-        // Command a bounded closing speed toward the cradle and track it. A position-gain law
-        // saturates the tilt cone on a large miss and overshoots; a speed command does not.
-        // Close on a constant-deceleration profile, linear near the cradle so the command has
-        // a finite slope there, and capped far out.
-        double miss = horizontalOffset.Magnitude;
-        double closingSpeed = System.Math.Min(_definition.MaximumClosingSpeedMps, System.Math.Min(
-            System.Math.Sqrt(2.0 * _definition.ClosingDecelerationMps2 * miss),
-            _definition.LateralClosingGainPerSecond(Phase == TowerCatchBurnPhase.Flip ? 3 : _engineCount) * miss));
-        var closing = miss > 1e-6 ? horizontalOffset * (-closingSpeed / miss) : Vector3d.Zero;
-        // Attitude authority grows with the lit engines, and the lateral loop must stay several
-        // times slower than the attitude loop: one Raptor lags the commanded tilt by seconds.
-        int lit = Phase == TowerCatchBurnPhase.Flip ? 3 : _engineCount;
-        double lateralGain = _definition.LateralGainPerSecond(lit);
         // The tilt, and with it the sideways thrust, follows the command only after the attitude
         // lag. Feed back the velocity that the thrust acting now will have produced one lag
         // ahead, so the loop stops leaning toward the cradle before it overshoots it.
@@ -212,10 +211,36 @@ public sealed class TowerCatchBurn
         }
         _previousHorizontalVelocity = horizontalVelocity;
         _hasPreviousHorizontalVelocity = true;
-        var predictedVelocity = Phase == TowerCatchBurnPhase.Braking
-            ? horizontalVelocity + _lateralAcceleration * _definition.LateralLagSeconds(lit)
-            : horizontalVelocity;
-        var homing = (closing - predictedVelocity) * lateralGain;
+        // Close the miss on the descent's own clock: uniform deceleration to rest over the
+        // cradle by the time the descent reaches the terminal gate. That trajectory needs no
+        // feedback, so the velocity gain stays inside the attitude bandwidth of the lit
+        // engines. Below the gate, and while hovering, close at the plain closing gain.
+        int lit = Phase == TowerCatchBurnPhase.Flip ? 3 : _engineCount;
+        double timeToGate = TowerCatchTerminalGuidance.TimeToGateS(_definition, clearance, -verticalSpeed);
+        // Plan the side acceleration through the identified plant, whose tilt reversal makes a
+        // feedback law overshoot: null offset and velocity when the descent reaches the gate,
+        // never sooner than the shortest horizon the reversal allows. Below the gate, or once
+        // the descent has stopped, keep a fixed receding horizon.
+        double lateralHorizon = timeToGate > 0.0 && double.IsFinite(timeToGate)
+            ? System.Math.Max(_definition.LateralMinimumHorizonS(lit), timeToGate)
+            : _definition.LateralMinimumHorizonS(lit);
+        LastTimeToGoS = lateralHorizon;
+        var planner = LateralPlannerFor(lit);
+        var homing = planner.Command(horizontalOffset, horizontalVelocity, lateralHorizon);
+        // The flip turns the ship in its pitch plane, where the body flaps add their authority
+        // to the gimbals. A side command out of that plane would make it flip partly in yaw on
+        // the gimbals alone: a nose 18° off the tower line stretched the flip from about 6 s
+        // to 9–10 s and threw the ship past the tower. The planner takes the side error after.
+        if (Phase == TowerCatchBurnPhase.Flip)
+        {
+            var axisNow = _ship.Orientation.Rotate(Vector3d.Up).Normalized;
+            var noseHorizontal = axisNow - up * axisNow.Dot(up);
+            if (noseHorizontal.MagnitudeSquared > 1e-6)
+            {
+                noseHorizontal = noseHorizontal.Normalized;
+                homing = noseHorizontal * homing.Dot(noseHorizontal);
+            }
+        }
         // No integral term: the thrust trim below already removes the steady side force of an
         // off-axis Raptor, and a velocity integral is a spring on position (∫v dt = r) that
         // wound up over the slow one-engine approach and carried the ship past the cradle.
@@ -235,8 +260,25 @@ public sealed class TowerCatchBurn
             double room = System.Math.Max(1.0, clearance - _definition.AlignmentHoldClearanceM);
             double arrestForce = _ship.TotalMass * (gravity + descent * descent / (2.0 * room))
                 * _definition.ThrottleHeadroom / _definition.ArrestThrottleHeadroom;
+            // Nor may it leave fewer engines than the rest of the profile needs: a ship almost
+            // stopped high up has a small demand now, but will fall back onto the braking
+            // segment below, which one Raptor cannot fly (it lit one engine 385 m up, fell to
+            // 37 m/s and braked at 3.8 m/s² for 40 s).
+            double profileForce = _ship.TotalMass * (gravity + System.Math.Max(
+                TowerCatchTerminalGuidance.GateDecelerationMps2(_definition, clearance, descent),
+                clearance > _definition.TerminalProfileClearanceM ? 0.0 : _definition.TerminalDecelerationMps2));
+            arrestForce = System.Math.Max(arrestForce, profileForce);
+            // The side acceleration still planned counts too, unclipped by the tilt cone: going
+            // to two engines with the lateral braking unfinished leaves them at full throttle
+            // and the plan saturated.
+            double plannedAcceleration = System.Math.Sqrt(verticalAcceleration * verticalAcceleration
+                + homing.MagnitudeSquared);
+            // Two Raptors at their floor out-thrust the ship near the end; a count that cannot
+            // throttle down to the vertical need would stop the descent and hover.
+            double currentFloorAcceleration = _engines.GetFullThrottleThrustMagnitude(pressure)
+                * _engines.Definition.MinThrottle / System.Math.Max(1, _ship.TotalMass);
             int selected = MonotoneLandingEngineSelection.Select(_ship, _body, _engines, _engineCount,
-                System.Math.Max(demandAcceleration * _ship.TotalMass, arrestForce), pressure,
+                System.Math.Max(plannedAcceleration * _ship.TotalMass, arrestForce), pressure,
                 _model.GimbalRangeDeg, _definition.ThrottleHeadroom, _definition.ControlAuthorityMargin);
             // The last engine settles the ship; it cannot also fly it across. Keep the second
             // engine until the ship is moving slowly and close over the cradle, as on Flight 15
@@ -244,6 +286,7 @@ public sealed class TowerCatchBurn
             // Two engines at their floor out-thrust the weight, so this only holds while the
             // ship is still coming down; once it stops descending the second engine must go.
             if (_engineCount == 2 && selected == 1 && verticalSpeed < -0.5
+                && currentFloorAcceleration < verticalAcceleration
                 && (horizontalVelocity.Magnitude > _definition.SingleEngineMaximumLateralSpeedMps
                     || horizontalOffset.Magnitude > _definition.SingleEngineMaximumMissM))
             {
@@ -271,6 +314,11 @@ public sealed class TowerCatchBurn
                 System.Math.Sqrt(System.Math.Max(0, floorAcceleration * floorAcceleration - lateral * lateral)));
         }
 
+        if (Phase == TowerCatchBurnPhase.Braking)
+        {
+            planner.Advance(horizontalAcceleration, interval);
+            planner.Observe(_lateralAcceleration, interval, LateralObserverTimeConstantS);
+        }
         var thrustAcceleration = up * verticalAcceleration + horizontalAcceleration;
         var aim = thrustAcceleration.MagnitudeSquared > 1e-12 ? thrustAcceleration.Normalized : up;
         // Ring Raptors sit off the axis, so the gimbals that hold attitude also turn the thrust
@@ -320,16 +368,21 @@ public sealed class TowerCatchBurn
             if (_ship.Orientation.Rotate(Vector3d.Up).Dot(aim) >= System.Math.Cos(15 * MathUtils.DEG_TO_RAD))
             {
                 Phase = TowerCatchBurnPhase.Braking;
+                LateralPlannerFor(_engineCount).Initialize(_lateralAcceleration);
                 FlipCompletedS = ElapsedS(universe);
                 FlipEndHorizontalOffset = horizontalOffset;
                 FlipEndHorizontalVelocity = horizontalVelocity;
             }
             return;
         }
-        double alignment = System.Math.Max(0.2, _ship.Orientation.Rotate(Vector3d.Up).Dot(aim));
+        // The throttle holds the vertical channel and the tilt carries the side force. Thrust
+        // sized to the commanded total along a lagging axis would turn a tilt past the aim
+        // into extra side acceleration; sized to the vertical need through the actual tilt it
+        // equals the commanded total once the axis is on the aim.
+        double axisUp = System.Math.Max(0.5, _ship.Orientation.Rotate(Vector3d.Up).Normalized.Dot(up));
         double rated = _engines.GetFullThrottleThrustMagnitude(pressure);
         _ship.Throttle = _engines.ApplyThrottleFloor(System.Math.Max(_engines.Definition.MinThrottle,
-            demandAcceleration * _ship.TotalMass / alignment / System.Math.Max(1, rated)));
+            verticalAcceleration * _ship.TotalMass / axisUp / System.Math.Max(1, rated)));
     }
 
     /// <summary>
@@ -349,12 +402,43 @@ public sealed class TowerCatchBurn
         return angle;
     }
 
+    /// <summary>
+    /// Roll (rad, ±π) of the belly (body −X) away from the vertical plane through the vehicle
+    /// axis, measured about the axis. Zero when the belly faces straight down: the flip then
+    /// turns the ship about its pitch axis, where the body flaps add their authority to the
+    /// gimbals. A rolled ship must flip partly in yaw on the gimbals alone.
+    /// </summary>
+    public static double BellyRollFromVerticalRad(Quaterniond orientation, Vector3d upWorld)
+    {
+        var axis = orientation.Rotate(Vector3d.Up).Normalized;
+        var belly = orientation.Rotate(-Vector3d.Right).Normalized;
+        var down = -upWorld.Normalized;
+        var downPlane = down - axis * down.Dot(axis);
+        if (downPlane.MagnitudeSquared < 1e-12) return 0.0;
+        downPlane = downPlane.Normalized;
+        return System.Math.Atan2(belly.Cross(downPlane).Dot(axis), belly.Dot(downPlane));
+    }
+
     /// <summary>Angular rate across the vehicle axis (pitch and yaw) and about it (roll).</summary>
     public static (double Transverse, double Roll) SplitAngularRate(Vessel ship)
     {
         var axis = ship.Orientation.Rotate(Vector3d.Up).Normalized;
         double roll = ship.AngularVelocity.Dot(axis);
         return ((ship.AngularVelocity - axis * roll).Magnitude, roll);
+    }
+
+    // The plant follows the lit engines; the planner keeps its internal state across a change.
+    private TowerCatchLateralPlanner LateralPlannerFor(int litEngines)
+    {
+        if (_lateralPlanner == null || _lateralPlannerEngines != litEngines)
+        {
+            var model = _definition.LateralPlant(litEngines);
+            _lateralPlanner = _lateralPlanner == null
+                ? new TowerCatchLateralPlanner(model, _definition.LateralPlanSmoothingS2)
+                : _lateralPlanner.WithModel(model);
+            _lateralPlannerEngines = litEngines;
+        }
+        return _lateralPlanner;
     }
 
     private void CutEngines()

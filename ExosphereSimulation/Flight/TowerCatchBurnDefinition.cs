@@ -30,6 +30,12 @@ public sealed class TowerCatchBurnDefinition
     [JsonPropertyName("glidePlanningTurnRateRadPerS")] public double GlidePlanningTurnRateRadPerS { get; set; }
     /// <summary>Horizontal acceleration the belly-flop lift gives when turned fully sideways (m/s²).</summary>
     [JsonPropertyName("glideLiftAccelerationMps2")] public double GlideLiftAccelerationMps2 { get; set; }
+    /// <summary>
+    /// Seconds before ignition over which the belly-flop lift turns onto the line to the tower.
+    /// In the near-vertical fall the nose leans toward the lift, so a glide still turning at
+    /// ignition lights with the nose, and the flip throw along it, off the tower line.
+    /// </summary>
+    [JsonPropertyName("glideFinalAlignmentSeconds")] public double GlideFinalAlignmentSeconds { get; set; }
     /// <summary>Gain from glide velocity error to commanded horizontal acceleration (1/s).</summary>
     [JsonPropertyName("glideVelocityGainPerSecond")] public double GlideVelocityGainPerSecond { get; set; }
     /// <summary>Time the flip and spool take before the braking profile holds (s).</summary>
@@ -45,33 +51,33 @@ public sealed class TowerCatchBurnDefinition
     [JsonPropertyName("alignedMissM")] public double AlignedMissM { get; set; }
     /// <summary>Rail slack (m) at which the ship counts as centred enough to descend onto the arms.</summary>
     [JsonPropertyName("railDescentSlackM")] public double RailDescentSlackM { get; set; } = 0.5;
-    /// <summary>Lowest pin clearance per metre of horizontal miss while translating to the arms.</summary>
-    [JsonPropertyName("approachSlope")] public double ApproachSlope { get; set; }
     /// <summary>Gain from clearance error to descent speed while holding (1/s).</summary>
     [JsonPropertyName("holdClearanceGainPerSecond")] public double HoldClearanceGainPerSecond { get; set; }
     /// <summary>Tilt the flip may aim past vertical; the rotation carries on past its target (deg).</summary>
     [JsonPropertyName("flipMaximumTiltDegrees")] public double FlipMaximumTiltDegrees { get; set; }
     [JsonPropertyName("maximumTiltDegrees")] public double MaximumTiltDegrees { get; set; }
-    /// <summary>Closing speed per metre of horizontal miss with one, two and three engines lit (1/s).
-    /// With the velocity gain this sets an overdamped loop only while it stays below a quarter of it.</summary>
-    [JsonPropertyName("lateralClosingGainByEngines")] public double[] LateralClosingGainByEngines { get; set; } = [];
-    public double LateralClosingGainPerSecond(int litEngines) => Lookup(LateralClosingGainByEngines, litEngines);
-    /// <summary>Deceleration the commanded closing speed assumes on the way in (m/s²).</summary>
-    [JsonPropertyName("closingDecelerationMps2")] public double ClosingDecelerationMps2 { get; set; }
-    /// <summary>Upper bound on the commanded closing speed toward the cradle (m/s).</summary>
-    [JsonPropertyName("maximumClosingSpeedMps")] public double MaximumClosingSpeedMps { get; set; }
-    /// <summary>Gain from horizontal velocity error to horizontal acceleration with one, two and three
-    /// engines lit (1/s). One off-axis Raptor turns the tilt far slower than three.</summary>
-    [JsonPropertyName("lateralGainByEngines")] public double[] LateralGainByEngines { get; set; } = [];
-    public double LateralGainPerSecond(int litEngines) => Lookup(LateralGainByEngines, litEngines);
+    /// <summary>
+    /// Identified side-acceleration response per lit engine count (one, two, three), each
+    /// <c>[K, T_z, T, ζ]</c> of <see cref="LateralPlantModel"/>: steps through the burn's own
+    /// actuation path on the 215 t full-physics bench, fitted to <c>K(1 − T_z s)/(T²s² + 2ζTs + 1)</c>.
+    /// </summary>
+    [JsonPropertyName("lateralPlantByEngines")] public double[][] LateralPlantByEngines { get; set; } = [];
+    /// <summary>
+    /// Shortest horizon of the side-acceleration plan, per second of the plant's reversal time
+    /// <c>T_z</c>: a plan shorter than a few reversal times drives the tilt against its own
+    /// initial reversal and oscillates.
+    /// </summary>
+    [JsonPropertyName("lateralMinimumHorizonPerZeroTime")] public double LateralMinimumHorizonPerZeroTime { get; set; }
 
-    private static double Lookup(double[] table, int litEngines) =>
-        table.Length == 0 ? 0.0 : table[System.Math.Clamp(litEngines, 1, table.Length) - 1];
-    /// <summary>Attitude lag of the sideways thrust with one, two and three engines lit (s).</summary>
-    [JsonPropertyName("lateralLagSecondsByEngines")] public double[] LateralLagSecondsByEngines { get; set; } = [];
+    public double LateralMinimumHorizonS(int litEngines) => LateralMinimumHorizonPerZeroTime * LateralPlant(litEngines).ZeroTimeS;
+    /// <summary>Weight of command changes against command size in the side-acceleration plan (s²).</summary>
+    [JsonPropertyName("lateralPlanSmoothingS2")] public double LateralPlanSmoothingS2 { get; set; }
 
-    /// <summary>Lag for a lit engine count, clamped to the declared table; zero when none is declared.</summary>
-    public double LateralLagSeconds(int litEngines) => Lookup(LateralLagSecondsByEngines, litEngines);
+    public LateralPlantModel LateralPlant(int litEngines)
+    {
+        var p = LateralPlantByEngines[System.Math.Clamp(litEngines, 1, LateralPlantByEngines.Length) - 1];
+        return new LateralPlantModel(p[0], p[1], p[2], p[3]);
+    }
     /// <summary>
     /// Share of the remaining engines' rated thrust that must still arrest the current descent
     /// within the remaining clearance before one more engine may shut down.
@@ -120,9 +126,7 @@ public sealed class TowerCatchBurnDefinition
     public double TargetDescentSpeedMps(double clearanceM, double horizontalMissM)
     {
         double profile = TargetDescentSpeedMps(clearanceM);
-        double holdClearance = System.Math.Max(
-            horizontalMissM > AlignedMissM ? AlignmentHoldClearanceM : 0.0,
-            ApproachSlope * System.Math.Max(0.0, horizontalMissM - AlignedMissM));
+        double holdClearance = horizontalMissM > AlignedMissM ? AlignmentHoldClearanceM : 0.0;
         if (holdClearance <= 0.0) return profile;
         double hold = HoldClearanceGainPerSecond * (clearanceM - holdClearance);
         return System.Math.Min(profile, hold);
@@ -168,20 +172,19 @@ public sealed class TowerCatchBurnDefinition
     public void Validate()
     {
         double[] positive = [TerminalGlideAltitudeM, GlideMaximumClosingSpeedMps,
-            GlideVelocityGainPerSecond, GlideClosingGainPerSecond, GlidePlanningTurnRateRadPerS, GlideLiftAccelerationMps2, IgnitionLeadM, IgnitionLeadPerGlideSeconds,
+            GlideVelocityGainPerSecond, GlideClosingGainPerSecond, GlidePlanningTurnRateRadPerS, GlideLiftAccelerationMps2, GlideFinalAlignmentSeconds, IgnitionLeadM, IgnitionLeadPerGlideSeconds,
             IgnitionLeadMaximumGlideMps, FlipLeadSeconds, BrakingDecelerationMps2, TerminalProfileClearanceM,
             TerminalDecelerationMps2, ContactDescentSpeedMps, AlignmentHoldClearanceM, AlignedMissM,
-            HoldClearanceGainPerSecond, ApproachSlope, FlipMaximumTiltDegrees, MaximumTiltDegrees, ClosingDecelerationMps2, MaximumClosingSpeedMps, ArrestThrottleHeadroom,
+            HoldClearanceGainPerSecond, FlipMaximumTiltDegrees, MaximumTiltDegrees, ArrestThrottleHeadroom,
             VerticalDampingPerSecond, ProportionalAttitudeGain, AttitudeDampingGain, RollDampingGain, RollAlignmentGain, RollAlignmentMaximumTiltDegrees, RollAlignmentClearanceM, RollAlignmentCommandLimit,
-            FlipAttitudeDampingGain, SingleEngineMaximumLateralSpeedMps, SingleEngineMaximumMissM, ThrottleHeadroom, ControlAuthorityMargin, MissedApproachClearanceM, MissedApproachRadiusM, MaximumBurnSeconds];
+            FlipAttitudeDampingGain, LateralMinimumHorizonPerZeroTime, LateralPlanSmoothingS2, SingleEngineMaximumLateralSpeedMps, SingleEngineMaximumMissM, ThrottleHeadroom, ControlAuthorityMargin, MissedApproachClearanceM, MissedApproachRadiusM, MaximumBurnSeconds];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"
             || string.IsNullOrWhiteSpace(Assumptions) || positive.Any(v => !double.IsFinite(v) || v <= 0.0)
             || MaximumTiltDegrees >= 45.0 || ThrottleHeadroom > 1.0 || ArrestThrottleHeadroom > 1.0
             || ContactDescentSpeedMps > TowerCatchCutoff.MaxVerticalSpeedMps
             || AlignmentHoldClearanceM >= TerminalProfileClearanceM
-            || LateralLagSecondsByEngines.Any(v => !double.IsFinite(v) || v < 0.0)
-            || LateralGainByEngines.Length == 0 || LateralGainByEngines.Any(v => !double.IsFinite(v) || v <= 0.0)
-            || LateralClosingGainByEngines.Length == 0 || LateralClosingGainByEngines.Any(v => !double.IsFinite(v) || v <= 0.0))
+            || LateralPlantByEngines.Length == 0 || LateralPlantByEngines.Any(p => p.Length != 4
+                || !new LateralPlantModel(p[0], p[1], p[2], p[3]).IsValid))
             throw new InvalidDataException($"Invalid tower catch burn estimate '{Id}'.");
     }
 

@@ -8,6 +8,7 @@
   "glideVelocityGainPerSecond": 0.2,
   "glidePlanningTurnRateRadPerS": 0.08,
   "glideLiftAccelerationMps2": 3.0,
+  "glideFinalAlignmentSeconds": 8.0,
   "ignitionLeadM": 380.0,
   "ignitionLeadPerGlideSeconds": 13.4,
   "ignitionLeadMaximumGlideMps": 60.0,
@@ -20,26 +21,30 @@
   "alignedMissM": 4.0,
   "railDescentSlackM": 0.5,
   "holdClearanceGainPerSecond": 0.5,
-  "approachSlope": 1.0,
   "flipMaximumTiltDegrees": 10.0,
   "maximumTiltDegrees": 30.0,
-  "lateralClosingGainByEngines": [
-    0.06,
-    0.08,
-    0.1
+  "lateralPlantByEngines": [
+    [
+      1.26,
+      1.81,
+      1.02,
+      0.96
+    ],
+    [
+      1.15,
+      1.68,
+      0.9,
+      0.91
+    ],
+    [
+      1.38,
+      1.24,
+      0.79,
+      0.85
+    ]
   ],
-  "closingDecelerationMps2": 0.5,
-  "maximumClosingSpeedMps": 15.0,
-  "lateralGainByEngines": [
-    0.15,
-    0.3,
-    0.4
-  ],
-  "lateralLagSecondsByEngines": [
-    2.5,
-    0.5,
-    0.3
-  ],
+  "lateralMinimumHorizonPerZeroTime": 5.0,
+  "lateralPlanSmoothingS2": 1.0,
   "verticalDampingPerSecond": 1.2,
   "proportionalAttitudeGain": 2.2,
   "attitudeDampingGain": 6.0,
