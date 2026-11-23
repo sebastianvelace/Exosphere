@@ -500,10 +500,46 @@ predicted compression bounds the peak:
 
 One fault remains open, and it predates this change. In the default chapter the peak *pin
 load* exceeds the predicted load: 1.72 MN against 1.18 MN at 60 Hz (identical before this
-change), and 2.23 MN against 1.25 MN at 120 Hz. Both stay inside the 3 MN pin limit. The
-pins are already compressed when the cutoff decides (gap −0.17 to −0.39 m), so the peak
-probably comes from the powered touchdown before cutoff, which the post-cutoff predictor
-does not cover. This has not been verified.
+change), and 2.23 MN against 1.25 MN at 120 Hz. Both stay inside the 3 MN pin limit. See
+the next section for the cause.
+
+### Default-chapter pin-load spike (diagnosed, not fixed)
+
+A per-step trace at 120 Hz put the 2.23 MN peak at the first pin contact, under power and
+before the cutoff check ran. The pin met the cradle at 4.4 m/s. At 7 mm of compression the
+load was almost entirely damping: c·v ≈ 2.2 MN.
+
+The legacy EDL guidance flies the last 30 m as a sawtooth. Descent speed swings between 1.6
+and 5.7 m/s, and the engines shut down and relight about every 1.3 s:
+
+1. The catch phase keeps all three centre Raptors (`minimumSafeEngines = maxLandingEngines`).
+2. Three engines at their 40 % floor out-thrust the 207 t ship, so it cannot hover.
+3. `PoweredLandingGuidance` then commands zero whenever the ship is slower than its profile,
+   and the engines shut down.
+4. The profile also targets 1.2 m/s at contact, the leg-touchdown value, while the cutoff
+   accepts at most 0.65 m/s.
+
+Four trials were run and reverted:
+
+- **One engine below 30 m, continuous descent law, 0.4 m/s contact target.** The ship
+  hovered: a proportional loop settled about 0.8 m/s slow, because delivered thrust exceeds
+  the rated model by several percent. A bounded vertical integral fixed that, and the
+  120 Hz run caught with a 1.49 MN peak load. It landed 4.4 m off-centre and tilted 3.3°,
+  on one rail, after 23 t more propellant.
+- **Two engines.** Two engines at their floor also out-thrust the ship, so it climbed.
+- **Measured-thrust trim ported to the legacy aim.** No effect: the trim measured zero,
+  because this vehicle's thrust runs along its axis.
+- **Lateral force trace.** The thrust pushed 0.6 m/s² toward the cradle, yet the centre of
+  mass drifted away. The default chapter is the scripted demonstration, which writes the
+  attitude every frame (`vessel.Orientation = desiredAttitude`). One off-centre engine makes
+  a torque. The integrator rotates the ship about its centre of mass, and the snap rotates it
+  back about the skirt datum, about 20 m lower. Each frame that moves the centre of mass
+  sideways, a translation that is not physical. Three symmetric engines make no torque,
+  which is why the original sawtooth showed no drift.
+
+The demonstration's attitude snap cannot fly an asymmetric engine. The physical fix is to fly
+the default chapter's terminal approach with the actuator-controlled single-burn controller
+(`TowerCatchBurn`), which already holds one engine with thrust trim and no relights.
 
 The single burn still takes 78–89 s, against 18 s on Flight 15.
 
