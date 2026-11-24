@@ -1124,7 +1124,31 @@ The 120 Hz pin-load spike predates this change.
 - **Seed:** moving the single-burn seed ±170 m either aborts or catches as hard, so seed
   tuning does not fix it. This is the marginal lateral channel recorded above.
 
-**Open:** the opt-in single burn exceeds the load limit with the measured flaps.
+**Cause of the hard catch.** Replayed from the game's own ignition state, the hard catch
+is a contact event, not the descent:
+
+- The ship settled 2 m below the cradle plane with its fittings still rolled 21° from the
+  arms, so the pins passed beside an arm.
+- The roll alignment then turned a pin into the arm's side. The contact saw 2 m of
+  penetration (5.4 MN) and threw the ship back up.
+
+**Fix.** Below twice the hold clearance, the burn now holds as for a lateral miss until the
+pin roll error is within `rollAlignedToleranceDegrees` (5°). The fittings face the arms
+before they go between them, as on Flight 15.
+
+| Rate | Catch time (s) | Peak pin load (MN) | Load limit |
+| ---: | ---: | ---: | --- |
+| 50 Hz | 63.8 | 1.36 | within |
+| 60 Hz | 62.7 | 1.38 | within |
+| 120 Hz | — (missed approach before the arms) | — | — |
+
+The 120 Hz miss happens with or without the gate: the marginal lateral channel with the
+measured flaps.
+
+**Regression test.** The 60 Hz replay fixture is now the game's ignition with the
+measured flaps, and the replay test requires the catch within the travel and load limits.
+
+**Open:** the opt-in single burn at 120 Hz.
 
 **Check to run.** These chapter runs are not part of `ci_check.sh`. Run
 `CAPTURE_MENU_MODAL=flight15catchverify` at 50, 60 and 120 Hz after any change to the V3

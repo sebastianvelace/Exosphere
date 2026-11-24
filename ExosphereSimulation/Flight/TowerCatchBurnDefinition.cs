@@ -90,6 +90,11 @@ public sealed class TowerCatchBurnDefinition
     /// <summary>Roll command per radian of pin misalignment with the arms.</summary>
     [JsonPropertyName("rollAlignmentGain")] public double RollAlignmentGain { get; set; }
     /// <summary>Tilt from vertical above which the fittings are not rolled toward the arms (deg).</summary>
+    /// <summary>
+    /// Pin roll error (deg) above which the ship holds at the hold clearance instead of
+    /// settling: the fittings must face the arms before they go between them. Zero disables.
+    /// </summary>
+    [JsonPropertyName("rollAlignedToleranceDegrees")] public double RollAlignedToleranceDegrees { get; set; }
     [JsonPropertyName("rollAlignmentMaximumTiltDegrees")] public double RollAlignmentMaximumTiltDegrees { get; set; }
     /// <summary>Pin clearance below which the fittings are rolled toward the arms (m).</summary>
     [JsonPropertyName("rollAlignmentClearanceM")] public double RollAlignmentClearanceM { get; set; }
@@ -180,6 +185,7 @@ public sealed class TowerCatchBurnDefinition
             FlipAttitudeDampingGain, LateralMinimumHorizonPerZeroTime, LateralPlanSmoothingS2, SingleEngineMaximumLateralSpeedMps, SingleEngineMaximumMissM, ThrottleHeadroom, ControlAuthorityMargin, MissedApproachClearanceM, MissedApproachRadiusM, MaximumBurnSeconds];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"
             || string.IsNullOrWhiteSpace(Assumptions) || positive.Any(v => !double.IsFinite(v) || v <= 0.0)
+            || RollAlignedToleranceDegrees < 0.0 || RollAlignedToleranceDegrees >= 90.0
             || MaximumTiltDegrees >= 45.0 || ThrottleHeadroom > 1.0 || ArrestThrottleHeadroom > 1.0
             || ContactDescentSpeedMps > TowerCatchCutoff.MaxVerticalSpeedMps
             || AlignmentHoldClearanceM >= TerminalProfileClearanceM

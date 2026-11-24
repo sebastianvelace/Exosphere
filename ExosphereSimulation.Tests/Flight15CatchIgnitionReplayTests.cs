@@ -29,11 +29,14 @@ public sealed class Flight15CatchIgnitionReplayTests
         var burn = bench.Burn!;
         string steps = string.Join(" ", burn.EngineSteps.Select(s => $"{s.EngineCount}@{s.TimeS:F1}"));
         Assert.True(burn.Phase == TowerCatchBurnPhase.Caught, $"{burn.Phase} {burn.BlockReason} steps={steps}");
-        // The game cut the last engine at 38.3–38.9 s and caught about two seconds later. The
-        // 60 Hz capture replays within a few tenths of that; the 50 Hz one catches at 46.8 s,
-        // since a restore does not carry every control phase and the late overshoot amplifies
-        // small differences. The bound guards against the 78–98 s catches this replaced.
-        Assert.InRange(burn.CaughtTimeS, 0.0, 50.0);
+        // The 60 Hz capture is the game's ignition with the measured V3 forward flaps
+        // (2026-11-24): the game catches it at 62.7 s; the 50 Hz one is the earlier capture.
+        // A restore does not carry every control phase, so the late overshoot can amplify small
+        // differences. The bound guards against slower, wandering catches.
+        Assert.InRange(burn.CaughtTimeS, 0.0, 70.0);
+        // A catch only counts within the pins' travel and load limits.
+        Assert.False(ship.CatchLimitExceeded,
+            $"peak compression {ship.CatchPeakCompressionM:F3} m, peak pin load {ship.CatchPeakPinLoadN / 1e6:F2} MN");
         Assert.Equal(0, burn.Relights);
         var counts = burn.EngineSteps.Select(s => s.EngineCount).ToArray();
         Assert.Equal(3, counts[0]);

@@ -180,6 +180,17 @@ public sealed class TowerCatchBurn
             else if (horizontalOffset.Magnitude > _definition.AlignedMissM * SettleReleaseFactor)
                 _settlingOnPins = false;
             if (_settlingOnPins) missForHold = 0.0;
+            // The fittings must face the arms before they go between them: a pin lowered
+            // beside an arm and then rolled into it strikes the arm from the side. Until the
+            // roll is aligned, hold at the hold clearance as for a lateral miss.
+            if (_ship.CatchTargetRails.IsDefined && _definition.RollAlignedToleranceDegrees > 0.0
+                && clearance < 2.0 * _definition.AlignmentHoldClearanceM
+                && System.Math.Abs(PinRollErrorRad(_ship.Orientation, up, _ship.CatchTargetRails.ArmAxisWorld))
+                    > _definition.RollAlignedToleranceDegrees * MathUtils.DEG_TO_RAD)
+            {
+                _settlingOnPins = false;
+                missForHold = System.Math.Max(missForHold, 2.0 * _definition.AlignedMissM);
+            }
         }
         double targetDown = _definition.TargetDescentSpeedMps(clearance, missForHold);
         double feedForward = targetDown > 0.0

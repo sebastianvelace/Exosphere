@@ -52,6 +52,7 @@
   "rollAlignmentGain": 1.0,
   "rollAlignmentMaximumTiltDegrees": 10.0,
   "rollAlignmentClearanceM": 150.0,
+  "rollAlignedToleranceDegrees": 5.0,
   "rollAlignmentCommandLimit": 0.3,
   "flipAttitudeDampingGain": 3.5,
   "singleEngineMaximumLateralSpeedMps": 2.0,
