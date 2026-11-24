@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "subject": "Starship and Super Heavy descent and landing facts from the FAA LC-39A environmental impact statement noise study",
+  "source": "FAA, SpaceX Starship-Super Heavy Launch Vehicle at Launch Complex 39A, Final Environmental Impact Statement, Volume II, Appendix C.1, Part 1: Starship Noise Assessment for Flight and Test Operations at KSC LC-39A (KBR, Inc., June 24, 2025)",
+  "source_url": "https://www.faa.gov/space/stakeholder_engagement/spacex_starship_ksc/SpaceX-SSH-LC-39A-Final-EIS-Volume-II-AppC1-Noise-Report-Part1.pdf",
+  "accessed_date": "2026-11-23",
+  "confidence": "primary (U.S. government document; trajectories, thrust schedules and operations data supplied by SpaceX)",
+  "vehicle_described": {
+    "note": "the future LC-39A vehicle, not the flown V3: ship 70 m, booster 80 m",
+    "ship_raptors": 9,
+    "ship_raptor_sea_level_thrust_MN": 3.19,
+    "booster_raptors": 35,
+    "booster_raptor_sea_level_thrust_MN": 2.94
+  },
+  "facts": [
+    {"quantity": "ship descent powered phase", "value": "most of the descent is unpowered; landing thrust is applied during approximately the last 1,800 ft (about 550 m) of altitude", "page": 75},
+    {"quantity": "ship transonic altitude", "value": "supersonic from apogee or deorbit until just below 75,000 ft (about 22.9 km)", "page": 75, "cross_check": "IFT-4/5/6 webcast telemetry crosses 1,235 km/h at 22-23 km (data/ift_entry_corridor.json)"},
+    {"quantity": "ship reentry track", "value": "west to east, like past Space Shuttle landings, with its own reorientation for a vertical landing", "page": 13},
+    {"quantity": "booster powered landing", "value": "landing thrust occurs within about the final 5,000 ft (about 1.5 km) of altitude"},
+    {"quantity": "booster transonic altitude", "value": "supersonic until just below about 9,000 ft (about 2.7 km)", "cross_check": "IFT-5 booster passes about 1,265 km/h near 1 km display altitude before the burn"},
+    {"quantity": "ascent timeline", "value": {"MECO_s": 169, "stage_separation_s": 171, "second_engine_start_s": 176, "booster_touchdown_s": 495}, "page": 13},
+    {"quantity": "booster pitch-over boom onset", "value": "about t = 91 s at 77,000 ft, Mach 2.7, flight-path angle 38 deg"}
+  ],
+  "not_included": "The SpaceX trajectory files (Starship_Bottom_Up_Ascent_Nominal_80_12_r2.ASC, Starship_Bottom_Up_Flyback_Nominal_80_12_r2.ASC and the landing files) are referenced but not tabulated in Part 1.",
+  "implication_for_exosphere": "The single-burn catch lights at about 1,425 m of pin clearance with about 115 m/s of descent; the SpaceX-supplied landing profile applies thrust over about the last 550 m. A lower ignition is the published route to the about 18 s Flight 15 burn."
+}

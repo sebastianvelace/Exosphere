@@ -96,7 +96,27 @@ noted. The measurement history is in
   2. Predict a near-ballistic terminal phase.
   3. Use heading only to point the nose at the tower before the flip.
 
-### 5. Data still missing
+### 5. Catch-burn ignition altitude
+
+- **Data:** the SpaceX-supplied landing profile in the FAA LC-39A EIS applies thrust over
+  about the last 550 m. Flown ocean landings take 11.7–15.9 s from about 93 m/s (IFT
+  telemetry). Flight 15's catch took about 18 s.
+- **Model:** the single-burn catch lights at about 1,425 m of pin clearance at about
+  115 m/s and takes about 38 s.
+- **Work:** lower the ignition toward the published profile. That needs the flip and the
+  side channel to fit into it, which depends on items 1 and 6.
+
+### 6. Raptor 3 gimbal range
+
+- **Data:** ±15° (reported, not tied to a version, not SpaceX-published).
+- **Model:** 6° per axis at 10°/s, provenance `estimated` (±2°).
+- **Effect:** the catch burn saturates the gimbals (8.5° combined is 6° on each axis), so
+  the flip and braking authority may be understated by more than half.
+- **Work:** find a version-specific or primary figure before changing the model, then
+  re-run the catch benches.
+- **Data:** [data/raptor3_reference.json](data/raptor3_reference.json).
+
+### 7. Data still missing
 
 - Flap chord, span, area and hinge station of the V3 forward flaps (imagery).
 - Per-degree flap effectiveness and lateral-directional derivatives (figures of Li 2022;

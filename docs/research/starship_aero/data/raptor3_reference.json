@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "subject": "Raptor 3 figures against the Exosphere V3 ship engine model",
+  "source": "spacecraft-models/starship dimensions.md, Raptor engines section, which labels each figure Published (SpaceX), Reported (Wikipedia, NSF, Starship SpaceX Wiki) or Estimated; facts only, cited, no text copied (the repository has no licence)",
+  "source_url": "https://github.com/spacecraft-models/starship/blob/main/dimensions.md",
+  "accessed_date": "2026-11-23",
+  "figures": {
+    "sea_level_thrust": [
+      {"value_tf": 280, "status": "published", "note": "in testing (Aug 2024; April 2024 presentation)"},
+      {"value_tf": 250, "status": "reported", "note": "nominal as flown on V3 (Wikipedia, May 2026)"}
+    ],
+    "vacuum_engine_thrust": [
+      {"value_tf": 306, "status": "published"},
+      {"value_tf": 275, "status": "reported", "note": "nominal on V3"}
+    ],
+    "specific_impulse_s": {"sea_level_engine_vacuum": {"value": 350, "status": "published"}, "sea_level_engine_at_sea_level": {"value": [327, 333], "status": "reported / estimated"}, "rvac_vacuum": {"value": 380, "status": "reported"}},
+    "engine_mass_kg": {"engine_only": 1525, "with_vehicle_side_hardware": 1720, "status": "published"},
+    "chamber_pressure_bar": {"value": [330, 350], "status": "reported"},
+    "mixture_ratio": {"value": 3.6, "status": "reported"},
+    "throttle_range": {"value": [0.40, 1.00], "status": "reported, not tied to a version"},
+    "gimbal_deg": {"value": 15, "status": "reported, not tied to a version"},
+    "nozzle_exit_m": {"sea_level": 1.3, "rvac": [2.3, 2.4], "status": "reported / estimated"},
+    "length_m": {"sea_level": 2.9, "rvac": 4.5, "status": "estimated"}
+  },
+  "model": {
+    "file": "data/engines/raptor3_starship_sl_flight12.json",
+    "ratedThrustSeaLevelN": 2800000,
+    "specificImpulseSeaLevelS": 321.55,
+    "minimumThrottle": 0.4,
+    "gimbalRangeDeg": 6.0,
+    "gimbalRateDegPerS": 10.0,
+    "provenance": "data/provenance/starship_flight12_v3_2026.json: thrust estimated +/-15 %, gimbal envelope estimated +/-2 deg and +/-30 % rates"
+  },
+  "comparison": [
+    {"item": "sea-level thrust", "finding": "model 2.80 MN (about 285 tf) equals the published test figure; the reported flown nominal is about 250 tf (2.45 MN), 12 % lower"},
+    {"item": "sea-level Isp", "finding": "model 321.6 s against about 327-333 s"},
+    {"item": "throttle floor", "finding": "model 40 % agrees"},
+    {"item": "gimbal range", "finding": "model 6 deg per axis against a reported 15 deg. The catch burn saturates the gimbals (8.5 deg combined is 6 deg on each axis), so the model may understate the flip and braking control authority by more than half. The 15 deg figure is not tied to a version and is not SpaceX-published; confirm before changing the model."}
+  ]
+}

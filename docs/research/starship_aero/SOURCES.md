@@ -211,6 +211,36 @@ Other telemetry sources checked:
   - Booster catch-burn references.
 - **Data:** [data/ift_entry_corridor.json](data/ift_entry_corridor.json).
 
+### FAA LC-39A environmental impact statement, noise study
+
+- **Where:** FAA, Final EIS Volume II, Appendix C.1 Part 1 (KBR, June 24, 2025),
+  <https://www.faa.gov/space/stakeholder_engagement/spacex_starship_ksc/SpaceX-SSH-LC-39A-Final-EIS-Volume-II-AppC1-Noise-Report-Part1.pdf>.
+- **Confidence:** `primary`. A government document whose trajectories and thrust schedules
+  SpaceX supplied. It describes the future 70 m ship with 9 Raptors, not the flown V3.
+- **Supports:**
+  - The ship's descent is mostly unpowered, with landing thrust over about the last 550 m
+    (1,800 ft).
+  - The ship is supersonic until just below 22.9 km (75,000 ft). This matches the IFT
+    telemetry.
+  - Booster landing thrust comes within the last ~1.5 km, and the booster is supersonic to
+    ~2.7 km.
+  - Ascent timeline: MECO T+169 s, separation T+171 s, booster touchdown T+495 s.
+- **Does not support:** the trajectory files themselves, which are referenced but not
+  tabulated.
+- **Use:** the ignition altitude of the catch burn; the transonic altitude.
+- **Data:**
+  [data/faa_lc39a_noise_eis_2025.json](data/faa_lc39a_noise_eis_2025.json).
+
+### Raptor 3 figures (compendium)
+
+- **Where:** the dimensions compendium above, Raptor section. It labels each figure as
+  SpaceX-published or reported.
+- **Supports:** thrust of 280 tf in testing (published) and about 250 tf as flown on V3
+  (reported); throttle 40–100 %; gimbal ±15° (reported); engine mass 1,525 kg (published);
+  Isp.
+- **Use:** check the engine model. The gimbal range disagrees with it (6° modelled).
+- **Data:** [data/raptor3_reference.json](data/raptor3_reference.json).
+
 ### Mass estimates
 
 - **Where:** press and community estimates (Payload Space, New Space Economy, r/spacex).
