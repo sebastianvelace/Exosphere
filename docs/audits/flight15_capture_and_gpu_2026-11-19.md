@@ -931,6 +931,30 @@ around it. Either path needs the hull's sideslip side force checked against publ
 Starship data before the glide guidance, the planner and the ignition lead are
 recalibrated.
 
+### Sideslip steering is ineffective; the angle of attack steers along the nose (2026-11-23)
+
+The attitude was held kinematically for 2 s each, from the 4 km state, and the measurement
+is the aerodynamic acceleration (measured less gravity) in the local horizontal. The table
+gives the component along the nose heading, and in brackets the change in the cross
+component as the sideslip goes from −15° to +15°:
+
+| Angle of attack | Along the nose | Change across the nose |
+| ---: | ---: | ---: |
+| 80° | +0.35 m/s² | −0.40 m/s² |
+| 90° | −1.14 m/s² | −0.38 m/s² |
+| 100° | −2.75 m/s² | −0.33 m/s² |
+
+The cross component at zero sideslip, about 2 m/s², is the drag of the horizontal glide.
+
+- **Sideslip.** About 0.013 m/s² per degree, about ±0.2 m/s² at ±15°. Rolling a circular
+  hull about its own axis only turns its crossflow, which produces no side force. In the
+  model only the flaps break the symmetry, and they mainly restore the roll
+  (0.19 rad/s² at 5° with neutral flaps). This is the expected physics, not a defect. Steering the
+  glide by sideslip through roll is not effective.
+- **Angle of attack.** About −0.155 m/s² per degree along the nose heading, which makes the
+  angle of attack the usable steering channel. It acts only along the nose, and the nose
+  heading cannot be held (0.03–0.09 rad/s² of authority, see above).
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km
