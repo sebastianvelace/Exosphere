@@ -14,6 +14,8 @@ be checked against it. The model must follow the data; data must not be fitted t
 | [data/cylinder_crossflow_reference.json](data/cylinder_crossflow_reference.json) | Circular-cylinder crossflow drag by Reynolds regime; Jorgensen (in the code) and Achenbach. |
 | [data/flat_plate_normal_force_reference.json](data/flat_plate_normal_force_reference.json) | Flat-plate normal force at high incidence and low aspect ratio (Hoerner, Torres & Mueller). |
 | [data/ift_terminal_descent_telemetry.json](data/ift_terminal_descent_telemetry.json) | IFT-4/5/6 terminal belly flop from webcast OCR: speed against altitude, measured ballistic ratio m/(C_D S) and landing-burn durations. Reduced CSVs and their attribution are in `data/ift_terminal_descent/`; the script is `scripts/ift_terminal_descent.py`. |
+| [data/v3_ship_geometry_photogrammetry.json](data/v3_ship_geometry_photogrammetry.json) | Starship V3 ship geometry measured from photos (community compendium): forward- and aft-flap hinge lines, planform and azimuth, nosecone, catch pins and RCS, with the model comparison. |
+| [data/ift_entry_corridor.json](data/ift_entry_corridor.json) | IFT-4/5/6 ship entry corridor (speed at each altitude from 120 to 20 km) and the IFT-5 Super Heavy return and tower catch, from the full-flight 1 Hz extracts in `data/ift_terminal_descent/`. |
 | [data/starship_flight_observations.json](data/starship_flight_observations.json) | Observed flight values and timelines (broadcasts, SpaceX statements), and mass estimates. |
 
 The Flight 14 broadcast anchors with frame hashes stay in

@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "source": "SofieBrink/StarshipTelemetryExtractor (MIT), webcast OCR; reduced to 1 Hz in data/ift_terminal_descent/",
+  "generated_by": "scripts/ift_entry_and_booster.py",
+  "limits": [
+    "displayed altitude in whole km",
+    "speed is total speed, frame unstated",
+    "video time, not mission elapsed time",
+    "third-party OCR with gap filling"
+  ],
+  "ship_entry": {
+    "IFT4": {
+      "crossings": {
+        "120": {
+          "video_time_s": 2601.4,
+          "speed_kmh": 26639.0
+        },
+        "110": {
+          "video_time_s": 2673.67,
+          "speed_kmh": 26684.0
+        },
+        "100": {
+          "video_time_s": 2744.9,
+          "speed_kmh": 26727.0
+        },
+        "90": {
+          "video_time_s": 2816.13,
+          "speed_kmh": 26756.0
+        },
+        "85": {
+          "video_time_s": 2852.27,
+          "speed_kmh": 26749.0
+        },
+        "80": {
+          "video_time_s": 2890.43,
+          "speed_kmh": 26697.0
+        },
+        "75": {
+          "video_time_s": 2931.73,
+          "speed_kmh": 26532.0
+        },
+        "70": {
+          "video_time_s": 2988.53,
+          "speed_kmh": 25919.0
+        },
+        "65": {
+          "video_time_s": 3256.93,
+          "speed_kmh": 21538.0
+        },
+        "60": {
+          "video_time_s": 3334.37,
+          "speed_kmh": 19828.0
+        },
+        "55": {
+          "video_time_s": 3466.5,
+          "speed_kmh": 15691.0
+        },
+        "50": {
+          "video_time_s": 3548.07,
+          "speed_kmh": 12784.0
+        },
+        "45": {
+          "video_time_s": 3618.27,
+          "speed_kmh": 9891.0
+        },
+        "40": {
+          "video_time_s": 3689.5,
+          "speed_kmh": 6602.0
+        },
+        "35": {
+          "video_time_s": 3730.8,
+          "speed_kmh": 4488.0
+        },
+        "30": {
+          "video_time_s": 3760.73,
+          "speed_kmh": 2997.0
+        },
+        "25": {
+          "video_time_s": 3788.6,
+          "speed_kmh": 1748.0
+        },
+        "20": {
+          "video_time_s": 3810.27,
+          "speed_kmh": 1081.0
+        }
+      },
+      "first_below_1235_kmh": {
+        "video_time_s": 3804.07,
+        "altitude_km": 22.0,
+        "speed_kmh": 1225.0
+      }
+    },
+    "IFT5": {
+      "crossings": {
+        "120": {
+          "video_time_s": 2600.37,
+          "speed_kmh": 26639.0
+        },
+        "110": {
+          "video_time_s": 2672.63,
+          "speed_kmh": 26684.0
+        },
+        "100": {
+          "video_time_s": 2744.9,
+          "speed_kmh": 26728.0
+        },
+        "90": {
+          "video_time_s": 2816.13,
+          "speed_kmh": 26755.0
+        },
+        "85": {
+          "video_time_s": 2853.3,
+          "speed_kmh": 26743.0
+        },
+        "80": {
+          "video_time_s": 2891.47,
+          "speed_kmh": 26680.0
+        },
+        "75": {
+          "video_time_s": 2933.8,
+          "speed_kmh": 26490.0
+        },
+        "70": {
+          "video_time_s": 2998.83,
+          "speed_kmh": 25722.0
+        },
+        "65": {
+          "video_time_s": 3269.33,
+          "speed_kmh": 21654.0
+        },
+        "60": {
+          "video_time_s": 3344.7,
+          "speed_kmh": 19853.0
+        },
+        "55": {
+          "video_time_s": 3476.83,
+          "speed_kmh": 15563.0
+        },
+        "50": {
+          "video_time_s": 3543.93,
+          "speed_kmh": 12858.0
+        },
+        "45": {
+          "video_time_s": 3606.9,
+          "speed_kmh": 9765.0
+        },
+        "40": {
+          "video_time_s": 3663.67,
+          "speed_kmh": 6768.0
+        },
+        "35": {
+          "video_time_s": 3703.93,
+          "speed_kmh": 4585.0
+        },
+        "30": {
+          "video_time_s": 3733.87,
+          "speed_kmh": 2972.0
+        },
+        "25": {
+          "video_time_s": 3761.77,
+          "speed_kmh": 1641.0
+        },
+        "20": {
+          "video_time_s": 3785.5,
+          "speed_kmh": 991.0
+        }
+      },
+      "first_below_1235_kmh": {
+        "video_time_s": 3775.17,
+        "altitude_km": 23.0,
+        "speed_kmh": 1222.0
+      }
+    },
+    "IFT6": {
+      "crossings": {
+        "120": {
+          "video_time_s": 2426.0,
+          "speed_kmh": 26715.0
+        },
+        "110": {
+          "video_time_s": 2525.0,
+          "speed_kmh": 26761.0
+        },
+        "100": {
+          "video_time_s": 2626.0,
+          "speed_kmh": 26801.0
+        },
+        "90": {
+          "video_time_s": 2733.0,
+          "speed_kmh": 26813.0
+        },
+        "85": {
+          "video_time_s": 2790.0,
+          "speed_kmh": 26783.0
+        },
+        "80": {
+          "video_time_s": 2852.0,
+          "speed_kmh": 26664.0
+        },
+        "75": {
+          "video_time_s": 2927.0,
+          "speed_kmh": 26284.0
+        },
+        "70": {
+          "video_time_s": 3054.0,
+          "speed_kmh": 24834.0
+        },
+        "65": {
+          "video_time_s": 3232.0,
+          "speed_kmh": 21794.0
+        },
+        "60": {
+          "video_time_s": 3343.0,
+          "speed_kmh": 19318.0
+        },
+        "55": {
+          "video_time_s": 3436.0,
+          "speed_kmh": 16308.0
+        },
+        "50": {
+          "video_time_s": 3532.0,
+          "speed_kmh": 12504.0
+        },
+        "45": {
+          "video_time_s": 3595.0,
+          "speed_kmh": 9680.0
+        },
+        "40": {
+          "video_time_s": 3649.0,
+          "speed_kmh": 6927.0
+        },
+        "35": {
+          "video_time_s": 3690.0,
+          "speed_kmh": 4553.0
+        },
+        "30": {
+          "video_time_s": 3718.0,
+          "speed_kmh": 2923.0
+        },
+        "25": {
+          "video_time_s": 3742.0,
+          "speed_kmh": 1697.0
+        },
+        "20": {
+          "video_time_s": 3765.0,
+          "speed_kmh": 997.0
+        }
+      },
+      "first_below_1235_kmh": {
+        "video_time_s": 3755.0,
+        "altitude_km": 23.0,
+        "speed_kmh": 1234.0
+      }
+    }
+  },
+  "booster_ift5_catch": {
+    "peak_ascent": {
+      "video_time_s": 156.77,
+      "altitude_km": 64.0,
+      "speed_kmh": 5274.0
+    },
+    "boostback_minimum": {
+      "video_time_s": 203.23,
+      "altitude_km": 91.0,
+      "speed_kmh": 1203.0
+    },
+    "apogee": {
+      "video_time_s": 226.97,
+      "altitude_km": 96.0,
+      "speed_kmh": 1876.0
+    },
+    "peak_descent": {
+      "video_time_s": 357.07,
+      "altitude_km": 26.0,
+      "speed_kmh": 4394.0
+    },
+    "landing_burn": {
+      "start_video_time_s": 392.17,
+      "start_speed_kmh": 1209.0,
+      "start_altitude_km": 1.0,
+      "hard_phase_end_video_time_s": 398.33,
+      "hard_phase_end_speed_kmh": 239.0,
+      "speed_zero_video_time_s": 416.93,
+      "duration_s": 24.8
+    }
+  }
+}

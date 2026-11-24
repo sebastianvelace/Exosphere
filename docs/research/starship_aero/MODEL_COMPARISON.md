@@ -40,6 +40,27 @@ noted. The measurement history is in
   1. Place the forward flaps from imagery.
   2. Re-check the heading channel once trim no longer saturates the plates (item 2).
 
+- **Measured V3 geometry, now available:**
+  - **Source:**
+    [data/v3_ship_geometry_photogrammetry.json](data/v3_ship_geometry_photogrammetry.json),
+    ±0.6 m and ±5°.
+  - **Station:** the forward flaps sit on the ogive, centre about 7.6 m above the nose base.
+    The model has them about 1.75 m below it, roughly 9 m further aft.
+  - **Hinge and plane:** hinge tilted about 19°; azimuth about 98° and 262°; planes turned
+    14° leeward; swept-trapezoid planform. The area, about 14 m², already matches the
+    model's 14.5 m².
+  - **Ship length:** the model stack totals 54.0 m (engines 4.5 + tank 30.5 + command
+    19.0), against the published 52.1 m from skirt edge to tip. The definition of the
+    datum needs checking.
+- **Work:** move and reshape the forward flaps from these data. The plate model needs:
+  - a hinge tilt, already prototyped;
+  - a hinge azimuth (prototyped and reverted for heading, but justified here by geometry);
+  - a plane rotation;
+  - a non-rectangular planform, or at least the centroid and area of the trapezoid.
+
+  Then re-measure the trim range, the heading authority and every Flight 14 and Flight 15
+  gate.
+
 ### 2. Trim-feasibility check (bug, fixed, not merged)
 
 - **Bug:** `Flight14DescentController.TrimFeasibleAngleOfAttack` tested the moment about
@@ -101,6 +122,17 @@ These come from the datasets in `data/`:
 - **Forward-flap heading authority.**
   - Requirement: first-order and of the right sign in both directions.
   - Source: Zhang 2021, qualitative.
+- **Entry corridor.**
+  - Requirement: speed at 50, 40, 30 and 20 km within the IFT-4/5/6 spread, widened by
+    the display resolution: altitude ±0.5 km; for speed, about ±5 % at 50 and 40 km and
+    about ±10 % at 30 and 20 km.
+  - Source: `data/ift_entry_corridor.json`. Apply it only to entries from a comparable
+    suborbital trajectory: entry speed about 26,700 km/h at 120 km.
+- **Super Heavy catch burn.**
+  - Reference: the IFT-5 landing burn starts at about 1,200 km/h near 1 km, decelerates at
+    about 47 m/s² for about 6 s, then runs a gentle phase of about 14 s to zero.
+  - Use it for the shape of the booster catch, not as a pass band, since the booster
+    version differs.
 - **Terminal ballistic ratio.**
   - Requirement: the steady belly-flop ratio m/(C_D S) between 2 and 12 km lies in
     491–649 kg/m².

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "subject": "Starship V3 ship geometry relevant to aerodynamics and the catch, from a community photogrammetry compendium",
+  "source": "spacecraft-models/starship, dimensions.md (GitHub). Measurements scaled from NASASpaceflight photos of Ship 39 and others, each labelled Published, Reported or Estimated with its error. The repository carries no licence: only the measured facts are recorded here, paraphrased, with the source cited; no text is copied.",
+  "source_url": "https://github.com/spacecraft-models/starship/blob/main/dimensions.md",
+  "accessed_date": "2026-11-23",
+  "source_last_pushed": "2026-11-02",
+  "confidence": "estimate (photogrammetry) unless an entry says reported or published",
+  "reference_frame": "z in metres up from the bottom edge of the aft skirt (z = 0) to the nose tip (z = 52.1 m); azimuth 0 deg = windward (tiled) centreline, 180 deg = leeward",
+  "ship": {
+    "height_m": {"value": 52.1, "status": "published", "check": "51.7 +/- 1.7 m measured in a stack photo"},
+    "diameter_m": {"value": 9.0, "status": "published"},
+    "barrel_rings": {"value": "21 rings of 1.83 m", "status": "reported (Wikipedia)"},
+    "nosecone": {"shape": "tangent ogive", "length_m": 13.7, "error_m": 1.0, "base_z_m": 38.4, "status": "estimate"},
+    "tile_line_deg_from_windward": {"barrel": 105, "nosecone": 128, "aft_skirt": 108, "error_deg": 5, "status": "estimate"}
+  },
+  "forward_flaps": {
+    "status": "estimate (Starfactory photo), +/-0.6 m and +/-5 deg unless noted",
+    "count": 2,
+    "hinge_azimuth_deg": [98, 262],
+    "hinge_line": {"z_bottom_m": 43.3, "radius_at_bottom_m": 4.0, "z_top_m": 48.6, "radius_at_top_m": 2.2, "length_along_slope_m": 5.6},
+    "derived_hinge_tilt_from_axis_deg": {"value": 18.8, "derivation": "atan((4.0 - 2.2) / (48.6 - 43.3))"},
+    "tip_edge": {"length_m": 2.0, "error_m": 0.2, "z_bottom_m": 42.4, "z_top_m": 44.4, "distance_from_hinge_m": 3.7, "error_from_hinge_m": 0.4, "orientation": "roughly parallel to the axis"},
+    "edges": "trailing edge drops about 1 m from the hinge bottom to the tip bottom; leading edge strongly swept, dropping about 4 m from the hinge top to the tip top",
+    "derived_planform_area_m2": {"value": 14.1, "derivation": "trapezoid (5.6 + 2.0) / 2 x 3.7"},
+    "flap_plane": "each plane turned about 14 deg from radial toward leeward, so the planes are about 136 deg apart (reported: about 140 deg, since V2)",
+    "construction": "one thickness throughout, rounded edges, three hinges with a single control arm at the central one (reported, Ringwatchers V2; V3 externally similar)",
+    "relation_to_catch_pins": "lowest corners about 2.5 m above the catch pins"
+  },
+  "aft_flaps": {
+    "status": "estimate (Starfactory photo), +/-0.8 m",
+    "hinge_azimuth_deg": {"value": [90, 270], "error_deg": 10},
+    "leading_edge_root_z_m": 15.0,
+    "leading_edge_to_tip_top_z_m": 8.6,
+    "reach_beyond_hull_m": [3.7, 4.0],
+    "span_tip_to_tip_m": {"value": 17, "status": "reported (Wikipedia), not tied to a version"},
+    "thickness_m": {"root": 0.7, "outboard_edge": 0.35, "status": "estimate"},
+    "actuation": {"value": "one actuator with three motors per flap on V3 (two actuators on V2)", "status": "published"},
+    "hinge_fairings": "static aero strip 0.6-0.8 m wide along the root; tiled leading-edge cap about 0.8 m wide, tip 1.5-1.7 m above the flap root"
+  },
+  "catch_pins": {
+    "status": "estimate",
+    "azimuth_deg": [90, 270],
+    "z_m": {"underside": 39.0, "top_at_hull": 39.9, "error_m": 0.3},
+    "standoff_m": {"value": 0.44, "error_m": 0.05},
+    "note": "two wedge-shaped tiled fairings on the nosecone; reported (NSF) as the main lifting point on V3"
+  },
+  "rcs": {
+    "status": "reported (NSF May 2026)",
+    "v3": "redesigned: roll thrusters on the payload bay in two opposed pairs, another set about midway down, and outlets fed through the aft flap hinges onto a gas-steering plate",
+    "v1_v2": "cold-gas thrusters on ullage gas: four below the payload bay and two on the LOX tank"
+  },
+  "model_comparison": {
+    "model_files": ["data/parts/starship_v3_command_flight12.json", "data/parts/starship_v3_tank_flight12.json", "data/parts/starship_v3_engines_flight12.json"],
+    "model_stack_length_m": "54.0 (engines 4.5 + tank 30.5 + command 19.0), versus 52.1 published from skirt edge to tip",
+    "model_forward_flap": "hinge parallel to the axis at 90/270 deg, centre about 1.75 m below the nose base on the barrel, 5.7 x 2.55 m rectangle",
+    "measured_forward_flap": "on the ogive with its centre about 7.6 m above the nose base, hinge tilted about 19 deg at about 98/262 deg, plane turned 14 deg leeward, swept trapezoid of about 14 m2",
+    "consequence": "the model's forward flaps sit about 9 m too far aft, which shortens their pitch moment arm, and their parallel-to-axis hinge leaves the heading moment second order"
+  }
+}

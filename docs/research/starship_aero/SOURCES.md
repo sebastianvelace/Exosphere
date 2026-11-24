@@ -151,6 +151,66 @@ Other telemetry sources checked:
 - **Does not support:** actuation rate or torque. The model's 25°/s remains a simulator
   estimate.
 
+### Starship V3 dimensions compendium (photogrammetry)
+
+- **Where:** spacecraft-models/starship, `dimensions.md`,
+  <https://github.com/spacecraft-models/starship/blob/main/dimensions.md> (last pushed
+  2026-11-02). It cites NASASpaceflight photos, Ringwatchers, NSF reports and Wikipedia.
+- **Licence:** none. Only the measured facts are recorded, paraphrased and cited; no text
+  is copied.
+- **Confidence:** `estimate`. Each value is labelled Published, Reported or Estimated with
+  its error, typically ±0.6 m and ±5°.
+- **Supports:**
+  - V3 ship height 52.1 m, from skirt edge to tip.
+  - Nosecone: tangent ogive about 13.7 m ± 1 m long.
+  - Forward-flap geometry:
+    - hinge at about 98° and 262° from windward, running up the ogive from z 43.3 m
+      (radius 4.0 m) to 48.6 m (radius 2.2 m), which makes a tilt of about 19° to the axis;
+    - planes turned about 14° leeward;
+    - swept trapezoid of about 14 m².
+  - Aft flaps: hinges at 90° and 270°, leading-edge root at about z 15 m, about 4 m reach,
+    thickness tapering from 0.7 to 0.35 m.
+  - Catch pins at z ≈ 39.0–39.9 m.
+  - The V3 RCS layout (reported).
+- **Does not support:** flap deflection ranges or rates, centre of mass, mass.
+- **Use:** correcting the model's V3 flap stations and hinge geometry.
+- **Data:**
+  [data/v3_ship_geometry_photogrammetry.json](data/v3_ship_geometry_photogrammetry.json).
+
+### IFT-4/5/6 full-flight extracts: entry corridor and booster catch
+
+- **Where:** same OCR source as above, reduced to 1 Hz for the whole flight
+  (`data/ift_terminal_descent/ift*_full_flight_1hz.csv`); analysis in
+  `scripts/ift_entry_and_booster.py`.
+- **Confidence:** `secondary`.
+- **Supports:**
+  - The ship entry corridor (speed at each altitude), which repeats closely across three
+    flights:
+
+    | Altitude | Speed |
+    | ---: | --- |
+    | 50 km | 12,500–12,900 km/h |
+    | 40 km | 6,600–6,900 km/h |
+    | 30 km | about 2,900–3,000 km/h |
+    | 20 km | about 1,000–1,080 km/h |
+
+    Mach 1 falls at 22–23 km.
+  - The IFT-5 Super Heavy return and first tower catch:
+
+    | Event | Value |
+    | --- | --- |
+    | Peak ascent speed | 5,274 km/h at 64 km |
+    | Boostback minimum | 1,203 km/h at 91 km |
+    | Apogee | 96 km |
+    | Peak descent speed | 4,394 km/h at 26 km |
+    | Landing burn | starts at about 1,209 km/h near 1 km; hard phase to 239 km/h in about 6 s (≈ 47 m/s²); zero speed 24.8 s after the start |
+
+- **Use:**
+  - A speed-against-altitude gate for entry recalibration (the Flight 14 and Flight 15
+    descents). It does not depend on time alignment.
+  - Booster catch-burn references.
+- **Data:** [data/ift_entry_corridor.json](data/ift_entry_corridor.json).
+
 ### Mass estimates
 
 - **Where:** press and community estimates (Payload Space, New Space Economy, r/spacex).
