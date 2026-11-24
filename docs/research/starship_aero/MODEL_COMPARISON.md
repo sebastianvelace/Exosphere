@@ -118,11 +118,26 @@ noted. The measurement history is in
   change nothing. The ship reaches ignition about 1,290 m from the cradle with the nose 36°
   off the tower line in every run. There is too little lift at that height to move it
   1.3 km.
+- **Physical flight from the chapter's 70 km entry (2026-11-24):** the game seed (171.7 km
+  upstream, 2.1 km south, 1.8 km/s) is calibrated to the kinematic glide. Flown on the
+  physical Flight 15 descent law, the ship reaches 4 km 28.6 km short and 5.2 km south of
+  the cradle. From this suborbital state the entry is nearly ballistic. A fixed bank of
+  0–150° for the whole entry moves the 4 km point by only about ±1–2 km, and the
+  footprint guidance does no better than a fixed bank. A seed of 143.1 km upstream and
+  3.1 km north reaches 4 km within 0.1 km downrange and 0.5 km crossrange, nearly at rest
+  horizontally; a 2 km seed error stays a 2 km miss.
+- **Terminal attitude is the next blocker:** with that seed and ignition armed below
+  4 km, the ship lights 290–880 m from the cradle depending on the frame rate. The nose
+  points anywhere (cosine to the tower line from −0.54 to 0.94), so the flip takes 12–17 s
+  instead of 6, and the flap-first flip stalls. The physical belly flop does not hold the
+  heading and belly-down roll that a pitch-plane flip needs.
 - **Work:**
-  1. Do the lateral targeting in the glide higher up, where lift exists (item 4).
-  2. Then light near overhead, with little sideways speed, using the flap-first flip.
-  3. Lower the ignition toward the flown profile (this item).
-  4. Only then revisit the gimbal range with retuned gains (item 6).
+  1. Recalibrate the chapter's entry seed for physical flight.
+  2. Hold heading and belly-down roll in the terminal belly flop, now that the tilted
+     forward hinges give a heading channel (item 4).
+  3. Then light near overhead, with little sideways speed, using the flap-first flip.
+  4. Lower the ignition toward the flown profile (this item).
+  5. Only then revisit the gimbal range with retuned gains (item 6).
 
 ### 6. Raptor gimbal range (all variants)
 
