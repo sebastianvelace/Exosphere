@@ -955,6 +955,46 @@ The cross component at zero sideslip, about 2 m/s², is the drag of the horizont
   angle of attack the usable steering channel. It acts only along the nose, and the nose
   heading cannot be held (0.03–0.09 rad/s² of authority, see above).
 
+### Where the belly-flop heading drift comes from (2026-11-23)
+
+**Aerodynamics produce no heading moment.** With the belly facing the flow, turning the
+nose heading about a near-vertical flow leaves the flow identical in the body frame. The
+measured body moments were constant across all twelve headings from −150° to +180°; only
+their projection on the vertical changed.
+
+**The flaps' heading moment is second order.** Moving one plate at a time at an 80° angle
+of attack, each flap's moment about the belly normal is the same at 0° and 90° and has zero
+slope at its 45° neutral. Flap 0, for example, gives +0.018 rad/s² at both ends and 0 at 45°.
+Roll and the angle-of-attack moment are monotonic. The allocator linearises at neutral, so
+it sees no heading authority. With the attitude held and no sideslip:
+
+| Command | Response |
+| --- | --- |
+| Heading +1 | −0.036 rad/s² of heading (wrong sign) and 0.28 rad/s² of roll |
+| Roll ±1 | the same flaps, [0, 0, 90, 90], and no roll at all, because trim had saturated the plates |
+
+That positive feedback, together with the heading-pointing glide law, made the heading
+turn on the flown glide.
+
+**An allocator fix tried and reverted.** Two changes were tried together:
+
+- inertia-weighted residuals, in angular-acceleration space;
+- a second Gauss–Newton start from the current deflections.
+
+They restored the roll channel (±1.14 rad/s² with the right sign) and gave heading +1 the
+right sign. They passed every Flight 14 test, including the slow chains and the historical
+gates. But they did not make the heading steerable. Commands of 0°, +90° and −90° produced
+the same trajectory, with the heading drifting up to 0.15 rad/s at a nearly constant
+0.01 rad/s². They also slowed the catch replay (52 s at 50 Hz, no catch in 80 s at 60 Hz) and
+loosened the physical glide's angle-of-attack hold, from a mean deviation of 4.6° to 10°.
+
+**Conclusion.** With these plate flaps, hinged on the hull sides at a 45° neutral, the
+belly-flop heading has at most about 0.05 rad/s² of second-order authority. It cannot be
+held. Steering a physical terminal glide by heading, by sideslip or by a heading-dependent
+lift is not available in this model. A physical catch glide has to plan around the heading
+the airframe takes. Otherwise the flap model must gain heading authority that is backed by
+data on Starship's flap geometry and actuation.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km
