@@ -995,6 +995,26 @@ lift is not available in this model. A physical catch glide has to plan around t
 the airframe takes. Otherwise the flap model must gain heading authority that is backed by
 data on Starship's flap geometry and actuation.
 
+### Published flap data and the model's flap layout (2026-11-23)
+
+**Little is published.** Public sources give no flap hinge geometry, travel, neutral angle
+or servo rate. The provenance records already mark travel and rate as unknown
+(`rigid_body_fidelity_2026.json`, status `estimated`). Popular sources describe the four
+flaps as controlling pitch, roll and yaw independently, and the belly flop as roughly
+60–70°. That figure is ambiguous between angle of attack and body attitude, and none of
+these sources is primary.
+
+**One published layout change matters.** For Block 2 (Flight 7), SpaceX made the forward
+flaps smaller and moved them toward the tip and away from the heat shield. NASASpaceflight
+reports that on Block 1 the flaps were 180° apart, and describes the Block 2 forward flaps
+as moved up and leeward. The model's V3 forward hinges sit at (0, y, ±4.5), exactly 180°
+apart, which is the Block 1 layout. A leeward hinge azimuth would break the symmetry that
+makes the heading moment second order. The amount of the shift is not published.
+
+**RCS does not change the picture.** The declared cold-gas thrusters (24 at 1500 N) are
+armed, but they add nothing to `GetAttitudeAuthorityBody`. Even fully counted, each gives
+about 0.0005 rad/s² about the heading axis at this mass. The forward store is empty.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km
