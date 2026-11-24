@@ -131,13 +131,44 @@ noted. The measurement history is in
   points anywhere (cosine to the tower line from −0.54 to 0.94), so the flip takes 12–17 s
   instead of 6, and the flap-first flip stalls. The physical belly flop does not hold the
   heading and belly-down roll that a pitch-plane flip needs.
+- **Physical terminal glide prototype (2026-11-24, `stash` "physical catch glide
+  prototype", not merged).** Measured on the full chain from the 70 km entry:
+  - **Trim and roll.** At catch mass the flaps cannot trim below about 83°. The descent
+    schedule's 76–81° drove them to their stops, and the hinge-lean coupling then rolled
+    the ship 20–45° off belly-down. Flying the model's zero-lift angle (about 83–85°, lower
+    than the 85–95° of Li 2022 and Chen 2025) keeps the roll near 0°.
+  - **Heading.** The descent's single 6° reference-lead limit is shared by all axes. An
+    uncorrectable pitch error used all of it and dragged the heading reference along with
+    the ship, so the nose wandered through 180°. Allowing 45° of lead in the terminal glide
+    holds the heading to a cosine of −1.00 with the roll near 0°.
+  - **Along-track authority.** Between the zero-lift angle and about 100° the angle of
+    attack acts as a throttle toward the tail. That gives a steady drift of 13–15 m/s
+    (L/D ≈ 0.1), about 1–1.5 km of reach from 13 km. Toward the nose there is almost no
+    authority, because the trim floor is close to the zero-lift angle.
+  - **Entry seed.** 143.1 km upstream and 0.05 km south reaches 12 km within about 50 m of
+    the cradle.
+  - **Dispersion.** The ignition point is chaotic. Shifting the seed by 250 m, or changing
+    from 50 to 60 Hz, moves it by 40–1,170 m, more than the terminal reach can absorb.
+    A robust catch needs footprint guidance with real authority (a predictor-corrector in
+    the supersonic phase), not seed tuning.
+  - **Flip on the flaps alone.** It cannot complete: the aerodynamic trim reaches only
+    about 100–120° (tilt 70–80°), and a pitch command on the flaps excites the
+    1.5 rad/s roll/sideslip mode.
+  - **15° gimbal with the catch gains scaled by 6/15** (same loop, more headroom):
+    - the flip takes 4.4 s at both frame rates;
+    - the braking removes the 46–58 m/s throw in about 5 s, close to the flown
+      10–11 m/s²;
+    - with a lateral-vertical timing coupling (the descent slowed until the bang-bang
+      lateral time fits), 3–4 of 8 configurations catch, in 70–120 s.
+
+    Applied globally, the range breaks the Flight 14 landing burn, whose gains are not
+    scaled, and the two game ignition replays.
 - **Work:**
-  1. Recalibrate the chapter's entry seed for physical flight.
-  2. Hold heading and belly-down roll in the terminal belly flop, now that the tilted
-     forward hinges give a heading channel (item 4).
-  3. Then light near overhead, with little sideways speed, using the flap-first flip.
-  4. Lower the ignition toward the flown profile (this item).
-  5. Only then revisit the gimbal range with retuned gains (item 6).
+  1. Footprint guidance with authority in the supersonic phase, so ignition dispersion
+     stays within the terminal reach (about 1 km).
+  2. Retune every Raptor 3 ship controller for a 15° gimbal (item 6), then adopt it.
+  3. Light near overhead, nose toward the cradle; brake the throw on the 15° gimbal.
+  4. Lower the ignition toward the flown profile (this item), then move the pins (item 8).
 
 ### 6. Raptor gimbal range (all variants)
 
