@@ -163,9 +163,26 @@ noted. The measurement history is in
 
     Applied globally, the range breaks the Flight 14 landing burn, whose gains are not
     scaled, and the two game ignition replays.
+- **Footprint guidance (2026-11-24, prototype v2 in `stash`, not merged).**
+  - **Where the dispersion comes from.** With the recalibrated seed the ship is within
+    about 50 m of the cradle at 12 km at both frame rates. The 40–1,170 m ignition
+    dispersion is made by the terminal glide law itself, not by the supersonic phase.
+  - **The actuator acts one way and turns slowly.** Real side force exists only toward
+    the tail. The ship gets about 1 m/s² once the flaps actually trim 97–103°; between
+    6 and 10 km they reach only 85–96°, so the authority there is a fraction of that.
+    The descent's reference slew of 0.05 rad/s takes about 50 s to swing the nose round.
+  - **Designs tried:**
+
+    | Design | Result |
+    | --- | --- |
+    | 2D, tail along the wanted acceleration, with an integral on the measured tailward acceleration | Diverges when the wanted direction reverses, because the nose must turn 180° |
+    | Nose kept in a ±30° cone about the axis, aim biased beyond the ignition point | Catches 4 of 6, in 60–117 s |
+    | Axis from cradle to ship, ignition on the far side, faster slew | Catches 0 of 6 |
 - **Work:**
-  1. Footprint guidance with authority in the supersonic phase, so ignition dispersion
-     stays within the terminal reach (about 1 km).
+  1. A dedicated terminal-glide bench, started at 12 km from dispersed states, to
+     identify the tailward-lift and heading dynamics, as was done for the burn's lateral
+     plant. Then design that loop against the identified model instead of on full-chain
+     runs.
   2. Retune every Raptor 3 ship controller for a 15° gimbal (item 6), then adopt it.
   3. Light near overhead, nose toward the cradle; brake the throw on the 15° gimbal.
   4. Lower the ignition toward the flown profile (this item), then move the pins (item 8).
