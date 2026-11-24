@@ -899,6 +899,38 @@ and the ship ignites facing away from the tower. The glide authority, the glide 
 and the ignition lead must be re-identified on the physical belly flop. Only then can the
 game chapter drop the demonstration attitude.
 
+### Physical glide authority: lift is there, heading is not steerable (2026-11-23)
+
+These runs fly glide only from the 4 km state, under the physical Flight 15 descent law,
+with the lift reference forced to a fixed world direction (`Flight15CatchBench.LiftOverride`,
+`GlideOnly`).
+
+**The side acceleration is close to the guidance's assumption.** The lift gives
+2.5–3.2 m/s² along the nose heading, against the 3 m/s² in `glideLiftAccelerationMps2`.
+
+**The heading does not follow the command.** Lift-up, 45° and 90° bank requests produced
+identical trajectories. In every case the nose heading turned from +0.83 to −1.0 relative to
+the requested side in about 18 s, near 9°/s, with peak heading rates of 0.25 rad/s.
+
+**Why.** The flap angular authority at this state:
+
+| Axis | Authority (rad/s²) |
+| --- | ---: |
+| Long axis (roll / sideslip) | 2.4 |
+| Angle of attack | 0.2 |
+| Belly normal, which is the nose heading in a near-vertical fall | 0.03–0.09 |
+
+The heading command sat at +1 while an aerodynamic moment turned the ship the other way.
+The catch glide guidance steers by pointing the nose, and so the lift, toward a heading
+(`ComputeEntryAxisForLift`). That spends the weakest axis, and the kinematic demonstration
+attitude hid it.
+
+**Open design question.** A physical terminal glide has to steer through the strong axis,
+that is, sideslip held by roll, or accept the heading the airframe settles to and plan
+around it. Either path needs the hull's sideslip side force checked against published
+Starship data before the glide guidance, the planner and the ignition lead are
+recalibrated.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km

@@ -33,6 +33,10 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
     /// <summary>When set, the glide flies the physical Flight 14/15 belly-flop attitude law.</summary>
     public Flight14DescentDefinition? PhysicalDescent { get; set; }
     public double LastGlideAngleOfAttackDeg { get; private set; }
+    /// <summary>Replaces the glide guidance's lift reference (bench, flow-up, flow) for identification.</summary>
+    public Func<Flight15CatchBench, Vector3d, Vector3d, Vector3d>? LiftOverride { get; set; }
+    /// <summary>When true the bench never ignites; it keeps gliding.</summary>
+    public bool GlideOnly { get; set; }
     private Quaterniond _descentReference;
     private bool _descentReferenceInitialized;
     public Universe Universe { get; }
@@ -120,7 +124,7 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
             var cradleUp = Ship.CatchTargetUpWorld.Normalized;
             double clearance = TowerCatchBurn.UprightPinClearanceM(Ship, time);
             double descent = -(Ship.Velocity - Ship.CatchTargetVelocityWorld).Dot(cradleUp);
-            if (Definition.ShouldIgnite(clearance, descent)) Ignite(time);
+            if (!GlideOnly && Definition.ShouldIgnite(clearance, descent)) Ignite(time);
         }
         if (Burn != null)
             Burn.Advance(universe, controlIntervalSeconds);
@@ -160,10 +164,11 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
             var d = PhysicalDescent;
             var flow = surfVel.Normalized;
             if (!_descentReferenceInitialized) { _descentReference = Ship.Orientation; _descentReferenceInitialized = true; }
+            var liftReference = LiftOverride?.Invoke(this, up, flow) ?? steering.LiftReference;
             double angle = Flight14DescentController.TrimFeasibleAngleOfAttack(Ship, _earth, altitude, surfVel,
-                steering.LiftReference, d.TerminalAngleOfAttackDegrees, d.TrimMarginDegrees * MathUtils.DEG_TO_RAD);
+                liftReference, d.TerminalAngleOfAttackDegrees, d.TrimMarginDegrees * MathUtils.DEG_TO_RAD);
             LastGlideAngleOfAttackDeg = angle;
-            var axisReference = AerodynamicsModel.ComputeEntryAxisForLift(flow, steering.LiftReference, angle);
+            var axisReference = AerodynamicsModel.ComputeEntryAxisForLift(flow, liftReference, angle);
             var target = AerodynamicsModel.ComputeBellyFirstOrientation(axisReference, flow);
             _descentReference = AttitudeGuidance.SlewQuaternion(_descentReference, target, interval, d.ReferenceSlewRateRadPerSecond);
             _descentReference = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(_descentReference, flow, angle);
