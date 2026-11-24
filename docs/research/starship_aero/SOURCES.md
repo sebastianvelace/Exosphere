@@ -156,8 +156,8 @@ Other telemetry sources checked:
 - **Where:** spacecraft-models/starship, `dimensions.md`,
   <https://github.com/spacecraft-models/starship/blob/main/dimensions.md> (last pushed
   2026-11-02). It cites NASASpaceflight photos, Ringwatchers, NSF reports and Wikipedia.
-- **Licence:** none. Only the measured facts are recorded, paraphrased and cited; no text
-  is copied.
+- **Licence:** CC BY-SA 4.0 for the model, scripts and analysis; the reference images are
+  excluded. Facts are recorded with attribution.
 - **Confidence:** `estimate`. Each value is labelled Published, Reported or Estimated with
   its error, typically ±0.6 m and ±5°.
 - **Supports:**
@@ -231,14 +231,18 @@ Other telemetry sources checked:
 - **Data:**
   [data/faa_lc39a_noise_eis_2025.json](data/faa_lc39a_noise_eis_2025.json).
 
-### Raptor 3 figures (compendium)
+### Raptor figures (compendium and gimbal evidence)
 
 - **Where:** the dimensions compendium above, Raptor section. It labels each figure as
   SpaceX-published or reported.
 - **Supports:** thrust of 280 tf in testing (published) and about 250 tf as flown on V3
   (reported); throttle 40–100 %; gimbal ±15° (reported); engine mass 1,525 kg (published);
   Isp.
-- **Use:** check the engine model. The gimbal range disagrees with it (6° modelled).
+- **Gimbal evidence:** ±15° on two axes recurs across Everyday Astronaut, Wikipedia and
+  SpaceX test footage, all `secondary`. A 2020 forum thread asks whether the figure is the
+  total travel instead. No primary specification and no gimbal rate were found.
+- **Use:** check the engine models. Every modelled Raptor gimbals 6–7°, and the ship's
+  Raptor 2 sea-level thrust is 11 % below the published 230 tf.
 - **Data:** [data/raptor3_reference.json](data/raptor3_reference.json).
 
 ### Mass estimates

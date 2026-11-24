@@ -106,10 +106,12 @@ noted. The measurement history is in
 - **Work:** lower the ignition toward the published profile. That needs the flip and the
   side channel to fit into it, which depends on items 1 and 6.
 
-### 6. Raptor 3 gimbal range
+### 6. Raptor gimbal range (all variants)
 
-- **Data:** ±15° (reported, not tied to a version, not SpaceX-published).
-- **Model:** 6° per axis at 10°/s, provenance `estimated` (±2°).
+- **Data:** ±15° on two axes. Several secondary sources agree, and SpaceX footage shows a
+  15° firing. It is not SpaceX-published as a specification, and no source gives a rate.
+- **Model:** every Raptor variant gimbals 6–7° (Raptor 3 ship: 6° at 10°/s), provenance
+  `estimated` (±2°).
 - **Effect:** the catch burn saturates the gimbals (8.5° combined is 6° on each axis), so
   the flip and braking authority may be understated by more than half.
 - **Work:** find a version-specific or primary figure before changing the model, then
