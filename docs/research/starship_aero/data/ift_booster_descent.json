@@ -1,0 +1,361 @@
+{
+  "schema_version": 1,
+  "subject": "Super Heavy unpowered descent, IFT-4 (water), IFT-5 (tower catch), IFT-6 (water)",
+  "source": "SofieBrink/StarshipTelemetryExtractor (MIT) webcast OCR, reduced in data/ift_terminal_descent/",
+  "generated_by": "scripts/ift_booster_descent.py",
+  "confidence": "secondary",
+  "flights": {
+    "IFT4": {
+      "apogee": {
+        "video_time_s": 249.7,
+        "altitude_km": 109.0
+      },
+      "peak_descent": {
+        "video_time_s": 396.3,
+        "altitude_km": 27.0,
+        "speed_kmh": 4464.0
+      },
+      "peak_deceleration_mps2": 49.8,
+      "ballistic_ratio_2_to_20_km": {
+        "min": 1939,
+        "max": 2533,
+        "mean": 2334
+      },
+      "levels": [
+        {
+          "altitude_km": 40,
+          "video_time_s": 384.93,
+          "speed_kmh": 4213.0,
+          "dv_dt_mps2": 8.6,
+          "ballistic_ratio_kg_m2": 1952
+        },
+        {
+          "altitude_km": 30,
+          "video_time_s": 393.2,
+          "speed_kmh": 4429.0,
+          "dv_dt_mps2": 5.0,
+          "ballistic_ratio_kg_m2": 2641
+        },
+        {
+          "altitude_km": 25,
+          "video_time_s": 397.33,
+          "speed_kmh": 4463.0,
+          "dv_dt_mps2": -1.2,
+          "ballistic_ratio_kg_m2": 2575
+        },
+        {
+          "altitude_km": 20,
+          "video_time_s": 401.43,
+          "speed_kmh": 4358.0,
+          "dv_dt_mps2": -14.9,
+          "ballistic_ratio_kg_m2": 2413
+        },
+        {
+          "altitude_km": 15,
+          "video_time_s": 406.6,
+          "speed_kmh": 3827.0,
+          "dv_dt_mps2": -42.3,
+          "ballistic_ratio_kg_m2": 1939
+        },
+        {
+          "altitude_km": 12,
+          "video_time_s": 409.7,
+          "speed_kmh": 3302.0,
+          "dv_dt_mps2": -49.8,
+          "ballistic_ratio_kg_m2": 2029
+        },
+        {
+          "altitude_km": 10,
+          "video_time_s": 411.77,
+          "speed_kmh": 2936.0,
+          "dv_dt_mps2": -48.4,
+          "ballistic_ratio_kg_m2": 2214
+        },
+        {
+          "altitude_km": 8,
+          "video_time_s": 413.83,
+          "speed_kmh": 2591.0,
+          "dv_dt_mps2": -43.7,
+          "ballistic_ratio_kg_m2": 2394
+        },
+        {
+          "altitude_km": 6,
+          "video_time_s": 416.93,
+          "speed_kmh": 2145.0,
+          "dv_dt_mps2": -35.7,
+          "ballistic_ratio_kg_m2": 2434
+        },
+        {
+          "altitude_km": 5,
+          "video_time_s": 419.0,
+          "speed_kmh": 1901.0,
+          "dv_dt_mps2": -29.9,
+          "ballistic_ratio_kg_m2": 2446
+        },
+        {
+          "altitude_km": 4,
+          "video_time_s": 421.07,
+          "speed_kmh": 1697.0,
+          "dv_dt_mps2": -25.2,
+          "ballistic_ratio_kg_m2": 2463
+        },
+        {
+          "altitude_km": 3,
+          "video_time_s": 423.13,
+          "speed_kmh": 1529.0,
+          "dv_dt_mps2": -20.9,
+          "ballistic_ratio_kg_m2": 2533
+        },
+        {
+          "altitude_km": 2,
+          "video_time_s": 425.2,
+          "speed_kmh": 1379.0,
+          "dv_dt_mps2": -18.6,
+          "ballistic_ratio_kg_m2": 2471
+        },
+        {
+          "altitude_km": 1,
+          "video_time_s": 428.3,
+          "speed_kmh": 1219.0,
+          "dv_dt_mps2": -9.8,
+          "ballistic_ratio_kg_m2": 3087
+        }
+      ]
+    },
+    "IFT5": {
+      "apogee": {
+        "video_time_s": 226.97,
+        "altitude_km": 96.0
+      },
+      "peak_descent": {
+        "video_time_s": 357.07,
+        "altitude_km": 26.0,
+        "speed_kmh": 4394.0
+      },
+      "peak_deceleration_mps2": 45.8,
+      "ballistic_ratio_2_to_20_km": {
+        "min": 2170,
+        "max": 2994,
+        "mean": 2526
+      },
+      "levels": [
+        {
+          "altitude_km": 40,
+          "video_time_s": 344.67,
+          "speed_kmh": 4143.0,
+          "dv_dt_mps2": 7.8,
+          "ballistic_ratio_kg_m2": 1137
+        },
+        {
+          "altitude_km": 30,
+          "video_time_s": 353.97,
+          "speed_kmh": 4366.0,
+          "dv_dt_mps2": 4.2,
+          "ballistic_ratio_kg_m2": 2189
+        },
+        {
+          "altitude_km": 25,
+          "video_time_s": 358.1,
+          "speed_kmh": 4393.0,
+          "dv_dt_mps2": -1.2,
+          "ballistic_ratio_kg_m2": 2499
+        },
+        {
+          "altitude_km": 20,
+          "video_time_s": 363.23,
+          "speed_kmh": 4252.0,
+          "dv_dt_mps2": -16.3,
+          "ballistic_ratio_kg_m2": 2170
+        },
+        {
+          "altitude_km": 15,
+          "video_time_s": 367.37,
+          "speed_kmh": 3852.0,
+          "dv_dt_mps2": -36.2,
+          "ballistic_ratio_kg_m2": 2226
+        },
+        {
+          "altitude_km": 12,
+          "video_time_s": 370.47,
+          "speed_kmh": 3382.0,
+          "dv_dt_mps2": -45.8,
+          "ballistic_ratio_kg_m2": 2281
+        },
+        {
+          "altitude_km": 10,
+          "video_time_s": 373.57,
+          "speed_kmh": 2872.0,
+          "dv_dt_mps2": -44.1,
+          "ballistic_ratio_kg_m2": 2287
+        },
+        {
+          "altitude_km": 8,
+          "video_time_s": 375.63,
+          "speed_kmh": 2563.0,
+          "dv_dt_mps2": -40.1,
+          "ballistic_ratio_kg_m2": 2513
+        },
+        {
+          "altitude_km": 6,
+          "video_time_s": 379.77,
+          "speed_kmh": 2040.0,
+          "dv_dt_mps2": -29.4,
+          "ballistic_ratio_kg_m2": 2555
+        },
+        {
+          "altitude_km": 5,
+          "video_time_s": 380.8,
+          "speed_kmh": 1935.0,
+          "dv_dt_mps2": -27.1,
+          "ballistic_ratio_kg_m2": 2728
+        },
+        {
+          "altitude_km": 4,
+          "video_time_s": 382.87,
+          "speed_kmh": 1752.0,
+          "dv_dt_mps2": -22.9,
+          "ballistic_ratio_kg_m2": 2808
+        },
+        {
+          "altitude_km": 3,
+          "video_time_s": 385.97,
+          "speed_kmh": 1517.0,
+          "dv_dt_mps2": -18.7,
+          "ballistic_ratio_kg_m2": 2693
+        },
+        {
+          "altitude_km": 2,
+          "video_time_s": 388.03,
+          "speed_kmh": 1396.0,
+          "dv_dt_mps2": -14.2,
+          "ballistic_ratio_kg_m2": 2994
+        },
+        {
+          "altitude_km": 1,
+          "video_time_s": 391.13,
+          "speed_kmh": 1265.0,
+          "dv_dt_mps2": -12.5,
+          "ballistic_ratio_kg_m2": 2931
+        }
+      ]
+    },
+    "IFT6": {
+      "apogee": {
+        "video_time_s": 235.0,
+        "altitude_km": 97.0
+      },
+      "peak_descent": {
+        "video_time_s": 365.0,
+        "altitude_km": 24.0,
+        "speed_kmh": 4212.0
+      },
+      "peak_deceleration_mps2": 41.5,
+      "ballistic_ratio_2_to_20_km": {
+        "min": 2159,
+        "max": 2985,
+        "mean": 2576
+      },
+      "levels": [
+        {
+          "altitude_km": 40,
+          "video_time_s": 351.0,
+          "speed_kmh": 3916.0,
+          "dv_dt_mps2": 8.5,
+          "ballistic_ratio_kg_m2": 1540
+        },
+        {
+          "altitude_km": 30,
+          "video_time_s": 360.0,
+          "speed_kmh": 4161.0,
+          "dv_dt_mps2": 5.5,
+          "ballistic_ratio_kg_m2": 2599
+        },
+        {
+          "altitude_km": 25,
+          "video_time_s": 365.0,
+          "speed_kmh": 4212.0,
+          "dv_dt_mps2": -0.9,
+          "ballistic_ratio_kg_m2": 2364
+        },
+        {
+          "altitude_km": 20,
+          "video_time_s": 369.0,
+          "speed_kmh": 4133.0,
+          "dv_dt_mps2": -12.0,
+          "ballistic_ratio_kg_m2": 2457
+        },
+        {
+          "altitude_km": 15,
+          "video_time_s": 374.0,
+          "speed_kmh": 3711.0,
+          "dv_dt_mps2": -34.2,
+          "ballistic_ratio_kg_m2": 2159
+        },
+        {
+          "altitude_km": 12,
+          "video_time_s": 377.0,
+          "speed_kmh": 3294.0,
+          "dv_dt_mps2": -40.8,
+          "ballistic_ratio_kg_m2": 2375
+        },
+        {
+          "altitude_km": 10,
+          "video_time_s": 379.0,
+          "speed_kmh": 2992.0,
+          "dv_dt_mps2": -41.5,
+          "ballistic_ratio_kg_m2": 2612
+        },
+        {
+          "altitude_km": 8,
+          "video_time_s": 382.0,
+          "speed_kmh": 2554.0,
+          "dv_dt_mps2": -40.3,
+          "ballistic_ratio_kg_m2": 2488
+        },
+        {
+          "altitude_km": 6,
+          "video_time_s": 385.0,
+          "speed_kmh": 2132.0,
+          "dv_dt_mps2": -34.5,
+          "ballistic_ratio_kg_m2": 2468
+        },
+        {
+          "altitude_km": 5,
+          "video_time_s": 386.0,
+          "speed_kmh": 2015.0,
+          "dv_dt_mps2": -31.8,
+          "ballistic_ratio_kg_m2": 2624
+        },
+        {
+          "altitude_km": 4,
+          "video_time_s": 388.0,
+          "speed_kmh": 1809.0,
+          "dv_dt_mps2": -25.8,
+          "ballistic_ratio_kg_m2": 2752
+        },
+        {
+          "altitude_km": 3,
+          "video_time_s": 390.0,
+          "speed_kmh": 1643.0,
+          "dv_dt_mps2": -21.8,
+          "ballistic_ratio_kg_m2": 2844
+        },
+        {
+          "altitude_km": 2,
+          "video_time_s": 393.0,
+          "speed_kmh": 1436.0,
+          "dv_dt_mps2": -15.7,
+          "ballistic_ratio_kg_m2": 2985
+        },
+        {
+          "altitude_km": 1,
+          "video_time_s": 396.0,
+          "speed_kmh": 1301.0,
+          "dv_dt_mps2": -18.2,
+          "ballistic_ratio_kg_m2": 2468
+        }
+      ]
+    }
+  },
+  "interpretation": "With the about 250 t catch mass Musk quoted for Flight 5 (spoken, an estimate), a ratio of 2,200-2,800 kg/m2 implies a drag area of about 90-115 m2, C_D about 1.4-1.8 on the 63.6 m2 base area, for the engine-first booster with its grid fins."
+}

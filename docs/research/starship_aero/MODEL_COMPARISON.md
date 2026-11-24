@@ -118,7 +118,20 @@ noted. The measurement history is in
   re-run the catch benches.
 - **Data:** [data/raptor3_reference.json](data/raptor3_reference.json).
 
-### 7. Data still missing
+### 7. Super Heavy descent drag
+
+- **Data:** IFT-4/5/6 give an unpowered ratio m/(C_D S) of 2,200–2,800 kg/m² between 20
+  and 2 km, with a peak of 4.5–5 g. With the about 250 t catch mass Musk quoted, that
+  implies C_D ≈ 1.4–1.8 on the base area.
+- **Model:** `super_heavy_v3_booster_flight12.json` flies an axial C_D of 1.00
+  (calibrated estimate) and has no explicit grid fins. At 250 t that gives about
+  3,900 kg/m², a booster that brakes less than observed, unless its return mass is higher.
+- **Work:**
+  1. Measure the model's ratio on the booster return bench.
+  2. Compare with the flown band.
+  3. Consider grid fins (NASA Orion grid-fin data) if the drag deficit is real.
+
+### 8. Data still missing
 
 - Flap chord, span, area and hinge station of the V3 forward flaps (imagery).
 - Per-degree flap effectiveness and lateral-directional derivatives (figures of Li 2022;
@@ -155,6 +168,9 @@ These come from the datasets in `data/`:
     about 47 m/s² for about 6 s, then runs a gentle phase of about 14 s to zero.
   - Use it for the shape of the booster catch, not as a pass band, since the booster
     version differs.
+- **Super Heavy descent ratio.**
+  - Requirement: an unpowered booster m/(C_D S) between 20 and 2 km in 2,000–3,000 kg/m².
+  - Source: `data/ift_booster_descent.json`.
 - **Terminal ballistic ratio.**
   - Requirement: the steady belly-flop ratio m/(C_D S) between 2 and 12 km lies in
     491–649 kg/m².

@@ -245,6 +245,45 @@ Other telemetry sources checked:
   Raptor 2 sea-level thrust is 11 % below the published 230 tf.
 - **Data:** [data/raptor3_reference.json](data/raptor3_reference.json).
 
+### Super Heavy descent (same OCR extracts)
+
+- **Where:** `data/ift_terminal_descent/ift*_full_flight_1hz.csv`, booster columns;
+  analysis in `scripts/ift_booster_descent.py`.
+- **Confidence:** `secondary`.
+- **Supports:**
+  - Apogee 96–109 km.
+  - Peak descent speed 4,200–4,460 km/h at 24–27 km.
+  - Peak aerodynamic deceleration 4.5–5 g between 12 and 8 km.
+  - Implied ballistic ratio m/(C_D S) of about 2,000–3,000 kg/m² between 20 and 2 km,
+    mostly 2,200–2,800, consistent across three flights.
+- **Does not support:** mass and C_D separately, or the flight-path angle.
+- **Data:** [data/ift_booster_descent.json](data/ift_booster_descent.json).
+
+### Grid fin aerodynamics
+
+- **Where:**
+  - NASA, Grid Fin Stabilization of the Orion Launch Abort Vehicle (NTRS 20110013520):
+    wind-tunnel normal force per fin, Mach 0.5–2.5, at Ames 11×11 ft and 9×7 ft,
+    <https://ntrs.nasa.gov/api/citations/20110013520/downloads/20110013520.pdf>.
+  - 19th International Symposium on Ballistics (2001): grid-fin normal force well below
+    planar fins at Mach 0.75–1.5, from cell choking and shock reflection, and about equal
+    above Mach 2, <http://aux.ciar.org/ttk/mbt/papers/symp_19/EB13_511.pdf>.
+  - ICAS 2004 grid-pattern study: lower normal-force slope for the hexagonal pattern at
+    Mach 0.8, <https://www.icas.org/icas_archive/ICAS2004/PAPERS/092.PDF>.
+- **Confidence:** `primary` (NASA) and `peer-reviewed`.
+- **Use:** if the Super Heavy grid fins are modelled explicitly. Today the booster flies one
+  calibrated axial C_D of 1.00.
+
+### Mechazilla
+
+- **Searched:** arm closing speed, carriage travel, catch damping.
+- **Found:**
+  - Cable-and-pulley carriage (Teslarati, Universe Today).
+  - Hydraulic damping is claimed only by a secondary blog, unconfirmed.
+- **Not found:** no engineering or SpaceX figures.
+- **Note:** the 36 m arm length in Baidu Baike comes with other implausible figures. Treat
+  the catch mechanism's dynamics as unpublished.
+
 ### Mass estimates
 
 - **Where:** press and community estimates (Payload Space, New Space Economy, r/spacex).
