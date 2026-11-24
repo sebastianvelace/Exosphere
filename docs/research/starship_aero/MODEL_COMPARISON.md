@@ -86,8 +86,21 @@ noted. The measurement history is in
   telemetry). Flight 15's catch took about 18 s.
 - **Model:** the single-burn catch lights at about 1,425 m of pin clearance at about
   115 m/s and takes about 38 s.
-- **Work:** lower the ignition toward the published profile. That needs the flip and the
-  side channel to fit into it, which depends on items 1 and 6.
+- **Why the model's catch is marginal (2026-11-24 trace, 60 Hz ignition replay):**
+  - It lights 1,124 m short of the cradle, and the flip throws the ship toward it: the
+    horizontal speed goes from 33 to 87 m/s by flip end, 790 m above the pins.
+  - Upright at 50–85 m/s sideways and 30–85 m/s down, the hull meets the air at roughly
+    45–70° of crossflow. Holding the tilt the braking needs (about 28°) takes more moment
+    than the Raptors give. From two engines on, both gimbals sit at their 8.5° limit (6° per
+    axis), the attitude command saturates, and the tilt stays at 10–15° while the aim error
+    grows to 55°. The ship crosses the cradle at about 33 m/s some 200 m above it.
+  - A 15° gimbal is not a drop-in fix: with the attitude gains tuned for 6° the loop gain
+    rises 2.5× and the ship tumbled (97° tilt at 15 s) in all four replays.
+  - The flown profile avoids the problem rather than overpowering it: thrust only over the
+    last ~550 m, igniting nearly over the cradle, so little sideways speed has to be
+    removed upright.
+- **Work:** do the lateral targeting in the glide (item 4), light near overhead and lower
+  (this item), and only then revisit the gimbal range with retuned gains (item 6).
 
 ### 6. Raptor gimbal range (all variants)
 
@@ -128,7 +141,7 @@ noted. The measurement history is in
   the pins, so the ignition clearance is unchanged (1,425 m) and the two runs differ by only
   0.1 m at 7 s. The difference grows because the lateral channel is marginal: with either pin
   station the ship crosses the cradle at about 33 m/s some 200 m above it. The pins wait for a
-  more robust lateral catch (item 5).
+  more robust lateral catch (item 5, which records why it is marginal).
 - **Work:** make the lateral channel robust, then move the pins to the measured station and
   re-run the catch benches, the replays and the default chapter.
 
