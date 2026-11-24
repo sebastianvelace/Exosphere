@@ -1099,6 +1099,56 @@ If step 1 does not give a heading moment of the right sign in both directions, t
 fallback is a terminal phase that ignores heading: plan the ignition and flip on the
 heading the airframe takes.
 
+### Terminal-glide identification bench (2026-11-24)
+
+**Bench.** The bench (prototype v3 in `stash`, harness `_TmpIdent.cs`) flies the
+chapter's 70 km entry physically down to 12 km. The seed is 143.1 km upstream and 0.05 km
+south. From there it holds the nose heading and the angle of attack fixed (identification
+hooks on `TowerCatchPhysicalGlide`) and records the response to 1.5 km. Eleven runs take
+15 s.
+
+**Drift plant.** The angle of attack sets a drift speed along the nose, not an
+acceleration. The belly flop glides like a sailplane: its horizontal speed is about its
+lift-to-drag ratio times its sink rate. Steady drift toward the tail:
+
+| Commanded angle | Steady tailward drift |
+| ---: | ---: |
+| 83° | −15 to −17 m/s (toward the nose) |
+| 89° | about 1 m/s |
+| 92° | about 8 m/s |
+| 95° | 16–19 m/s |
+| 98° | about 23 m/s |
+| 101° | about 29 m/s |
+
+Above about 101° the flaps do not follow (a 104° command flies 94–98°). Around the
+zero-drift angle α₀ ≈ 88.5° the gain is about 2.4 m/s per degree, with a first-order lag
+τ ≈ 8 s. The channel therefore works both ways along the nose.
+
+**Inner loops.**
+
+- **Angle of attack:** after takeover the angle needs about 15 s to settle. A step then
+  moves at about 1.4°/s, and the angle often stops 2–9° short of the command.
+- **Heading:** a 20° step takes about 16 s, 60° about 30 s and 180° about 45 s. About 8 s
+  of delay comes before the turn starts.
+- **Roll:** it wanders ±20–40° while the angle of attack moves.
+
+**Guidance trial.** The design is a position loop commanding drift speed. The angle
+comes from the static inversion α₀ + v/K plus an integral on the measured drift. The nose
+is held on the line to the cradle, leans up to 20° to close cross-track, and asks for less
+drift until it is aligned.
+
+- **Test:** starting points dispersed ±600 m along-track and ±300 m cross-track at
+  12.5 km. The miss is measured against the ignition point at 2 km altitude.
+- **Result:** 40–640 m. The undispersed case ends 110–160 m off, and raising the position
+  gain only moves the error from overshoot to undershoot.
+
+**Conclusion.** The outer loop is limited by the inner attitude loop. With 10–15 s of
+angle-of-attack lag, τ ≈ 8 s of drift lag, about 8 s of heading delay and large roll
+excursions, the closed loop cannot hold a position to tens of metres. The next step is the
+terminal attitude loop itself: faster and more accurate angle tracking with the roll held,
+so the flaps are not on the descent's slew and lead limits. Only then can the drift
+guidance close.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km

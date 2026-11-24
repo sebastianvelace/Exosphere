@@ -178,11 +178,17 @@ noted. The measurement history is in
     | 2D, tail along the wanted acceleration, with an integral on the measured tailward acceleration | Diverges when the wanted direction reverses, because the nose must turn 180° |
     | Nose kept in a ±30° cone about the axis, aim biased beyond the ignition point | Catches 4 of 6, in 60–117 s |
     | Axis from cradle to ship, ignition on the far side, faster slew | Catches 0 of 6 |
+- **Terminal-glide identification (2026-11-24).** Full record in
+  [the Flight 15 audit](../../audits/flight15_capture_and_gpu_2026-11-19.md#terminal-glide-identification-bench-2026-11-24).
+  - **Drift plant.** The angle of attack sets a drift speed along the nose (the belly
+    flop glides like a sailplane): about 2.4 m/s per degree around 88.5°, lag about 8 s,
+    from −15 m/s at 83° to +29 m/s at 101°.
+  - **Guidance and its limit.** Drift-speed guidance designed on that plant misses by
+    40–640 m from dispersed 12 km states. The limit is the inner attitude loop: 10–15 s of
+    angle-of-attack lag, about 8 s of heading delay, and ±20–40° roll excursions.
 - **Work:**
-  1. A dedicated terminal-glide bench, started at 12 km from dispersed states, to
-     identify the tailward-lift and heading dynamics, as was done for the burn's lateral
-     plant. Then design that loop against the identified model instead of on full-chain
-     runs.
+  1. A terminal attitude loop for the catch glide: fast and accurate angle tracking with
+     the roll held. Then close the drift guidance on the identified plant.
   2. Retune every Raptor 3 ship controller for a 15° gimbal (item 6), then adopt it.
   3. Light near overhead, nose toward the cradle; brake the throw on the 15° gimbal.
   4. Lower the ignition toward the flown profile (this item), then move the pins (item 8).
