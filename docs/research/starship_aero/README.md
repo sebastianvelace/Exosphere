@@ -13,6 +13,7 @@ be checked against it. The model must follow the data; data must not be fitted t
 | [data/chen2025_s31_subsonic_rans.json](data/chen2025_s31_subsonic_rans.json) | S31 prototype subsonic RANS: C_L, C_D and C_M against α from 0 to 350°, digitised from the published plot; vehicle and initial-state table. |
 | [data/cylinder_crossflow_reference.json](data/cylinder_crossflow_reference.json) | Circular-cylinder crossflow drag by Reynolds regime; Jorgensen (in the code) and Achenbach. |
 | [data/flat_plate_normal_force_reference.json](data/flat_plate_normal_force_reference.json) | Flat-plate normal force at high incidence and low aspect ratio (Hoerner, Torres & Mueller). |
+| [data/ift_terminal_descent_telemetry.json](data/ift_terminal_descent_telemetry.json) | IFT-4/5/6 terminal belly flop from webcast OCR: speed against altitude, measured ballistic ratio m/(C_D S) and landing-burn durations. Reduced CSVs and their attribution are in `data/ift_terminal_descent/`; the script is `scripts/ift_terminal_descent.py`. |
 | [data/starship_flight_observations.json](data/starship_flight_observations.json) | Observed flight values and timelines (broadcasts, SpaceX statements), and mass estimates. |
 
 The Flight 14 broadcast anchors with frame hashes stay in

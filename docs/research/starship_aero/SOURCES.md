@@ -101,6 +101,56 @@ what it supports, what it does not, and its use in Exosphere.
   - Timelines: `secondary`.
 - **Data:** [data/starship_flight_observations.json](data/starship_flight_observations.json).
 
+### IFT-4, IFT-5 and IFT-6 webcast telemetry (OCR)
+
+- **Where:** SofieBrink, StarshipTelemetryExtractor (MIT licence),
+  <https://github.com/SofieBrink/StarshipTelemetryExtractor>, `Examples/`.
+- **Confidence:** `secondary`. This is a third-party OCR of the primary broadcast
+  telemetry, with automatic gap filling and outlier removal.
+- **Supports:**
+  - Per-frame Starship altitude (1 km display resolution) and speed (1 km/h) through the
+    terminal belly flop, the flip and the landing burn of three flights.
+  - Measured steady ballistic ratio m/(C_D S) between 12 and 2 km:
+
+    | Flight | Range | Mean |
+    | --- | --- | --- |
+    | IFT-4 | 562–649 kg/m² | 614 kg/m² |
+    | IFT-5 | 491–538 kg/m² | 520 kg/m² |
+    | IFT-6 | 536–582 kg/m² | 566 kg/m² |
+
+  - Landing burn from about 93 m/s to below 8 m/s: 11.7 s (IFT-4), 15.9 s (IFT-5) and
+    14.5 s (IFT-6).
+- **Does not support:**
+  - Mass and C_D·S separately.
+  - Attitude or flap positions.
+  - Mission-elapsed time: the time is video time.
+- **Use:**
+  - A historical gate on the model's terminal ballistic ratio.
+  - A reference duration for the landing and catch burn.
+- **Data:**
+  - [data/ift_terminal_descent_telemetry.json](data/ift_terminal_descent_telemetry.json);
+  - reduced CSVs in `data/ift_terminal_descent/` with `ATTRIBUTION.md`;
+  - analysis in `scripts/ift_terminal_descent.py`.
+
+Other telemetry sources checked:
+
+- shahar603/Telemetry-Data covers Falcon 9 to 2020. It also holds the telemetry of the 2017
+  BFR EDL animation, which is an older design concept.
+- The Launch Dashboard API has no Starship data.
+- chrisjbillington/starship_telemetry and osajus/starship_telemetry cover early IFT ascent
+  or tools only.
+
+### Flap actuation
+
+- **Where:** Teslarati and Inverse reports; a May 2026 V3 summary on Slashdot, citing
+  Teslarati.
+- **Confidence:** `secondary`.
+- **Supports:**
+  - The flaps are driven by electric actuators with Tesla drive motors and battery packs.
+  - V3 changed from two actuators per flap to one actuator with three motors.
+- **Does not support:** actuation rate or torque. The model's 25°/s remains a simulator
+  estimate.
+
 ### Mass estimates
 
 - **Where:** press and community estimates (Payload Space, New Space Economy, r/spacex).

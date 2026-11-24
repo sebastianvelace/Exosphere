@@ -16,6 +16,8 @@ noted. The measurement history is in
 | Sideslip side force | not reported | ±0.2 m/s² at ±15° | expected for a round hull |
 | Broadside drag regime | transcritical crossflow C_d ≈ 0.5–0.7 (Achenbach; Re ≈ 6–8 × 10⁷) | Jorgensen transcritical | Li's C_D ≈ 10 on base area (≈ 640 m²) does not state its Re |
 | Flight 14 terminal speed | 363 km/h at 1.2 km | 101.7 m/s scaled to 1.2 km (historical gate) | agrees |
+| Terminal ballistic ratio m/(C_D S) | IFT-4/5/6, steady 2–12 km: 491–649 kg/m², with flight means 520–614 (webcast OCR) | ≈ 600 kg/m² (215 t, drag area ≈ 358 m² at 4 km) | inside the flown range |
+| Landing-burn duration, about 93 m/s to below 8 m/s | 11.7, 15.9 and 14.5 s (IFT-4/5/6 ocean landings); Flight 15 catch about 18 s from ignition | single-burn catch about 38 s from ignition, including a 6 s flip | the catch spends its extra time on the side overshoot |
 
 ## Discrepancies and open items
 
@@ -99,6 +101,11 @@ These come from the datasets in `data/`:
 - **Forward-flap heading authority.**
   - Requirement: first-order and of the right sign in both directions.
   - Source: Zhang 2021, qualitative.
+- **Terminal ballistic ratio.**
+  - Requirement: the steady belly-flop ratio m/(C_D S) between 2 and 12 km lies in
+    491–649 kg/m².
+  - Source: IFT-4/5/6 webcast OCR, `data/ift_terminal_descent_telemetry.json`.
+  - The flights' own spread sets the band. Mass and drag area are not separable.
 - **Terminal speed.**
   - Requirement: within ±10 % of 363 km/h at 1.2 km, for the modelled mass.
   - Source: Flight 14 broadcast. Already a gate.
