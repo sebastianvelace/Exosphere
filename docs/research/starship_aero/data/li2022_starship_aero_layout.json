@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "source": "Li Z., Zhang L., Li L., Huang B., Yuan H. Performance and characteristics analysis on the Starship aerodynamic configuration. Acta Aerodynamica Sinica 40(5):1-14 (2022). DOI 10.7638/kqdlxxb-2022.0011",
+  "source_url": "https://html.rhhz.net/KQDLXXB/2022-05-1.htm",
+  "accessed_date": "2026-11-23",
+  "confidence": "peer-reviewed-cfd",
+  "method": "Steady RANS, SST turbulence, Roe flux with MUSCL/min-mod, adiabatic no-slip walls, ~2e6 cells; turbulence model validated on S809 at high angle of attack. Geometry reconstructed from public information, not SpaceX data.",
+  "values_from": "Article text and tables 1-3. Figure-only values (C_l_beta, C_n_beta, curves at X_cg 0.57/0.60) are not transcribed.",
+  "geometry": {
+    "length_m": 50.0,
+    "diameter_m": 9.0,
+    "span_m_estimated": 18.0,
+    "planform_area_m2": 545.0,
+    "flaps": "four trapezoidal flaps of uniform thickness with round leading edges; no vertical or belly fin",
+    "forward_flap_hinge": "tangent to the nose-cap generatrix (inclined to the body axis)",
+    "aft_flap_hinge": "parallel to the body x-axis",
+    "deflection_definition": "dihedral angle, positive upward, viewed nose to tail",
+    "deflection_range_deg": [0.0, 80.0],
+    "flap_chord_span_area": "not given"
+  },
+  "references": {
+    "length_ref": "body length",
+    "area_ref": "body base area (pi * 4.5^2 = 63.6 m2 for 9 m diameter)",
+    "x_cg_fraction_from_nose": 0.58,
+    "return_mass_t": 140.0,
+    "inertia_ratio_Iy_over_Ix": 7.0,
+    "reynolds_number": "not given",
+    "sideslip_range": "small sideslip only (derivatives)"
+  },
+  "longitudinal": [
+    {"mach": 12, "statement": "max C_L near 50 deg; max C_D near 90 deg; max L/D 1.5-1.7 at 10-20 deg"},
+    {"mach": 12, "alpha_deg": [60, 70], "C_L": [4.2, 2.9], "C_D": [8.5, 10.4], "L_over_D": [0.5, 0.3]},
+    {"mach": 2, "statement": "max C_L at 40-50 deg; max C_D at 90 deg; max L/D 1.7-1.9 at 10-20 deg"},
+    {"mach": 2, "alpha_deg": [60, 70], "C_L": [5.0, 3.4], "C_D": [10.0, 12.6], "L_over_D": [0.5, 0.3]},
+    {"mach": 0.8, "statement": "max C_L about 4-6 at 40-50 deg; C_L near zero at 90 deg; C_D max 6-11 over 80-120 deg; C_D 9.5-11 at 90 deg; max L/D 3.0-3.3 near 12 deg"}
+  ],
+  "trim": [
+    {"mach": 12, "x_cg": 0.58, "forward_dihedral_deg": 0, "trim_alpha_deg": 69},
+    {"mach": 12, "x_cg": 0.58, "forward_dihedral_deg": 80, "trim_alpha_deg": 28},
+    {"mach": 12, "statement": "forward pair alone trims within 70 deg; aft deflection extends trim above 90 deg"},
+    {"mach": 2, "x_cg": 0.58, "forward_dihedral_deg": 0, "trim_alpha_deg": 78},
+    {"mach": 0.8, "x_cg": 0.58, "statement": "forward pair alone trims 65-89 deg; aft pair at 80 deg dihedral extends trim to 120 deg; subsonic trim efficiency lower overall"}
+  ],
+  "static_stability": [
+    {"mach": 12, "statement": "C_m_alpha < 0 (stable) at 60-70 deg for all forward dihedral 0-80 deg; unstable below about 20 deg"},
+    {"mach": 2, "statement": "stable 60-90 deg, smaller |C_m_alpha| than at Ma 12"},
+    {"mach": 0.8, "statement": "stable near 90 deg (aft-flap case)"},
+    {"mach": 12, "x_cp_fraction_at_60deg": [0.57, 0.62]}
+  ],
+  "lateral_directional": [
+    {"statement": "C_l_beta < 0 at Ma 12, 60-70 deg: roll-stable"},
+    {"statement": "C_n_beta > 0 over a wide alpha range: statically directional-unstable"},
+    {"criterion": "C_n_beta_dyn = C_n_beta cos(alpha) + (Iy/Ix) C_l_beta sin(alpha)",
+     "stable_alpha_ranges_deg": {"12": "above about 20", "2": "27-80", "0.8": "65-120"}},
+    {"statement": "heading is controlled by bank-to-turn about the velocity vector; roll and yaw strongly coupled"}
+  ],
+  "flight_profile_statement": "hypersonic 60-70 deg (about 15 min); supersonic at high alpha (about 2 g peak); subsonic near 90 deg (about 2 min); terminal phase by thrust vectoring",
+  "ballistic_coefficients": {"ballistic_kg_m2": 275, "lift_load_kg_m2": 550, "relative_to_orbiter": [0.62, 1.29]}
+}

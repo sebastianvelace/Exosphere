@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "source": "Chen L., Qin T., Huangfu Z., Li L., Wei W. Optimization of Flip-Landing Trajectories for Starship based on a Deep Learned Simulator. arXiv:2508.06520 (2025)",
+  "source_url": "https://arxiv.org/abs/2508.06520",
+  "accessed_date": "2026-11-23",
+  "confidence": "preprint; coefficient curves digitised",
+  "method": "RANS, boundary-layer resolved grid (~4e6 points), ANSYS Fluent; incompressible (Ma < 0.3); no engine plume",
+  "configuration": "Starship S31 prototype; forward flaps deployed flat; aft flaps folded upward at 80 deg; flaps fixed (no deflection sweep)",
+  "references": {
+    "length_ref_m": 50.0,
+    "area_ref": "not stated",
+    "moment_centre": "not stated explicitly; centre of mass at 0.60 L from the nose tip",
+    "reynolds_number": "not stated"
+  },
+  "digitisation": {
+    "figure": "Figure 2 (CFD data markers, not the neural-network curve)",
+    "alpha_step_deg": 10,
+    "reading_error": "about +/-0.15 in C_L and C_D, +/-0.08 in C_M; sign convention of alpha and C_M as plotted",
+    "warning": "Use for curve shape and zero crossings. Absolute magnitudes depend on the unstated reference area."
+  },
+  "alpha_deg": [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300, 310, 320, 330, 340, 350],
+  "C_D": [0.3, 0.4, 0.9, 1.65, 2.9, 4.2, 5.3, 5.65, 5.2, 4.6, 4.6, 5.6, 3.8, 3.65, 2.3, 1.7, 1.45, 1.0, 0.9, 0.9, 1.25, 1.95, 3.05, 4.25, 5.15, 5.15, 5.85, 6.05, 5.95, 8.2, 6.95, 5.3, 3.5, 1.85, 0.95, 0.4],
+  "C_L": [0.0, 1.0, 2.0, 2.9, 3.9, 4.3, 3.9, 2.7, 1.25, 0.1, -0.3, -2.1, -1.4, -2.5, -1.4, -1.2, -1.4, -0.6, -0.1, 0.2, 1.0, 1.7, 2.6, 2.8, 2.8, 2.05, 1.5, 0.6, -0.4, -3.8, -4.6, -4.9, -4.5, -3.3, -2.2, -0.9],
+  "C_M": [0.0, -0.32, -0.62, -0.85, -1.15, -1.4, -1.52, -1.42, -1.0, -0.65, -0.35, -0.2, -0.15, 0.12, 0.0, 0.1, -0.08, -0.1, 0.0, -0.05, -0.03, 0.0, 0.0, -0.02, -0.1, -0.15, 0.0, 0.12, 0.27, 1.35, 1.25, 1.08, 1.2, 0.87, 0.62, 0.3],
+  "derived_observations": [
+    "C_L crosses zero near alpha 90-95 deg for this flap set",
+    "C_D near its maximum plateau (about 4.6-5.6) for alpha 60-110 deg",
+    "C_M approaches zero from below between about 100 and 130 deg: with forward flaps flat and aft flaps folded, trim lies above 100 deg"
+  ],
+  "vehicle_table": {
+    "J_z_kg_m2": [1.25e7, 3.2e7],
+    "specific_impulse_s": 350,
+    "wet_mass_t": 135,
+    "dry_mass_t": 120,
+    "x_cg_fraction_from_nose": 0.60,
+    "length_m": 50,
+    "max_thrust_kN": 2300,
+    "throttle_range_percent": [25, 100],
+    "gimbal_limit_deg": 10,
+    "max_flip_time_s": 2.4,
+    "initial_pitch_deg": 170,
+    "initial_velocity_mps": {"horizontal": -18.82, "vertical": -106.73},
+    "dynamics": "2-D planar rigid body, RK4"
+  }
+}

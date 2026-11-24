@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "subject": "Normal force on flat plates at high incidence and low aspect ratio, for the body-flap plate model",
+  "accessed_date": "2026-11-23",
+  "in_code": "ExosphereSimulation BodyFlapAerodynamics.NormalForceCoefficient: subsonic C_N = (pi/2) AR sin(a) cos(a) + 1.2 sin^2(a); modified Newtonian above Ma 1.5; smoothstep blend between",
+  "entries": [
+    {"quantity": "C_N at 90 deg, square plate", "value": 1.18, "source": "Hoerner, Fluid-Dynamic Drag (1965), as quoted in Monash 17th AFMC paper 212", "url": "https://www.flair.monash.edu.au/intranet/proceedings/17afmc_proceedings/PDF/212_Paper.pdf", "confidence": "secondary"},
+    {"quantity": "C_N at 90 deg, side ratio 4", "value": 1.21, "source": "Hoerner, as quoted (same)", "confidence": "secondary"},
+    {"quantity": "low-AR rectangular plates, 0.5 <= AR <= 2, alpha <= 50 deg, Re about 7e4-1e5", "source": "Torres & Mueller, AIAA J. 42(5):865-873 (2004)", "confidence": "secondary (parameters quoted)"},
+    {"quantity": "AR 0.5 parameters", "alpha_m_deg": 35, "K_p": 0.831, "K": 0.67, "note": "edge-vortex lift dominates at AR 0.5", "source": "Torres & Mueller (2004) as tabulated in Aerospace 10(7):597 (2023)", "url": "https://doi.org/10.3390/aerospace10070597", "confidence": "secondary"},
+    {"quantity": "C_N plateau", "statement": "C_N rises to a plateau for 30 < alpha < 70 deg, then falls slightly toward 90 deg (pitching plate, AR about 4)", "source": "J. Fluid Mech. 846:82-120 (2018)", "url": "https://yakari.polytechnique.fr/Django-pub/documents/yuelong2018rp-1pp.pdf", "confidence": "peer-reviewed (dynamic, not static)"}
+  ],
+  "starship_flap_regime": {
+    "aspect_ratio": "about 0.45 (V3 forward, 2.55 x 5.7 m) to about 0.33 (aft, 3.7 x 11.1 m) using span/length",
+    "reynolds": "about 1e7 to 1e8 on the flap length at terminal speed",
+    "note": "far above the Torres & Mueller range; use only for the shape of C_N(alpha), not magnitudes"
+  },
+  "implication_for_heading_authority": "A plate's force component across the flow, C_N(alpha) cos(alpha), peaks near 45-55 deg of incidence. Exosphere's flaps sit at a 45 deg neutral with hinges parallel to the body axis, so their heading moment has zero slope at neutral. Measured on the Flight 15 bench, see MODEL_COMPARISON.md."
+}

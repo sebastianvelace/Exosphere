@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "subject": "Drag of a circular cylinder in crossflow by Reynolds-number regime",
+  "accessed_date": "2026-11-23",
+  "in_code": "ExosphereSimulation CrossflowDrag follows Jorgensen NASA TR R-474 (figs. 1-6), with crossflow Mach and Reynolds dependence; gates F1 in docs/physics/fidelity_gates.md",
+  "regimes": [
+    {"regime": "subcritical", "reynolds": "below about 2e5", "C_D": 1.2, "source": "Wieselsberger via Jorgensen NASA TR R-474 fig. 2", "confidence": "primary"},
+    {"regime": "supercritical plateau", "reynolds": "about 5e5 to 3e6", "C_D": 0.2, "source": "Achenbach (1968), J. Fluid Mech. 34(4):625-639, as quoted in later work", "confidence": "secondary"},
+    {"regime": "transcritical", "reynolds": "above about 3e6 (Achenbach data to 5e6)", "C_D": 0.7, "source": "Achenbach (1968) as quoted in J. Wind Eng. Ind. Aerodyn. (2024) https://www.sciencedirect.com/science/article/pii/S0167610524001843", "confidence": "secondary"},
+    {"regime": "transcritical, rough", "statement": "drag rises with surface roughness", "source": "Achenbach (1971), as quoted", "confidence": "secondary"}
+  ],
+  "starship_terminal_regime": {
+    "diameter_m": 9.0,
+    "crossflow_speed_mps": "about 100-125",
+    "reynolds": "about 6e7 to 8e7 at sea level to 4 km",
+    "note": "beyond the measured range of Achenbach (5e6); transcritical C_D of 0.5-0.7 is the expected band. Subcritical C_D = 1.2 does not apply."
+  },
+  "implication": "Broadside drag of a Starship-size hull at terminal speed should use the transcritical crossflow coefficient. A RANS study that does not state its Reynolds number (Li 2022 gives C_D 9.5-11 on base area at 90 deg, about 640 m2 of drag area) may sit in a different regime. The Flight 14 broadcast terminal speed (363 km/h at 1.2 km) fits the lower drag area, within the mass uncertainty."
+}

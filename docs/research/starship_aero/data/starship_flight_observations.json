@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "subject": "Observed Starship flight values usable as checks, with their limits",
+  "accessed_date": "2026-11-23",
+  "observations": [
+    {
+      "flight": "14",
+      "quantity": "descent altitude displays",
+      "values": [{"elapsed_s": 10369, "altitude_km": 74.1}, {"elapsed_s": 10541, "altitude_km": 67.8}, {"elapsed_s": 10961, "altitude_km": 44.5}],
+      "source": "SpaceX broadcast frames, docs/research/STARSHIP_FLIGHT14_DESCENT_BROWSER_ANCHORS_2026-10-02.json (with frame hashes)",
+      "confidence": "primary",
+      "limits": "altitude datum unspecified (ellipsoid vs sphere about 1-2 km on this track); used with a 3 km band by Flight14DescentHistoricalTests"
+    },
+    {
+      "flight": "14",
+      "quantity": "belly-flop speed",
+      "value": "363 km/h at 1.2 km",
+      "source": "SpaceX broadcast, as used by Flight14DescentHistoricalTests",
+      "confidence": "primary",
+      "limits": "speed frame unspecified"
+    },
+    {
+      "flight": "15",
+      "quantity": "ship catch burn timeline",
+      "values": {"three_raptors_lit": "T+22:32:16", "two_raptors": "T+22:32:26", "one_raptor": "T+22:32:33", "catch_and_cutoff": "T+22:32:34"},
+      "derived": "about 18 s from ignition to catch, no relight",
+      "source": "SpaceX timeline as reported in the press (recorded in data/flight_profiles/starship_flight15_catch_burn_estimate.json assumptions)",
+      "confidence": "secondary"
+    },
+    {
+      "flight": "11",
+      "quantity": "terminal timeline",
+      "values": {"transonic": "+01:03:30", "subsonic": "+01:03:52", "landing_burn_start": "+01:05:58", "landing_flip": "+01:06:00"},
+      "derived": "about 2 min subsonic belly flop before the burn, consistent with Li 2022's subsonic-phase duration",
+      "source": "https://en.wikipedia.org/wiki/Starship_flight_test_11",
+      "confidence": "secondary"
+    },
+    {
+      "flight": "5",
+      "quantity": "terminal timeline",
+      "values": {"landing_flip": "+01:05:15", "landing_burn": "+01:05:20", "splashdown": "+01:05:40"},
+      "source": "https://wikiwand.com/en/articles/Starship_flight_test_5",
+      "confidence": "secondary"
+    },
+    {
+      "flight": "7 (Block 2 design change)",
+      "quantity": "forward flap placement",
+      "statement": "forward flaps smaller, moved toward the tip and away from the heat shield (SpaceX); Block 1 flaps 180 deg apart, Block 2 forward flaps moved up and leeward (NSF)",
+      "source": "https://www.nasaspaceflight.com/2025/01/starship-flight-7-block-2/",
+      "confidence": "primary (SpaceX statement), secondary (NSF detail)",
+      "limits": "shift magnitude not published"
+    },
+    {
+      "flight": "S31 prototype (CFD study, not flight data)",
+      "quantity": "flip entry state",
+      "value": {"horizontal_mps": 18.82, "vertical_mps": -106.73},
+      "source": "Chen et al., arXiv:2508.06520, table 1",
+      "confidence": "preprint; a modelling assumption, not a measurement"
+    }
+  ],
+  "mass_estimates": {
+    "confidence": "estimate",
+    "use": "ranges for terminal-speed comparisons only; never a model input",
+    "values": [
+      {"variant": "V1", "dry_t": 100, "basis": "Musk, 2021, as reported"},
+      {"variant": "Block 2", "dry_t": 155, "basis": "community estimate from flight data (r/spacex)"},
+      {"variant": "V3", "dry_t": 75, "basis": "guide estimate, internally inconsistent"},
+      {"variant": "Li 2022 assumption", "return_t": 140},
+      {"variant": "Chen 2025 assumption", "wet_t": 135, "dry_t": 120}
+    ]
+  }
+}

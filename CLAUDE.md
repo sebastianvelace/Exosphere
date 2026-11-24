@@ -259,6 +259,10 @@ The default Starship stack uses `decoupler_heavy`, not `decoupler_medium`, becau
   `FidelityProvenanceTests` cross-checks code constants against their records, and
   `docs/physics/estimates_register.md` (regenerate with `python3 tools/provenance_register.py`;
   `contract_checks.sh` fails if stale) lists everything that is not published data.
+- Researcher and flight data for Starship aerodynamics and control live in
+  `docs/research/starship_aero/` (annotated sources, JSON datasets with confidence levels,
+  model-versus-data comparison and candidate gates). Check a new aero or control model
+  against it, and record new sources there.
 - Each fidelity phase closes on an analytic and a historical gate listed in
   `docs/physics/fidelity_gates.md` and tagged `[Trait("FidelityGate", "Fn")]` +
   `[Trait("GateKind", "analytic|historical")]`; `FidelityGateRegistryTests` keeps both in sync.

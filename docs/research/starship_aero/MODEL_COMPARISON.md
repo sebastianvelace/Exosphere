@@ -1,0 +1,104 @@
+# Exosphere against the Starship aerodynamics data
+
+Status on 2026-11-23. The model measurements come from the Flight 15 glide bench
+(`Flight15CatchBench`, game state saved at 4 km, 215 t, X_cg ≈ 0.55 L from the nose), unless
+noted. The measurement history is in
+[../../audits/flight15_capture_and_gpu_2026-11-19.md](../../audits/flight15_capture_and_gpu_2026-11-19.md).
+
+## Agreement
+
+| Quantity | Data | Model | Note |
+| --- | --- | --- | --- |
+| Subsonic belly-flop attitude | near 90° (Li 2022; Chen 2025) | descent law flies 80° | inside the trim range |
+| Subsonic trim range | Ma 0.8, X_cg 0.58: 65–89° on the forward pair, up to 120° with the aft pair (Li) | ≈ 71–77° with full deflection, beyond 100° at the other end | consistent within the geometry and X_cg differences |
+| Lift near 90° | C_L ≈ 0 at 90–95° (Li Ma 0.8; Chen S31) | +0.35 m/s² along the nose at 80°, −1.1 at 90° | crosses zero between 80° and 90° |
+| Roll versus sideslip | C_lβ < 0, roll-stable (Li) | restoring, 2.2 rad/s² per radian; natural frequency 1.47 rad/s | sign agrees |
+| Sideslip side force | not reported | ±0.2 m/s² at ±15° | expected for a round hull |
+| Broadside drag regime | transcritical crossflow C_d ≈ 0.5–0.7 (Achenbach; Re ≈ 6–8 × 10⁷) | Jorgensen transcritical | Li's C_D ≈ 10 on base area (≈ 640 m²) does not state its Re |
+| Flight 14 terminal speed | 363 km/h at 1.2 km | 101.7 m/s scaled to 1.2 km (historical gate) | agrees |
+
+## Discrepancies and open items
+
+### 1. Forward-flap hinge geometry
+
+- **Data:** Li 2022 puts the forward hinge along the nose-cone generatrix. SpaceX moved
+  the Block 2 forward flaps toward the tip, and NSF describes the move as up and leeward.
+- **Model:** all four hinges are parallel to the body axis, and the V3 forward flaps sit
+  on the barrel below the 14 m nose.
+- **Effect:** each flap's moment about the belly normal is second order at its 45°
+  neutral. The plate's force across the flow, C_N cos α, peaks there. The heading
+  authority is ≈ 0.03 rad/s² at best, and the allocator saturates.
+- **Trial results:**
+  - A leeward hinge azimuth was tried and reverted.
+  - A forward pair moved onto the ogive (hinge radius 4.0 m), with the hinge tilt derived
+    from the ogive (≈ 10°), gives a clean heading channel of the right sign: ±0.03 rad/s².
+  - Holding a heading still fails: the roll channel dies when trim saturates the plates.
+  - Experiment kept in a stash; not merged.
+- **Work:**
+  1. Place the forward flaps from imagery.
+  2. Re-check the heading channel once trim no longer saturates the plates (item 2).
+
+### 2. Trim-feasibility check (bug, fixed, not merged)
+
+- **Bug:** `Flight14DescentController.TrimFeasibleAngleOfAttack` tested the moment about
+  body X. In a belly-first −X attitude the angle-of-attack moment acts about body Z, and
+  the X moment is exactly zero up to rounding, so feasibility was decided on the sign of
+  rounding noise.
+- **Fix:** use the moment about body axis × flow. The limit becomes physical: 71° minimum
+  with full deflection, and higher angles are kept.
+- **Consequence:** the Flight 14 historical gate fails.
+  - Residuals: +6.3 km at T+10369, +7.2 km at T+10541, +11.8 km at T+10961.
+  - Previously: +0.1 km, +0.7 km and −2.2 km.
+- **Not yet explained:** both runs fly about 60–61° through the hypersonic phase. The
+  difference is not the angle of attack; the descent stays higher from the first minutes.
+  The next step is to trace bank and lift direction side by side.
+- **Status:** fix uncommitted; recalibration in progress.
+
+### 3. Reference angle of attack in the terminal glide
+
+- **Problem:** the EDL catch glide used the hypersonic 70°, which cannot be trimmed at catch
+  mass. The game's demonstration attitude hid this by writing the orientation
+  kinematically.
+- **Data:** a terminal phase near 85–90° with C_L ≈ 0 (Li; Chen).
+- **Work:** fly the terminal glide on the physical descent law.
+
+### 4. Heading guidance architecture
+
+- **Data:** heading is turned by bank-to-turn about the velocity vector at higher speed
+  (Li). Near 90° there is little lift, so the terminal phase is nearly ballistic.
+- **Model:** the catch glide steers by pointing the nose toward a heading, using the
+  weakest axis.
+- **Work:**
+  1. Do the lateral targeting while lift exists (α 60–70°, faster flight).
+  2. Predict a near-ballistic terminal phase.
+  3. Use heading only to point the nose at the tower before the flip.
+
+### 5. Data still missing
+
+- Flap chord, span, area and hinge station of the V3 forward flaps (imagery).
+- Per-degree flap effectiveness and lateral-directional derivatives (figures of Li 2022;
+  full text of Zhang 2021).
+- The reference area of the Chen 2025 coefficients.
+- Starship V3 landing mass and centre of mass. Only estimates exist (75–155 t dry).
+- Any primary terminal telemetry beyond the Flight 14 broadcast and timelines.
+
+## Candidate gates
+
+These come from the datasets in `data/`:
+
+- **Subsonic trim range.**
+  - Requirement: the trim angle with the forward pair alone lies in 65–89°, and aft
+    deflection extends it beyond 100°.
+  - Source: Li 2022, Ma 0.8. Compare with a stated X_cg offset.
+- **C_L sign change.**
+  - Requirement: C_L changes sign between 85° and 100° in the subsonic belly flop.
+  - Sources: Li 2022; Chen 2025.
+- **Roll stability.**
+  - Requirement: the roll moment from sideslip is restoring, with C_lβ < 0.
+  - Source: Li 2022.
+- **Forward-flap heading authority.**
+  - Requirement: first-order and of the right sign in both directions.
+  - Source: Zhang 2021, qualitative.
+- **Terminal speed.**
+  - Requirement: within ±10 % of 363 km/h at 1.2 km, for the modelled mass.
+  - Source: Flight 14 broadcast. Already a gate.

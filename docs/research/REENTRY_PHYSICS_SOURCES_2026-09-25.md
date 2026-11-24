@@ -1,5 +1,8 @@
 # Reentry physics source register — 2026-09-25
 
+> Starship-specific aerodynamics and control sources, datasets and the model comparison are
+> in [starship_aero/](starship_aero/README.md).
+
 ## Research question
 
 Which parts of Exosphere's orbital return and Starship entry behavior are physically
