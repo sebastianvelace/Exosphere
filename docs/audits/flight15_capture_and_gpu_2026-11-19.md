@@ -1015,6 +1015,26 @@ makes the heading moment second order. The amount of the shift is not published.
 armed, but they add nothing to `GetAttitudeAuthorityBody`. Even fully counted, each gives
 about 0.0005 rad/s² about the heading axis at this mass. The forward store is empty.
 
+### Leeward forward-flap hinges tried and reverted (2026-11-23)
+
+A hinge azimuth was added to the plate model, carrying each flap's whole frame round the
+hull toward the leeward side. It was swept on the V3 forward flaps from 0° to 30°.
+
+**Each plate gains a first-order heading moment.** At neutral it grows from
+0.02 mrad/s² per degree at 0° to 0.52 at 30°.
+
+**The heading still does not follow the command.** Requests of +90° and −90° ended with the
+nose on the same physical side. The heading drifts to a fixed direction, and the azimuth
+only changes which side it settles on. An earlier read of this sweep took it as
+controllability, which was wrong. With a 10° estimate in the V3 data, a heading-hold test
+failed. The catch replays also stopped catching, and the physical glide's angle-of-attack
+hold loosened to a mean deviation of 9.8°.
+
+**Result.** The code, the data and the provenance are reverted. The leeward shift is
+published but its amount is not, and as modelled it does not give heading control. The
+glide bench keeps a part-catalogue hook (`Flight15CatchBench.Restore(..., catalogEdit)`) for
+geometry experiments.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km

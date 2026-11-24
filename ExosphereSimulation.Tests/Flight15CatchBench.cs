@@ -65,7 +65,8 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
         Flight14DescentDefinition.LoadFromJson(Path.Combine(DataDirectory(), "flight_profiles",
             "starship_flight15_descent_estimate.json"));
 
-    public static Flight15CatchBench Restore(string capture, TowerCatchBurnDefinition? definition = null)
+    public static Flight15CatchBench Restore(string capture, TowerCatchBurnDefinition? definition = null,
+        Action<PartCatalog>? catalogEdit = null)
     {
         string data = DataDirectory();
         string fixtures = Path.Combine(AppContext.BaseDirectory, "Fixtures", "flight15_catch");
@@ -80,7 +81,9 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
         var universe = new Universe();
         universe.AddBody(earth);
         var save = SaveGameV2Json.DeserializeOrMigrate(File.ReadAllText(Path.Combine(fixtures, capture + ".save.json")));
-        SaveGameV2Codec.Restore(universe, save, PartCatalog.LoadFromDirectory(Path.Combine(data, "parts")));
+        var catalog = PartCatalog.LoadFromDirectory(Path.Combine(data, "parts"));
+        catalogEdit?.Invoke(catalog);
+        SaveGameV2Codec.Restore(universe, save, catalog);
         universe.SchedulerBudgetEnabled = env.GetProperty("SchedulerBudgetEnabled").GetBoolean();
         universe.DeferredPhysicsCandidateEnabled = env.GetProperty("DeferredPhysicsCandidateEnabled").GetBoolean();
         universe.DistributedAerodynamicsEnabled = env.GetProperty("DistributedAerodynamicsEnabled").GetBoolean();
