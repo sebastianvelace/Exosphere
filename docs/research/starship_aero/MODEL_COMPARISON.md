@@ -99,8 +99,30 @@ noted. The measurement history is in
   - The flown profile avoids the problem rather than overpowering it: thrust only over the
     last ~550 m, igniting nearly over the cradle, so little sideways speed has to be
     removed upright.
-- **Work:** do the lateral targeting in the glide (item 4), light near overhead and lower
-  (this item), and only then revisit the gimbal range with retuned gains (item 6).
+- **Flown flip shape (IFT-4/5/6 webcast speeds):** total speed rises only 0–9 m/s as the
+  flip starts, then falls at about 10–11 m/s² for 6–7 s (from about 93 to 17 m/s). In the
+  model it stays at 120–135 m/s through the whole 6 s flip: three Raptors idle at their
+  40 % floor while the axis still lies across the fall, which throws the ship about
+  54 m/s sideways and brakes nothing.
+- **Flip experiments (2026-11-24, stashed, not merged):**
+  - Throttling up as the axis nears retrograde changes nothing: the flip ends near vertical,
+    while the retrograde direction leans 30–45° away from the tower because of the throw.
+  - Pitching up on the flaps first and lighting the engines at 70° from vertical cuts the
+    throw from about 54 to 22 m/s (87 → 55 m/s sideways at flip end on the replays). The
+    flaps alone cannot bring the axis below about 55–70° from every state; below that the
+    flip stalls.
+  - Attitude gains and roll damping only reshuffle which replay catches; none holds the aim
+    (errors of 30–80° in every case).
+- **The glide is the bottleneck:** on the physical belly flop from 4 km
+  (`glide_4km`, Flight 15 descent law) the glide guidance's closing speed and ignition lead
+  change nothing. The ship reaches ignition about 1,290 m from the cradle with the nose 36°
+  off the tower line in every run. There is too little lift at that height to move it
+  1.3 km.
+- **Work:**
+  1. Do the lateral targeting in the glide higher up, where lift exists (item 4).
+  2. Then light near overhead, with little sideways speed, using the flap-first flip.
+  3. Lower the ignition toward the flown profile (this item).
+  4. Only then revisit the gimbal range with retuned gains (item 6).
 
 ### 6. Raptor gimbal range (all variants)
 
