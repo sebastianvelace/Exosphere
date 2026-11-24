@@ -1035,6 +1035,70 @@ published but its amount is not, and as modelled it does not give heading contro
 glide bench keeps a part-catalogue hook (`Flight15CatchBench.Restore(..., catalogEdit)`) for
 geometry experiments.
 
+### Literature review: Starship belly-flop aerodynamics and control (2026-11-23)
+
+Sources read for this review:
+
+- Li Z. et al., "Performance and characteristics analysis on the Starship aerodynamic
+  configuration", Acta Aerodynamica Sinica 40(5), 2022 (RANS/SST, Mach 12/2/0.8,
+  α 0–120°): <https://html.rhhz.net/KQDLXXB/2022-05-1.htm>.
+- Zhang Y. et al., "Numerical simulation on aerodynamic characteristics of new type control
+  surface of Starship", Acta Aeronautica et Astronautica Sinica 42(2), 2021, 624058; abstract
+  only: <https://hkxb.buaa.edu.cn/EN/abstract/abstract18170.shtml>.
+- Chen L. et al., "Optimization of Flip-Landing Trajectories for Starship based on a Deep
+  Learned Simulator", arXiv 2508.06520 (S31 RANS, Mach < 0.3, 2-D):
+  <https://arxiv.org/abs/2508.06520>.
+- NASASpaceflight Flight 7 / Block 2 coverage:
+  <https://www.nasaspaceflight.com/2025/01/starship-flight-7-block-2/>.
+
+**What the literature agrees on, and how the model compares:**
+
+| Quantity | Literature | Exosphere (4 km glide state, 215 t) |
+| --- | --- | --- |
+| Subsonic belly-flop attitude | near 90° (Li: subsonic phase near 90°; Chen: "near-90°") | Flight 15 descent law flies 80° |
+| Subsonic trim range | Ma 0.8, X_cg 0.58: forward pair alone 65–89°; aft pair at 80° extends it to 120° (Li) | ≈ 77° with full deflection to > 100° (X_cg ≈ 0.55 from the nose) |
+| Lift at 90° | C_L ≈ 0 near 90–95° (Li Ma 0.8; Chen S31 RANS) | +0.35 m/s² along the nose at 80°, −1.1 at 90° |
+| Roll versus sideslip | C_lβ < 0, roll-stable (Li) | restoring, 2.2 rad/s² per radian |
+| Directional | C_nβ > 0 statically, but the dynamic criterion C_nβ,dyn is stable at Ma 0.8 for 65–120° (Li) | not measured |
+| Heading control | by bank-to-turn, rolling about the velocity vector (Li). Forward flaps mainly drive yaw at low α; at high α all three moments still respond to both pairs (Zhang) | the flaps' moment about the belly normal is second order; heading is not controllable |
+| Forward flap hinge | follows the nose-cone generatrix; aft hinge parallel to the body axis (Li). Block 2 moved the forward flaps toward the tip (SpaceX via NSF) | all four hinges parallel to the body axis; the V3 forward flaps sit on the barrel, below the 14 m nose |
+| Broadside drag | C_D ≈ 9.5–11 on the base area at 90°, Ma 0.8, which gives C_D·S ≈ 640 m² (Li) | ≈ 360 m² (aerodynamic load at 125 m/s, 4 km) |
+
+On drag: the model's crossflow follows Jorgensen with Reynolds dependence. A 9 m cylinder
+at about 120 m/s is at a transcritical Reynolds number, around 7·10⁷, where the crossflow
+C_d is about 0.5–0.7, not 1.2. The Flight 14 anchor of 363 km/h at 1.2 km fits the lower
+figure. Li's case does not report its Reynolds number. The difference is a known Reynolds
+effect, not evidence against the model.
+
+**The likely missing physics is the forward hinge tilt.** On a tangent ogive (R = 4.5 m,
+L = 14 m, ogive radius 24 m) the surface is inclined 35.7° at the cone base and about 25°
+4 m above it. A forward flap hinged along that generatrix has a normal with a component
+along the body axis. Its normal force then has an axial part acting at a ±4.5 m lateral
+arm, and differential deflection of the pair gives a first-order moment about the belly
+normal, which is the heading. A hinge parallel to the axis, as modelled, has no axial
+component, which leaves only the second-order term measured above. This matches Zhang's
+finding that the forward pair mainly drives yaw.
+
+**Proposed path:**
+
+1. *Model.* Place the V3 forward flaps on the nose cone, with the hinge along the ogive
+   generatrix and the tilt derived from the declared nose geometry. Record it as derived,
+   with an estimated station. First check: the three-axis channel-sign bench with
+   first-order heading authority, and no Flight 14 regressions.
+2. *Gates against the literature.* Subsonic trim range against Li (Ma 0.8). C_L near zero
+   at 90–95°. Restoring roll with sideslip. Terminal speed against the Flight 14 anchor,
+   allowing for the mass.
+3. *Guidance.* Turn by banking about the velocity vector, as Li describes. Do the lateral
+   targeting while lift exists (α 60–70°, faster flight). Hold trim near 85–90° in the
+   terminal phase, where C_L ≈ 0 and the fall is nearly ballistic; predict the arrival;
+   use heading control only to point the nose at the tower for the flip.
+4. *Game.* Drop the demonstration attitude for the single-burn chapter, re-place the
+   ignition, and then shorten the burn.
+
+If step 1 does not give a heading moment of the right sign in both directions, the
+fallback is a terminal phase that ignores heading: plan the ignition and flip on the
+heading the airframe takes.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km
