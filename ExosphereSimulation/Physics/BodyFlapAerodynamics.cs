@@ -13,7 +13,8 @@ public readonly record struct BodyFlapGeometry(
     double MinDeflectionRad,
     double MaxDeflectionRad,
     double NeutralDeflectionRad,
-    double RateRadPerS)
+    double RateRadPerS,
+    double HingeTiltRad = 0.0)
 {
     public double AreaM2 => LengthM * SpanM;
 
@@ -35,16 +36,30 @@ public readonly record struct BodyFlapGeometry(
             min,
             max,
             System.Math.Clamp(flap.NeutralDeflectionDeg * MathUtils.DEG_TO_RAD, min, max),
-            System.Math.Max(0.0, flap.RateDegPerS * MathUtils.DEG_TO_RAD));
+            System.Math.Max(0.0, flap.RateDegPerS * MathUtils.DEG_TO_RAD),
+            flap.HingeTiltDeg * MathUtils.DEG_TO_RAD);
     }
 
     /// <summary>Unit vector from the hinge to the tip at <paramref name="deflection"/>.</summary>
     public Vector3d SpanDirection(double deflection) =>
-        new(System.Math.Cos(deflection), 0.0, Side * System.Math.Sin(deflection));
+        AlongHinge(new(System.Math.Cos(deflection), 0.0, Side * System.Math.Sin(deflection)));
 
-    /// <summary>Plate normal (perpendicular to the span direction and the hull axis).</summary>
+    /// <summary>Plate normal (perpendicular to the span direction and the hinge line).</summary>
     public Vector3d Normal(double deflection) =>
-        new(Side * System.Math.Sin(deflection), 0.0, -System.Math.Cos(deflection));
+        AlongHinge(new(Side * System.Math.Sin(deflection), 0.0, -System.Math.Cos(deflection)));
+
+    /// <summary>Unit hinge line, pointing forward (+Y) and leaning toward the axis by the tilt.</summary>
+    public Vector3d HingeDirection => AlongHinge(new Vector3d(0.0, 1.0, 0.0));
+
+    // Tilts the axis-parallel flap frame about the circumferential direction at the hinge
+    // (body X), so +Y leans toward the axis: (0, cos τ, −side·sin τ).
+    private Vector3d AlongHinge(Vector3d v)
+    {
+        if (HingeTiltRad == 0.0) return v;
+        double angle = -Side * HingeTiltRad;
+        double c = System.Math.Cos(angle), s = System.Math.Sin(angle);
+        return new Vector3d(v.X, v.Y * c - v.Z * s, v.Y * s + v.Z * c);
+    }
 
     public Vector3d CentroidLocal(double deflection) =>
         HingeLocal + SpanDirection(deflection) * (0.5 * SpanM);

@@ -92,11 +92,11 @@
       "dataId": "starship_v3_command_flight12",
       "field": "bodyFlaps",
       "status": "estimated",
-      "source": "Exosphere image-derived Flight 7 proportions (VesselRenderer flap rigs); travel and servo rate are simulator estimates",
-      "accessedDate": "2026-11-03",
+      "source": "spacecraft-models/starship dimensions.md (CC BY-SA 4.0): photogrammetry of V3 Ship 39 from NASASpaceflight photos, recorded in docs/research/starship_aero/data/v3_ship_geometry_photogrammetry.json; travel and servo rate are simulator estimates",
+      "accessedDate": "2026-11-24",
       "variant": "Starship V3 forward flaps",
-      "conditions": "hinge station, length and span of each flap plate; deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
-      "uncertainty": "planform \u00b120%; travel and rate unknown publicly"
+      "conditions": "measured hinge line z 43.3-48.6 m (r 4.0-2.2 m) on the ogive, lean 18.8 deg toward the axis, tip edge 2.0 m at 3.7 m out. The plate model is a rectangle with the measured trapezoid area (13.5 m2) and centroid (1.57 m from the hinge, 7.23 m below the tip): hinge_y 2.27 m, hinge radius 3.47 m, hinge_tilt 18.8 deg, length 4.3 m, span 3.14 m. The measured hinge azimuth (98/262 deg) and the 14 deg leeward turn of the plate are not modelled (hinges at 90/270 deg). Deflection 0..90 deg, neutral 45 deg, 25 deg/s servo",
+      "uncertainty": "station and planform \u00b10.6 m, lean \u00b15 deg (photogrammetry); travel and rate unknown publicly"
     },
     {
       "dataId": "starship_tank",
@@ -298,12 +298,12 @@
       "dataId": "starship_v3_command_flight12",
       "field": "dryMassCenterYM",
       "status": "estimated",
-      "source": "Exosphere: thin-shell centroid of the 14 m tangent ogive plus the cylindrical payload section (lateral areas), with ~3 t of forward-flap hinge hardware at the hinge station",
+      "source": "Exosphere: thin-shell centroid of the 14 m tangent ogive plus the cylindrical payload section (lateral areas), with ~3 t of forward-flap hinge hardware at the measured hinge station (moved +8.5 m with the flaps on 2026-11-24)",
       "accessedDate": "2026-11-04",
       "variant": "starship_v3_command_flight12",
       "conditions": "dry structure centre along the part axis from its geometric centre, m",
       "uncertainty": "\u00b11 m (internal layout, tiles and plumbing not published)",
-      "value": -2.07
+      "value": -1.40
     },
     {
       "dataId": "starship_tank",

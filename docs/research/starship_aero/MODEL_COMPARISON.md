@@ -21,61 +21,44 @@ noted. The measurement history is in
 
 ## Discrepancies and open items
 
-### 1. Forward-flap hinge geometry
+### 1. Forward-flap hinge geometry (applied 2026-11-24)
 
-- **Data:** Li 2022 puts the forward hinge along the nose-cone generatrix. SpaceX moved
-  the Block 2 forward flaps toward the tip, and NSF describes the move as up and leeward.
-- **Model:** all four hinges are parallel to the body axis, and the V3 forward flaps sit
-  on the barrel below the 14 m nose.
-- **Effect:** each flap's moment about the belly normal is second order at its 45°
-  neutral. The plate's force across the flow, C_N cos α, peaks there. The heading
-  authority is ≈ 0.03 rad/s² at best, and the allocator saturates.
-- **Trial results:**
-  - A leeward hinge azimuth was tried and reverted.
-  - A forward pair moved onto the ogive (hinge radius 4.0 m), with the hinge tilt derived
-    from the ogive (≈ 10°), gives a clean heading channel of the right sign: ±0.03 rad/s².
-  - Holding a heading still fails: the roll channel dies when trim saturates the plates.
-  - Experiment kept in a stash; not merged.
-- **Work:**
-  1. Place the forward flaps from imagery.
-  2. Re-check the heading channel once trim no longer saturates the plates (item 2).
+- **Data:** [data/v3_ship_geometry_photogrammetry.json](data/v3_ship_geometry_photogrammetry.json),
+  ±0.6 m and ±5°. The V3 forward flaps sit on the ogive: hinge line z 43.3–48.6 m (r 4.0–2.2 m),
+  leaning about 19° toward the axis, at azimuth 98°/262°, planes turned 14° leeward, swept
+  trapezoid of 13.5 m². Li 2022 also hinges the forward pair along the nose-cone generatrix.
+- **Before:** hinges parallel to the axis at 90°/270°, centre 1.75 m below the nose base
+  (about 9 m too far aft), 5.7 × 2.55 m rectangle. Each flap's moment about the belly normal
+  was second order, so turning about body X (heading, and the X share of a bank about the
+  flow at α 60°) had almost no authority.
+- **Model now:** `hinge_tilt_deg` 18.8 (`BodyFlapGeometry.HingeDirection`), hinge radius
+  3.47 m, and a rectangle (4.3 × 3.14 m) with the measured trapezoid's area and centroid,
+  7.23 m below the tip. The ~3 t of hinge hardware moved with the flaps (dry centre −2.07 →
+  −1.40 m). Provenance in `data/provenance/rigid_body_fidelity_2026.json`.
+- **Not modelled yet:** the 98°/262° hinge azimuth, the 14° leeward plate turn and the
+  trapezoid's sweep. The 54.0 m model stack against the published 52.1 m is unresolved.
+- **Effect on Flight 14:** see item 2. The bank now follows its reference within about 1°
+  through the hypersonic entry, with no flap saturation.
 
-- **Measured V3 geometry, now available:**
-  - **Source:**
-    [data/v3_ship_geometry_photogrammetry.json](data/v3_ship_geometry_photogrammetry.json),
-    ±0.6 m and ±5°.
-  - **Station:** the forward flaps sit on the ogive, centre about 7.6 m above the nose base.
-    The model has them about 1.75 m below it, roughly 9 m further aft.
-  - **Hinge and plane:** hinge tilted about 19°; azimuth about 98° and 262°; planes turned
-    14° leeward; swept-trapezoid planform. The area, about 14 m², already matches the
-    model's 14.5 m².
-  - **Ship length:** the model stack totals 54.0 m (engines 4.5 + tank 30.5 + command
-    19.0), against the published 52.1 m from skirt edge to tip. The definition of the
-    datum needs checking.
-- **Work:** move and reshape the forward flaps from these data. The plate model needs:
-  - a hinge tilt, already prototyped;
-  - a hinge azimuth (prototyped and reverted for heading, but justified here by geometry);
-  - a plane rotation;
-  - a non-rectangular planform, or at least the centroid and area of the trapezoid.
-
-  Then re-measure the trim range, the heading authority and every Flight 14 and Flight 15
-  gate.
-
-### 2. Trim-feasibility check (bug, fixed, not merged)
+### 2. Trim-feasibility check (bug, fixed 2026-11-24)
 
 - **Bug:** `Flight14DescentController.TrimFeasibleAngleOfAttack` tested the moment about
   body X. In a belly-first −X attitude the angle-of-attack moment acts about body Z, and
   the X moment is exactly zero up to rounding, so feasibility was decided on the sign of
   rounding noise.
-- **Fix:** use the moment about body axis × flow. The limit becomes physical: 71° minimum
-  with full deflection, and higher angles are kept.
-- **Consequence:** the Flight 14 historical gate fails.
-  - Residuals: +6.3 km at T+10369, +7.2 km at T+10541, +11.8 km at T+10961.
-  - Previously: +0.1 km, +0.7 km and −2.2 km.
-- **Not yet explained:** both runs fly about 60–61° through the hypersonic phase. The
-  difference is not the angle of attack; the descent stays higher from the first minutes.
-  The next step is to trace bank and lift direction side by side.
-- **Status:** fix uncommitted; recalibration in progress.
+- **Fix:** use the moment about body axis × flow.
+- **Why the Flight 14 gate first failed (+6 to +12 km):** the old limiter returned a
+  random angle between about 52° and 67° almost every step. That jitter kept disturbing the
+  attitude and hid a missing control channel. With the fix the commanded angle stays at the
+  scheduled 59.5°, and at T+10060 s (85 km, q ≈ 220 Pa) the corridor guidance asked for a
+  bank of −99°. The forward flaps saturated in differential (90°/0°), yet the bank drifted
+  back toward 0° at about 0.1°/s: with parallel hinges they could not turn the body about
+  X. The ship flew lift-up for about 380 s at 81–85 km and stayed 6–12 km high.
+- **With the measured flaps (item 1):** the bank tracks the reference and the anchors fall
+  inside the 3 km band (see the historical gate output in the commit).
+- **Regression tests:** `Flight14TrimLimiterTests` (insensitive to a 1e-9 rad change of the
+  lift reference; the limited angle is itself trimmable) and
+  `BodyFlapAerodynamicsTests.ATiltedForwardHingeTurnsTheBodyAboutTheBellyNormal`.
 
 ### 3. Reference angle of attack in the terminal glide
 
@@ -131,9 +114,26 @@ noted. The measurement history is in
   2. Compare with the flown band.
   3. Consider grid fins (NASA Orion grid-fin data) if the drag deficit is real.
 
-### 8. Data still missing
+### 8. Catch pin station
 
-- Flap chord, span, area and hinge station of the V3 forward flaps (imagery).
+- **Data:** the V3 photogrammetry puts the two catch pins at z 39.0–39.9 m (12.2–13.1 m
+  below the tip) at 90°/270°, standing 0.44 m proud, with the forward flaps' lowest corners
+  about 2.5 m above them. The Flight 15 reporting places the fittings directly under the
+  forward flaps.
+- **Model:** `catch_pin_offset_y_m` −9.5 puts them 19 m below the tip, at the base of the
+  command section. That station followed the old, too-far-aft forward flaps; since the flaps
+  moved to their measured station the pins no longer sit under them.
+- **Trial (2026-11-24):** at the measured station (−3.15 m) the 50 Hz ignition replay still
+  catches (48.7 s), but the 60 Hz one ends in a missed approach at 22 s. The cradle rises with
+  the pins, so the ignition clearance is unchanged (1,425 m) and the two runs differ by only
+  0.1 m at 7 s. The difference grows because the lateral channel is marginal: with either pin
+  station the ship crosses the cradle at about 33 m/s some 200 m above it. The pins wait for a
+  more robust lateral catch (item 5).
+- **Work:** make the lateral channel robust, then move the pins to the measured station and
+  re-run the catch benches, the replays and the default chapter.
+
+### 9. Data still missing
+
 - Per-degree flap effectiveness and lateral-directional derivatives (figures of Li 2022;
   full text of Zhang 2021).
 - The reference area of the Chen 2025 coefficients.

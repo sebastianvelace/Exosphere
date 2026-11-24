@@ -231,13 +231,20 @@ public sealed class Flight14DescentController : IPhysicsStepController
         {
             var axis = AerodynamicsModel.ComputeEntryAxisForLift(flow, liftReference, degrees);
             var orientation = AerodynamicsModel.ComputeBellyFirstOrientation(axis, flow);
+            // The moment that changes the angle of attack acts about body axis × flow (body Z
+            // for the belly-first −X attitude), not about body X: about X a belly-first hull
+            // and a symmetric flap pair give zero, and the old test decided feasibility on the
+            // sign of its rounding noise.
+            var pitchAxis = Vector3d.Up.Cross(orientation.Inverse().Rotate(flow));
+            if (pitchAxis.MagnitudeSquared < 1e-12) return true;
+            pitchAxis = pitchAxis.Normalized;
             double hull = DistributedAerodynamics.Evaluate(elements, orientation, Vector3d.Zero, com,
                 surfaceVelocity, density, temperature, ship.MaximumDiameter, ship.Parts.AxialDragCoefficient,
-                atmosphere.SoundSpeedConstant, viscosity).TorqueBody.X;
+                atmosphere.SoundSpeedConstant, viscosity).TorqueBody.Dot(pitchAxis);
             double a = BodyFlapAerodynamics.Evaluate(flaps, noseUp, orientation, Vector3d.Zero, com,
-                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant, atmosphere.HeatCapacityRatio).TorqueBody.X;
+                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant, atmosphere.HeatCapacityRatio).TorqueBody.Dot(pitchAxis);
             double b = BodyFlapAerodynamics.Evaluate(flaps, noseDown, orientation, Vector3d.Zero, com,
-                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant, atmosphere.HeatCapacityRatio).TorqueBody.X;
+                surfaceVelocity, density, temperature, atmosphere.SoundSpeedConstant, atmosphere.HeatCapacityRatio).TorqueBody.Dot(pitchAxis);
             return (hull + a) * (hull + b) <= 0.0;
         }
         if (Feasible(scheduledDegrees)) return scheduledDegrees;

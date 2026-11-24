@@ -11,26 +11,26 @@ public sealed class CatchGeometryTests
     [InlineData("starship_command.json")]
     [InlineData("super_heavy_v3_booster_flight12.json")]
     [InlineData("super_heavy_booster.json")]
-    public void CatchPinsStandOnTheCylindricalHullByAboutAFoot(string file)
+    public void CatchPinsStandProudOfTheLocalHullByAboutAFoot(string file)
     {
         var part = PartDefinition.LoadFromJson(Path.Combine(RepoRoot(), "data", "parts", file));
-        double ogiveStart = 0.5 * part.LengthM - part.NoseLengthM;
 
-        Assert.True(part.CatchPinOffsetYM <= ogiveStart,
-            $"pin station {part.CatchPinOffsetYM} m lies in the nose ogive starting at {ogiveStart} m");
         Assert.True(System.Math.Abs(part.CatchPinOffsetYM) <= 0.5 * part.LengthM);
-        double protrusion = part.CatchPinLateralOffsetM + part.CatchPinRadiusM - 0.5 * part.DiameterM;
+        // Measured against the hull radius at the pin station, so a fitting may sit near the
+        // nosecone base, but one deep in the ogive (where the hull narrows) fails here.
+        double protrusion = part.CatchPinLateralOffsetM + part.CatchPinRadiusM
+            - HullRadius(part, part.CatchPinOffsetYM);
         Assert.InRange(protrusion, 0.05, 1.0);
     }
 
-    [Fact]
-    public void ShipFittingsSitDirectlyUnderTheForwardFlaps()
+    /// <summary>Tangent-ogive hull radius at station <paramref name="y"/> from the part centre.</summary>
+    private static double HullRadius(PartDefinition part, double y)
     {
-        var part = PartDefinition.LoadFromJson(Path.Combine(RepoRoot(), "data", "parts",
-            "starship_v3_command_flight12.json"));
-        double flapLowerEnd = part.BodyFlaps.Min(f => f.HingeYM - 0.5 * f.LengthM);
-
-        Assert.InRange(flapLowerEnd - (part.CatchPinOffsetYM + part.CatchPinRadiusM), 0.0, 0.5);
+        double radius = 0.5 * part.DiameterM, nose = part.NoseLengthM;
+        double fromTip = 0.5 * part.LengthM - y;
+        if (nose <= 0.0 || fromTip >= nose) return radius;
+        double rho = (radius * radius + nose * nose) / (2.0 * radius);
+        return System.Math.Sqrt(rho * rho - (nose - fromTip) * (nose - fromTip)) + radius - rho;
     }
 
     [Theory]

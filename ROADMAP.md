@@ -38,6 +38,11 @@ Base tecnica cerrada en `main`:
   (`EXOSPHERE_SINGLE_BURN_CATCH=1`) now catches in about 38 s at 50/60/120 Hz with
   three, two, then one Raptor and no relight (Flight 15 flew about 18 s). The powered handoff into the catch
   corridor, in-game continuous mission, and booster diversion remain open.
+  The V3 forward flaps now follow measured photogrammetry (on the ogive, hinge leaning
+  18.8°), and the descent trim limiter tests the angle-of-attack moment; the model
+  is checked against researcher and flight data in
+  [docs/research/starship_aero/MODEL_COMPARISON.md](docs/research/starship_aero/MODEL_COMPARISON.md),
+  which lists the open corrections (catch pins, ignition altitude, gimbal range, booster drag).
   See the [Flight 15 verification](docs/audits/flight15_capture_and_gpu_2026-11-19.md).
   Flight 14 remains available from the Flight 15 briefing and exposes an automatic
   engineering exploration: loaded ascent, insertion, 26 payload releases and estimated

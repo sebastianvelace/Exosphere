@@ -108,6 +108,13 @@ public class BodyFlapDef
     [JsonPropertyName("max_deflection_deg")] public double MaxDeflectionDeg { get; set; } = 90.0;
     [JsonPropertyName("neutral_deflection_deg")] public double NeutralDeflectionDeg { get; set; } = 45.0;
     [JsonPropertyName("rate_deg_per_s")] public double RateDegPerS { get; set; } = 25.0;
+    /// <summary>
+    /// Lean (deg) of the hinge line toward the hull axis going forward: a flap hinged along
+    /// a nose-cone generatrix rather than parallel to the axis. Its plate normal then has a
+    /// component along the axis, so the pair's differential deflection turns the ship about
+    /// the belly normal. Zero keeps the hinge parallel to the axis.
+    /// </summary>
+    [JsonPropertyName("hinge_tilt_deg")] public double HingeTiltDeg { get; set; }
 }
 
 /// <summary>

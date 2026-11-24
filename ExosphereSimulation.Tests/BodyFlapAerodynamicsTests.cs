@@ -87,6 +87,49 @@ public sealed class BodyFlapAerodynamicsTests
     }
 
     [Fact]
+    public void ATiltedForwardHingeTurnsTheBodyAboutTheBellyNormal()
+    {
+        // Belly-first flow at 60° angle of attack: the air arrives from the belly (−X) and the nose (+Y).
+        double alpha = 60.0 * MathUtils.DEG_TO_RAD;
+        var flow = new Vector3d(-System.Math.Sin(alpha), System.Math.Cos(alpha), 0.0) * 50.0;
+        double BellyNormalMoment(double tiltDeg, double left, double right)
+        {
+            var flaps = new[] { TiltedFlap(1, tiltDeg), TiltedFlap(-1, tiltDeg) };
+            return BodyFlapAerodynamics.Evaluate(flaps, new[] { left, right }, Quaterniond.Identity,
+                Vector3d.Zero, Vector3d.Zero, flow, Density, Temperature).TorqueBody.X;
+        }
+        double tiltedA = BellyNormalMoment(18.8, 1.2, 0.4), tiltedB = BellyNormalMoment(18.8, 0.4, 1.2);
+        double parallelA = BellyNormalMoment(0.0, 1.2, 0.4), parallelB = BellyNormalMoment(0.0, 0.4, 1.2);
+        // Mirrored differentials turn the body in opposite directions, and the lean of the hinge
+        // (the measured V3 ogive hinge) is what makes that moment first order.
+        Assert.True(tiltedA * tiltedB < 0.0, $"{tiltedA} vs {tiltedB}");
+        Assert.True(System.Math.Abs(tiltedA - tiltedB) > 3.0 * System.Math.Abs(parallelA - parallelB),
+            $"tilted {tiltedA - tiltedB} vs parallel {parallelA - parallelB}");
+    }
+
+    [Fact]
+    public void ATiltedHingeLeansTowardTheAxisGoingForward()
+    {
+        var plusZ = TiltedFlap(1, 18.8);
+        var minusZ = TiltedFlap(-1, 18.8);
+        Assert.True(plusZ.HingeDirection.Y > 0.0 && plusZ.HingeDirection.Z < 0.0, $"{plusZ.HingeDirection}");
+        Assert.True(minusZ.HingeDirection.Y > 0.0 && minusZ.HingeDirection.Z > 0.0, $"{minusZ.HingeDirection}");
+        Assert.Equal(18.8, System.Math.Acos(plusZ.HingeDirection.Y) * MathUtils.RAD_TO_DEG, 9);
+        for (double deflection = 0.0; deflection <= HalfPi; deflection += 0.3)
+        {
+            Assert.Equal(0.0, plusZ.Normal(deflection).Dot(plusZ.HingeDirection), 12);
+            Assert.Equal(0.0, plusZ.SpanDirection(deflection).Dot(plusZ.HingeDirection), 12);
+        }
+    }
+
+    private static BodyFlapGeometry TiltedFlap(int side, double tiltDeg) =>
+        BodyFlapGeometry.From(Hull(), Vector3d.Zero, new BodyFlapDef
+        {
+            Id = "f", HingeYM = 10.0, Side = side, HingeRadiusM = 3.5, HingeTiltDeg = tiltDeg,
+            LengthM = 4.3, SpanM = 3.1,
+        });
+
+    [Fact]
     public void FlapsDampARotationThroughTheLocalFlow()
     {
         var hull = Hull();
