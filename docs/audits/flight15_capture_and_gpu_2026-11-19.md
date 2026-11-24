@@ -1099,6 +1099,37 @@ If step 1 does not give a heading moment of the right sign in both directions, t
 fallback is a terminal phase that ignores heading: plan the ignition and flip on the
 heading the airframe takes.
 
+### Game chapter after the measured forward flaps (2026-11-24)
+
+The measured V3 forward flaps (`f8a2bb9`) change the belly-flop lift. The chapter writes
+the glide attitude kinematically, but its forces are physical, so the footprint moved.
+
+**Default chapter.** On the old seed it fell 505 m short. At 300 m it aborted the catch and
+landed on its legs, where it had caught with the old flaps. Moving the seed 500 m
+downrange and 74 m north (`starship_flight15_entry_estimate.json`) restores the catch:
+
+| Rate | Mass (t) | Peak compression (m) | Peak pin load (MN) | Load limit |
+| ---: | ---: | ---: | ---: | --- |
+| 50 Hz | 209.3 | 0.496 | 1.41 | within |
+| 60 Hz | 209.9 | 0.449 | 1.71 | within |
+| 120 Hz | 209.0 | 0.606 | 2.45 | exceeded |
+
+The 120 Hz pin-load spike predates this change.
+
+**Opt-in single burn** (`EXOSPHERE_SINGLE_BURN_CATCH=1`).
+
+- **Before, old flaps:** catches at 40.4 s with a 1.32 MN peak.
+- **Now, measured flaps:** catches at 60 Hz in 63–65 s with a 5.0–5.3 MN peak and 2.0–2.3 m
+  compression, beyond the load limit, and the 50 Hz run lands hard too.
+- **Seed:** moving the single-burn seed ±170 m either aborts or catches as hard, so seed
+  tuning does not fix it. This is the marginal lateral channel recorded above.
+
+**Open:** the opt-in single burn exceeds the load limit with the measured flaps.
+
+**Check to run.** These chapter runs are not part of `ci_check.sh`. Run
+`CAPTURE_MENU_MODAL=flight15catchverify` at 50, 60 and 120 Hz after any change to the V3
+aerodynamics.
+
 ### Terminal-glide identification bench (2026-11-24)
 
 **Bench.** The bench (prototype v3 in `stash`, harness `_TmpIdent.cs`) flies the
