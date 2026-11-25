@@ -1,0 +1,1339 @@
+{
+  "SchemaVersion": 2,
+  "SavedAtUtc": "2026-11-24T23:59:25.0558541+00:00",
+  "SimulationTime": 254.8399999998964,
+  "EphemerisId": "kepler",
+  "ClockCompensationSeconds": null,
+  "TimeScale": 1,
+  "ActiveVesselId": "610b8856-5114-4a02-b02d-972953165e17",
+  "Vessels": [
+    {
+      "Id": "610b8856-5114-4a02-b02d-972953165e17",
+      "Name": "Starship Flight 12 \u2014 V3 / Raptor 3",
+      "Position": {
+        "X": -26516683379.7105,
+        "Y": 144697152502.3807,
+        "Z": 2306727.5047362214
+      },
+      "Velocity": {
+        "X": -29713.467538385114,
+        "Y": -5880.781618695667,
+        "Z": 152.80557627875396
+      },
+      "Orientation": {
+        "W": 0.09857119951151293,
+        "X": -0.23856549752391706,
+        "Y": -0.7852957706009716,
+        "Z": -0.5627439690429865
+      },
+      "AngularVelocity": {
+        "X": -6.797590500566038E-06,
+        "Y": -2.4007542022780512E-05,
+        "Z": -3.141829425979446E-06
+      },
+      "IsOnRails": false,
+      "Orbit": null,
+      "ReferenceBodyId": "earth",
+      "Throttle": 0,
+      "PitchYawRoll": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "PropellantVentRateKgPerS": 0,
+      "TransportRelativeMomentum": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "TransportRelativeAngularMomentum": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "TransportMomentumShares": [],
+      "PropellantSloshStates": null,
+      "VentedPropellantKg": 0,
+      "FlapActuators": {
+        "X": -0.0001536078117914182,
+        "Y": -0.0006339453252350296,
+        "Z": -4.317920302153699E-05
+      },
+      "BodyFlapDeflectionsRad": [
+        0.1469101838414334,
+        0.1507857253076252,
+        1.532090249110924,
+        1.5250462544723222
+      ],
+      "PhysicalBodyFlapsActive": true,
+      "FlightControlInvertsAerodynamics": true,
+      "SasEnabled": false,
+      "ParachutesArmed": false,
+      "IsGroundHeld": false,
+      "GroundNormal": {
+        "X": -0.8929541471063175,
+        "Y": 0.27629621539792837,
+        "Z": 0.35537767589201597
+      },
+      "GroundOffset": 19.812,
+      "IsSurfaceSettled": false,
+      "SurfaceSettledDuration": 0,
+      "IsDestroyed": false,
+      "DestructionCause": 0,
+      "CrashImpactSpeed": 0,
+      "CrashPosition": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "RootPartInstanceId": "starship_v3_command_flight12:0d803792f2e54c88a9a30b1bb94fe814",
+      "Parts": [
+        {
+          "InstanceId": "starship_v3_command_flight12:0d803792f2e54c88a9a30b1bb94fe814",
+          "DefinitionId": "starship_v3_command_flight12",
+          "LiquidFuel": 0,
+          "Oxidizer": 0,
+          "ReservedLiquidFuel": 0,
+          "ReservedOxidizer": 0,
+          "HeaderPropellantKg": [
+            15650
+          ],
+          "SolidFuel": 0,
+          "Monopropellant": 0,
+          "RcsAttitudeEnabled": true,
+          "RcsStageArmed": true,
+          "ElectricCharge": 0,
+          "Temperature": 305.2337840073249,
+          "SkinTemperature": 430.4088492620862,
+          "ThermalDamage": 0,
+          "IsBroken": false,
+          "IsDeployed": false,
+          "IsStagingActive": true,
+          "ThrottleLevel": 0,
+          "GimbalOffset": {
+            "X": 0,
+            "Y": 0,
+            "Z": 0
+          },
+          "ActiveEngineFraction": 1,
+          "EngineInstances": [],
+          "ScheduledEngineFailures": []
+        },
+        {
+          "InstanceId": "starship_v3_tank_flight12:60e9e433e1b4487a98fa2a1a44a3d679",
+          "DefinitionId": "starship_v3_tank_flight12",
+          "LiquidFuel": 14742.427536209303,
+          "Oxidizer": 52257.5724637907,
+          "ReservedLiquidFuel": 0,
+          "ReservedOxidizer": 0,
+          "HeaderPropellantKg": [
+            4350
+          ],
+          "SolidFuel": 0,
+          "Monopropellant": 4000,
+          "RcsAttitudeEnabled": true,
+          "RcsStageArmed": true,
+          "ElectricCharge": 0,
+          "Temperature": 290.0610468687064,
+          "SkinTemperature": 287.76430793846106,
+          "ThermalDamage": 0,
+          "IsBroken": false,
+          "IsDeployed": false,
+          "IsStagingActive": true,
+          "ThrottleLevel": 0,
+          "GimbalOffset": {
+            "X": 0,
+            "Y": 0,
+            "Z": 0
+          },
+          "ActiveEngineFraction": 1,
+          "EngineInstances": [],
+          "ScheduledEngineFailures": []
+        },
+        {
+          "InstanceId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46",
+          "DefinitionId": "starship_v3_engines_flight12",
+          "LiquidFuel": 0,
+          "Oxidizer": 0,
+          "ReservedLiquidFuel": 0,
+          "ReservedOxidizer": 0,
+          "HeaderPropellantKg": [],
+          "SolidFuel": 0,
+          "Monopropellant": 0,
+          "RcsAttitudeEnabled": true,
+          "RcsStageArmed": false,
+          "ElectricCharge": 0,
+          "Temperature": 289.2035642980751,
+          "SkinTemperature": 287.8737623471448,
+          "ThermalDamage": 0,
+          "IsBroken": false,
+          "IsDeployed": false,
+          "IsStagingActive": true,
+          "ThrottleLevel": 0,
+          "GimbalOffset": {
+            "X": 0,
+            "Y": 0,
+            "Z": 0
+          },
+          "ActiveEngineFraction": 0.5,
+          "EngineInstances": [
+            {
+              "InstanceId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46:engine:01",
+              "EngineModelId": "raptor3-starship-sl-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 254.8399999998964,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46:engine:02",
+              "EngineModelId": "raptor3-starship-sl-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 254.8399999998964,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46:engine:03",
+              "EngineModelId": "raptor3-starship-sl-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 254.8399999998964,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46:engine:04",
+              "EngineModelId": "raptor3-starship-vac-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 254.8399999998964,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46:engine:05",
+              "EngineModelId": "raptor3-starship-vac-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 254.8399999998964,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46:engine:06",
+              "EngineModelId": "raptor3-starship-vac-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 254.8399999998964,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            }
+          ],
+          "ScheduledEngineFailures": []
+        },
+        {
+          "InstanceId": "starship_v3_hotstage_flight12:85de5022baba402691e2f4dc348a5937",
+          "DefinitionId": "starship_v3_hotstage_flight12",
+          "LiquidFuel": 0,
+          "Oxidizer": 0,
+          "ReservedLiquidFuel": 0,
+          "ReservedOxidizer": 0,
+          "HeaderPropellantKg": [],
+          "SolidFuel": 0,
+          "Monopropellant": 0,
+          "RcsAttitudeEnabled": true,
+          "RcsStageArmed": false,
+          "ElectricCharge": 0,
+          "Temperature": 290.0610468687064,
+          "SkinTemperature": 287.76430793846106,
+          "ThermalDamage": 0,
+          "IsBroken": false,
+          "IsDeployed": false,
+          "IsStagingActive": false,
+          "ThrottleLevel": 0,
+          "GimbalOffset": {
+            "X": 0,
+            "Y": 0,
+            "Z": 0
+          },
+          "ActiveEngineFraction": 1,
+          "EngineInstances": [],
+          "ScheduledEngineFailures": []
+        },
+        {
+          "InstanceId": "610b8856-5114-4a02-b02d-972953165e17-reentry-gear",
+          "DefinitionId": "starship_landing_gear",
+          "LiquidFuel": 0,
+          "Oxidizer": 0,
+          "ReservedLiquidFuel": 0,
+          "ReservedOxidizer": 0,
+          "HeaderPropellantKg": [],
+          "SolidFuel": 0,
+          "Monopropellant": 0,
+          "RcsAttitudeEnabled": true,
+          "RcsStageArmed": false,
+          "ElectricCharge": 0,
+          "Temperature": 290,
+          "SkinTemperature": 290,
+          "ThermalDamage": 0,
+          "IsBroken": false,
+          "IsDeployed": false,
+          "IsStagingActive": true,
+          "ThrottleLevel": 0,
+          "GimbalOffset": {
+            "X": 0,
+            "Y": 0,
+            "Z": 0
+          },
+          "ActiveEngineFraction": 1,
+          "EngineInstances": [],
+          "ScheduledEngineFailures": []
+        }
+      ],
+      "Joints": [
+        {
+          "ParentPartId": "starship_v3_command_flight12:0d803792f2e54c88a9a30b1bb94fe814",
+          "ChildPartId": "starship_v3_tank_flight12:60e9e433e1b4487a98fa2a1a44a3d679",
+          "ParentNodeId": "bottom",
+          "ChildNodeId": "top",
+          "TensileStrength": 450000000,
+          "CompressiveStrength": 900000000,
+          "ShearStrength": 225000000,
+          "CurrentTensileLoad": 0,
+          "CurrentShearLoad": 406924.3618925187
+        },
+        {
+          "ParentPartId": "starship_v3_tank_flight12:60e9e433e1b4487a98fa2a1a44a3d679",
+          "ChildPartId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46",
+          "ParentNodeId": "bottom",
+          "ChildNodeId": "top",
+          "TensileStrength": 450000000,
+          "CompressiveStrength": 900000000,
+          "ShearStrength": 225000000,
+          "CurrentTensileLoad": 726.6191010015027,
+          "CurrentShearLoad": 21360.858891995806
+        },
+        {
+          "ParentPartId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46",
+          "ChildPartId": "starship_v3_hotstage_flight12:85de5022baba402691e2f4dc348a5937",
+          "ParentNodeId": "bottom",
+          "ChildNodeId": "top",
+          "TensileStrength": 450000000,
+          "CompressiveStrength": 900000000,
+          "ShearStrength": 225000000,
+          "CurrentTensileLoad": 5639.9482601545205,
+          "CurrentShearLoad": 165800.95235215744
+        },
+        {
+          "ParentPartId": "starship_v3_engines_flight12:7debc105bdd14b6092f0ec3958322f46",
+          "ChildPartId": "610b8856-5114-4a02-b02d-972953165e17-reentry-gear",
+          "ParentNodeId": "bottom",
+          "ChildNodeId": "top",
+          "TensileStrength": 450000000,
+          "CompressiveStrength": 900000000,
+          "ShearStrength": 225000000,
+          "CurrentTensileLoad": 0,
+          "CurrentShearLoad": 70185.67921655744
+        }
+      ],
+      "Crew": [],
+      "PayloadManifestId": null
+    },
+    {
+      "Id": "06db0c65-4dc6-4035-a721-ecb16f568599",
+      "Name": "Starship Flight 12 \u2014 V3 / Raptor 3 (debris)",
+      "Position": {
+        "X": -26516681522.604923,
+        "Y": 144697152454.9308,
+        "Z": 2307318.556654399
+      },
+      "Velocity": {
+        "X": -29830.109614723726,
+        "Y": -5861.564805910692,
+        "Z": 165.45923683414765
+      },
+      "Orientation": {
+        "W": 0.7943431832427108,
+        "X": 0.22579807505293317,
+        "Y": 0.004822219262341821,
+        "Z": 0.5639245363872838
+      },
+      "AngularVelocity": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsOnRails": false,
+      "Orbit": null,
+      "ReferenceBodyId": "earth",
+      "Throttle": 0,
+      "PitchYawRoll": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "PropellantVentRateKgPerS": 0,
+      "TransportRelativeMomentum": {
+        "X": -0.0038173101071005055,
+        "Y": 0.04476803951547481,
+        "Z": -0.0023450679588861165
+      },
+      "TransportRelativeAngularMomentum": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "TransportMomentumShares": [
+        {
+          "PartInstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a",
+          "Linear": {
+            "X": -0.0038173101071005055,
+            "Y": 0.04476803951547481,
+            "Z": -0.002345067958886117
+          },
+          "AngularAboutDatum": {
+            "X": -0.07973231060212799,
+            "Y": 0,
+            "Z": 0.12978854364141718
+          }
+        }
+      ],
+      "PropellantSloshStates": null,
+      "VentedPropellantKg": 0,
+      "FlapActuators": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "BodyFlapDeflectionsRad": [],
+      "PhysicalBodyFlapsActive": true,
+      "FlightControlInvertsAerodynamics": false,
+      "SasEnabled": true,
+      "ParachutesArmed": false,
+      "IsGroundHeld": false,
+      "GroundNormal": {
+        "X": -0.894883591879955,
+        "Y": 0.26105472356423287,
+        "Z": 0.36198589515177554
+      },
+      "GroundOffset": 0.5,
+      "IsSurfaceSettled": true,
+      "SurfaceSettledDuration": 0.5,
+      "IsDestroyed": true,
+      "DestructionCause": 1,
+      "CrashImpactSpeed": 20.188839166977182,
+      "CrashPosition": {
+        "X": -26509139267.731003,
+        "Y": 144698634003.78586,
+        "Z": 2265532.921434491
+      },
+      "RootPartInstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a",
+      "Parts": [
+        {
+          "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a",
+          "DefinitionId": "super_heavy_v3_booster_flight12",
+          "LiquidFuel": 789800,
+          "Oxidizer": 2800200,
+          "ReservedLiquidFuel": 0,
+          "ReservedOxidizer": 0,
+          "HeaderPropellantKg": [],
+          "SolidFuel": 0,
+          "Monopropellant": 9999.997300313298,
+          "RcsAttitudeEnabled": true,
+          "RcsStageArmed": false,
+          "ElectricCharge": 0,
+          "Temperature": 289.95359241416526,
+          "SkinTemperature": 289.8953356323185,
+          "ThermalDamage": 0,
+          "IsBroken": false,
+          "IsDeployed": false,
+          "IsStagingActive": true,
+          "ThrottleLevel": 0,
+          "GimbalOffset": {
+            "X": 0,
+            "Y": 0,
+            "Z": 0
+          },
+          "ActiveEngineFraction": 1,
+          "EngineInstances": [
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:01",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:02",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:03",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:04",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:05",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:06",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:07",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:08",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:09",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:10",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:11",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:12",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:13",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:14",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:15",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:16",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:17",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:18",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:19",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:20",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:21",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:22",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:23",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:24",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:25",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:26",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:27",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:28",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:29",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:30",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:31",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:32",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            },
+            {
+              "InstanceId": "super_heavy_v3_booster_flight12:4c1d99e02b584594990f5091bf0e736a:engine:33",
+              "EngineModelId": "raptor3-superheavy-flight12",
+              "State": "Off",
+              "StateElapsedSeconds": 2.0333333333333297,
+              "CommandedThrottle": 0,
+              "ActualThrottle": 0,
+              "GimbalDeg": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "GimbalVelocityDegPerS": {
+                "X": 0,
+                "Y": 0,
+                "Z": 0
+              },
+              "ChamberPressureFraction": 0,
+              "TemperatureK": 290,
+              "StartAttempts": 0,
+              "StartsCompleted": 0,
+              "FailureCode": null
+            }
+          ],
+          "ScheduledEngineFailures": []
+        }
+      ],
+      "Joints": [],
+      "Crew": [],
+      "PayloadManifestId": null
+    }
+  ],
+  "DockingConnections": [],
+  "Mission": {
+    "MissionId": null,
+    "Phase": "",
+    "NextCallbackSequence": 1,
+    "CallbackEvents": [],
+    "LaunchSurfaceDirection": null,
+    "ObjectiveProgress": {},
+    "CompletedObjectives": [],
+    "ReachedPhases": []
+  },
+  "Navigation": {
+    "Mode": "SURF",
+    "TargetVesselId": null,
+    "ManeuverNodes": []
+  },
+  "Campaign": {
+    "ProfileId": "default",
+    "UnlockedIds": [],
+    "CompletedMissionIds": [],
+    "RewardLedger": {}
+  },
+  "PersistentAssets": [],
+  "Systems": {},
+  "VesselSystems": {}
+}

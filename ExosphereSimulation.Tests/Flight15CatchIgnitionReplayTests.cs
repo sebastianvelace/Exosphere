@@ -13,6 +13,7 @@ using Xunit;
 public sealed class Flight15CatchIgnitionReplayTests
 {
     [Theory]
+    [InlineData("ignition_120hz", 1.0 / 120.0)]
     [InlineData("ignition_60hz", 1.0 / 60.0)]
     [InlineData("ignition_50hz", 1.0 / 50.0)]
     public void GameIgnitionStateIsCaughtInOneBurn(string capture, double frame)
@@ -29,8 +30,9 @@ public sealed class Flight15CatchIgnitionReplayTests
         var burn = bench.Burn!;
         string steps = string.Join(" ", burn.EngineSteps.Select(s => $"{s.EngineCount}@{s.TimeS:F1}"));
         Assert.True(burn.Phase == TowerCatchBurnPhase.Caught, $"{burn.Phase} {burn.BlockReason} steps={steps}");
-        // The 60 Hz capture is the game's ignition with the measured V3 forward flaps
-        // (2026-11-24): the game catches it at 62.7 s; the 50 Hz one is the earlier capture.
+        // The 60 and 120 Hz captures are the game's ignitions with the measured V3 forward
+        // flaps (2026-11-24); the game catches them in about 64 s. The 50 Hz one is the earlier
+        // capture.
         // A restore does not carry every control phase, so the late overshoot can amplify small
         // differences. The bound guards against slower, wandering catches.
         Assert.InRange(burn.CaughtTimeS, 0.0, 70.0);

@@ -95,6 +95,14 @@ public sealed class TowerCatchBurnDefinition
     /// settling: the fittings must face the arms before they go between them. Zero disables.
     /// </summary>
     [JsonPropertyName("rollAlignedToleranceDegrees")] public double RollAlignedToleranceDegrees { get; set; }
+    /// <summary>
+    /// Roll damping during the flip. The forward flaps on the ogive excite the belly flop's
+    /// roll/sideslip mode as the ship pitches up; left undamped it can spin the ship up to
+    /// 1 rad/s and stall the flip. Zero leaves roll free.
+    /// </summary>
+    [JsonPropertyName("flipRollDampingGain")] public double FlipRollDampingGain { get; set; }
+    /// <summary>Share of the attitude command the body flaps follow during the braking (1 = all of it).</summary>
+    [JsonPropertyName("brakingFlapCommandScale")] public double BrakingFlapCommandScale { get; set; } = 1.0;
     [JsonPropertyName("rollAlignmentMaximumTiltDegrees")] public double RollAlignmentMaximumTiltDegrees { get; set; }
     /// <summary>Pin clearance below which the fittings are rolled toward the arms (m).</summary>
     [JsonPropertyName("rollAlignmentClearanceM")] public double RollAlignmentClearanceM { get; set; }
@@ -185,6 +193,8 @@ public sealed class TowerCatchBurnDefinition
             FlipAttitudeDampingGain, LateralMinimumHorizonPerZeroTime, LateralPlanSmoothingS2, SingleEngineMaximumLateralSpeedMps, SingleEngineMaximumMissM, ThrottleHeadroom, ControlAuthorityMargin, MissedApproachClearanceM, MissedApproachRadiusM, MaximumBurnSeconds];
         if (string.IsNullOrWhiteSpace(Id) || Status != "engineering-estimate"
             || string.IsNullOrWhiteSpace(Assumptions) || positive.Any(v => !double.IsFinite(v) || v <= 0.0)
+            || BrakingFlapCommandScale < 0.0 || BrakingFlapCommandScale > 1.0 || !double.IsFinite(BrakingFlapCommandScale)
+            || FlipRollDampingGain < 0.0 || !double.IsFinite(FlipRollDampingGain)
             || RollAlignedToleranceDegrees < 0.0 || RollAlignedToleranceDegrees >= 90.0
             || MaximumTiltDegrees >= 45.0 || ThrottleHeadroom > 1.0 || ArrestThrottleHeadroom > 1.0
             || ContactDescentSpeedMps > TowerCatchCutoff.MaxVerticalSpeedMps

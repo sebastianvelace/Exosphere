@@ -1,7 +1,7 @@
 {
   "id": "starship-flight15-tower-catch-burn-engineering-estimate",
   "status": "engineering-estimate",
-  "assumptions": "Single landing burn of the Flight 15 ship catch. SpaceX's published timeline (as reported by Autonocion and Geekspin, Nov 2026) lights three Raptors at T+22:32:16, drops to two at T+22:32:26 while moving between the arms, to one at T+22:32:33 nearly hovering, and the arms close with the last engine cut at T+22:32:34: about 18 s from ignition to catch with no relight. The belly flop speed at ignition follows the Flight 14 broadcast (363 km/h at 1.2 km). Deceleration segments, gains and margins are calibrated against EXOSPHERE to reproduce that sequence; SpaceX did not publish altitudes, speeds or throttle. Ignition point: 380 m short of the tower with no glide plus 13.4 s per m/s of glide toward it, measured on the 215 t bench (850 m at 35 m/s caught). In the game the same lead reached ignition head-on at 22.7 m/s and passed 111 m from the cradle, but the flip throw there (61 m/s) left 75 m/s to brake; a larger lead destabilised the glide loop.",
+  "assumptions": "Single landing burn of the Flight 15 ship catch. SpaceX's published timeline (as reported by Autonocion and Geekspin, Nov 2026) lights three Raptors at T+22:32:16, drops to two at T+22:32:26 while moving between the arms, to one at T+22:32:33 nearly hovering, and the arms close with the last engine cut at T+22:32:34: about 18 s from ignition to catch with no relight. The belly flop speed at ignition follows the Flight 14 broadcast (363 km/h at 1.2 km). Deceleration segments, gains and margins are calibrated against EXOSPHERE to reproduce that sequence; SpaceX did not publish altitudes, speeds or throttle. Ignition point: 380 m short of the tower with no glide plus 13.4 s per m/s of glide toward it, measured on the 215 t bench (850 m at 35 m/s caught). In the game the same lead reached ignition head-on at 22.7 m/s and passed 111 m from the cradle, but the flip throw there (61 m/s) left 75 m/s to brake; a larger lead destabilised the glide loop. With the measured V3 forward flaps (2026-11-24) the flip damps roll (flipRollDampingGain), the flaps follow half of the attitude command while braking upright (brakingFlapCommandScale), and the ship holds above the arms until its fittings face them in roll (rollAlignedToleranceDegrees); calibrated on the game chapter at 50, 60 and 120 Hz.",
   "terminalGlideAltitudeM": 10000.0,
   "glideClosingGainPerSecond": 0.03,
   "glideMaximumClosingSpeedMps": 40.0,
@@ -53,6 +53,8 @@
   "rollAlignmentMaximumTiltDegrees": 10.0,
   "rollAlignmentClearanceM": 150.0,
   "rollAlignedToleranceDegrees": 5.0,
+  "flipRollDampingGain": 2.0,
+  "brakingFlapCommandScale": 0.5,
   "rollAlignmentCommandLimit": 0.3,
   "flipAttitudeDampingGain": 3.5,
   "singleEngineMaximumLateralSpeedMps": 2.0,

@@ -354,7 +354,13 @@ public sealed class TowerCatchBurn
             Phase == TowerCatchBurnPhase.Flip ? _definition.FlipAttitudeDampingGain : _definition.AttitudeDampingGain,
             // An off-axis Raptor rolls the ship; a free roll turns its steady side force around
             // the vertical and the homing then orbits the cradle instead of closing on it.
-            rollDampingGain: Phase == TowerCatchBurnPhase.Flip ? 0.0 : _definition.RollDampingGain);
+            rollDampingGain: Phase == TowerCatchBurnPhase.Flip ? _definition.FlipRollDampingGain : _definition.RollDampingGain);
+        // Upright and sliding sideways, the forward flaps on the ogive sit in a strong
+        // crossflow far from the centre of mass: driven by the full, often saturated, attitude
+        // command they disturb more than they help, and the gimbals lose the tilt the braking
+        // needs. They follow a reduced share of it.
+        if (Phase == TowerCatchBurnPhase.Braking && _definition.BrakingFlapCommandScale < 1.0)
+            _ship.FlapCommandOverride = _ship.PitchYawRoll * _definition.BrakingFlapCommandScale;
         if (Phase == TowerCatchBurnPhase.Braking && _ship.CatchTargetRails.IsDefined)
         {
             double rollError = PinRollErrorRad(_ship.Orientation, up, _ship.CatchTargetRails.ArmAxisWorld);

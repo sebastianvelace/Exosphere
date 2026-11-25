@@ -1148,7 +1148,27 @@ measured flaps.
 **Regression test.** The 60 Hz replay fixture is now the game's ignition with the
 measured flaps, and the replay test requires the catch within the travel and load limits.
 
-**Open:** the opt-in single burn at 120 Hz.
+**120 Hz.** The game's 120 Hz capture flipped in 20.5 s instead of 6.8 s. The flip
+runs with roll undamped, the forward flaps on the ogive excite the roll/sideslip mode as
+the ship pitches up, and here the roll rate reached 1 rad/s. The bench does not reproduce
+this, because the restore does not carry every control phase. Two changes fix it:
+
+- **Flip roll damping** (`flipRollDampingGain` 2): the 120 Hz flip takes 6.8 s again.
+- **Half flap command while braking upright** (`brakingFlapCommandScale` 0.5). Upright and
+  sliding at about 57 m/s, the ogive flaps sit in a strong crossflow far from the centre of
+  mass. Driven by the saturated attitude command they took the tilt the braking needs: the
+  ship held 1–3° of tilt and crossed the cradle at 53 m/s.
+
+Neutral flaps also fixed the game but broke a synthetic bench case. Shares of 0.25 and
+0.5 pass both.
+
+| Rate | Catch time (s) | Peak pin load (MN) | Load limit |
+| ---: | ---: | ---: | --- |
+| 50 Hz | 64.0 | 1.36 | within |
+| 60 Hz | 64.3 | 1.38 | within |
+| 120 Hz | 64.9 | 1.37 | within |
+
+The replay test now includes the 120 Hz ignition capture.
 
 **Check to run.** These chapter runs are not part of `ci_check.sh`. Run
 `CAPTURE_MENU_MODAL=flight15catchverify` at 50, 60 and 120 Hz after any change to the V3
