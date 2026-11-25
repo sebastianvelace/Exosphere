@@ -28,17 +28,19 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
     private readonly Part _engines;
     private readonly TowerCatchGlideGuidance _glide = new();
     private readonly BellyFlopAttitudeReference _attitude = new();
+    private readonly TowerCatchPhysicalGlide _physicalGlide = new();
     private Vector3d _liftReference;
 
     /// <summary>When set, the glide flies the physical Flight 14/15 belly-flop attitude law.</summary>
     public Flight14DescentDefinition? PhysicalDescent { get; set; }
     public double LastGlideAngleOfAttackDeg { get; private set; }
+    public Quaterniond LastDescentReference => _physicalGlide.Reference;
+    public TowerCatchPhysicalGlide PhysicalGlide => _physicalGlide;
+    public Vector3d LastLiftReference { get; private set; }
     /// <summary>Replaces the glide guidance's lift reference (bench, flow-up, flow) for identification.</summary>
     public Func<Flight15CatchBench, Vector3d, Vector3d, Vector3d>? LiftOverride { get; set; }
     /// <summary>When true the bench never ignites; it keeps gliding.</summary>
     public bool GlideOnly { get; set; }
-    private Quaterniond _descentReference;
-    private bool _descentReferenceInitialized;
     public Universe Universe { get; }
     public Vessel Ship { get; }
     public TowerCatchBurnDefinition Definition { get; }
@@ -104,6 +106,33 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
         return bench;
     }
 
+    /// <summary>
+    /// The Flight 15 catch chapter's 70 km entry state, built as <c>SimulationBridge</c> builds
+    /// it (1.8 km/s, 120 m/s down, belly first with lift down), <paramref name="upstreamM"/>
+    /// up the cradle's ground track and <paramref name="northM"/> across it. The vessel and
+    /// switches come from the 4 km glide capture, whose mass is the 215 t chapter entry mass.
+    /// </summary>
+    public static Flight15CatchBench FromChapterEntry(double upstreamM, double northM,
+        TowerCatchBurnDefinition? definition = null, Action<PartCatalog>? catalogEdit = null)
+    {
+        var bench = Restore("glide_4km", definition, catalogEdit);
+        var ship = bench.Ship;
+        var earth = bench._earth;
+        var cradle = ship.CatchTargetPositionWorld - earth.Position;
+        var cradleUp = cradle.Normalized;
+        var cradleEast = earth.RotationAxis.Cross(cradleUp).Normalized;
+        var ground = cradle - cradleEast * upstreamM + cradleUp.Cross(cradleEast) * northM;
+        var up = ground.Normalized;
+        var east = earth.RotationAxis.Cross(up).Normalized;
+        var air = east * 1_800.0 - up * 120.0;
+        ship.Position = earth.Position + up * (earth.Radius + 70_000.0);
+        ship.Velocity = earth.Velocity + earth.GetSurfaceVelocity(ship.CatchTargetPositionWorld) + air;
+        ship.Orientation = AerodynamicsModel.ComputeBellyFirstOrientation(
+            AerodynamicsModel.ComputeLiftDownEntryAxis(up, air.Normalized), air.Normalized);
+        ship.AngularVelocity = Vector3d.Zero;
+        return bench;
+    }
+
     /// <summary>Starts the burn now, as when the state was saved at ignition.</summary>
     public void IgniteNow() => Ignite(Universe.CurrentTime);
 
@@ -162,25 +191,13 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
         var desired = _attitude.Update(Ship.Orientation, steering.AimAxis, velDir, interval);
         if (PhysicalDescent != null)
         {
-            // The physical belly-flop attitude stack of the Flight 14/15 descent: trim-feasible
-            // angle of attack, slew- and lead-limited belly-first reference, trimmed command.
-            var d = PhysicalDescent;
-            var flow = surfVel.Normalized;
-            if (!_descentReferenceInitialized) { _descentReference = Ship.Orientation; _descentReferenceInitialized = true; }
-            var liftReference = LiftOverride?.Invoke(this, up, flow) ?? steering.LiftReference;
-            double angle = Flight14DescentController.TrimFeasibleAngleOfAttack(Ship, _earth, altitude, surfVel,
-                liftReference, d.TerminalAngleOfAttackDegrees, d.TrimMarginDegrees * MathUtils.DEG_TO_RAD);
-            LastGlideAngleOfAttackDeg = angle;
-            var axisReference = AerodynamicsModel.ComputeEntryAxisForLift(flow, liftReference, angle);
-            var target = AerodynamicsModel.ComputeBellyFirstOrientation(axisReference, flow);
-            _descentReference = AttitudeGuidance.SlewQuaternion(_descentReference, target, interval, d.ReferenceSlewRateRadPerSecond);
-            _descentReference = AerodynamicsModel.ConstrainBellyFirstOrientationToAngle(_descentReference, flow, angle);
-            double lead = AttitudeGuidance.ErrorAngleRadians(Ship.Orientation, _descentReference);
-            double leadLimit = d.MaximumReferenceLeadDegrees * MathUtils.DEG_TO_RAD;
-            if (lead > leadLimit) _descentReference = Ship.Orientation.Slerp(_descentReference, leadLimit / lead).Normalize();
+            // The physical catch glide shared with the game's EDL director.
+            var liftReference = LiftOverride?.Invoke(this, up, velDir) ?? steering.LiftReference;
             Ship.PilotRateEnvelopeEnabled = false;
-            Ship.PitchYawRoll = Flight14AerodynamicAttitude.ComputeCommand(Ship, _earth, _descentReference,
-                d.TrimOnsetDynamicPressurePa, d.TrimFullDynamicPressurePa);
+            Ship.PitchYawRoll = _physicalGlide.Command(Ship, _earth, PhysicalDescent, Definition, liftReference,
+                Ship.GetCatchTargetPositionAt(time), interval);
+            LastGlideAngleOfAttackDeg = _physicalGlide.LastAngleOfAttackDegrees;
+            LastLiftReference = _physicalGlide.LastLiftReference;
             return;
         }
         Ship.PitchYawRoll = AttitudeGuidance.ComputeCommand(Ship.Orientation, desired, Ship.AngularVelocity,
@@ -189,6 +206,7 @@ internal sealed class Flight15CatchBench : IPhysicsStepController
 
     private void Ignite(double time)
     {
+        Ship.BodyFlapAllocationAxisWeights = null;
         var up = Ship.CatchTargetUpWorld.Normalized;
         IgnitionTime = time;
         IgnitionClearanceM = TowerCatchBurn.UprightPinClearanceM(Ship, time);

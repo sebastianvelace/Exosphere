@@ -186,12 +186,38 @@ noted. The measurement history is in
   - **Guidance and its limit.** Drift-speed guidance designed on that plant misses by
     40–640 m from dispersed 12 km states. The limit is the inner attitude loop: 10–15 s of
     angle-of-attack lag, about 8 s of heading delay, and ±20–40° roll excursions.
+- **Terminal attitude loop and drift guidance (2026-11-24, in `TowerCatchPhysicalGlide`).**
+  Full record in
+  [the Flight 15 audit](../../audits/flight15_capture_and_gpu_2026-11-19.md#terminal-attitude-loop-and-drift-guidance-2026-11-24).
+  - **Static plant.** At 12 km the flaps trim from 80° to 104°, with margins of about
+    ±0.08–0.1 rad/s² in angle of attack, ±0.04 in heading and ±0.8 in roll. The descent
+    law's oscillations came from two things:
+    - the torque-space flap allocation, which gives up roll first under saturation;
+    - step references beyond that margin.
+
+    Neither was a limit of the plant.
+  - **Loop.**
+    - Allocation in angular acceleration with roll first.
+    - Angle and heading references shaped inside the margin, with feedforward.
+    - A conditional integral on the angle error.
+
+    Steps of 3–5° settle inside 1° in 1.1–2.5 s at 50, 60 and 120 Hz, with the roll under
+    4.4°. The first steps after takeover still take 3.4–5.7 s.
+  - **Drift plant with this loop.** α₀ ≈ 89.0°, and τ ≈ 13 s ≈ V/g. It is an acceleration
+    along the nose of c (α − α₀) − v g/V, with c ≈ 0.175 m/s² per degree, usable from 80° to
+    102°.
+  - **Guidance.** Zero-effort miss to the ignition point on the lead circle, with the approach
+    axis following the bearing to the cradle and the far side chosen when it is faster. From
+    ±600 m / ±300 m at 12.5 km it misses the ignition point by at most 29 m at 50 Hz and
+    22 m at 60 Hz, across 15 states each. At 120 Hz 14 of 15 are inside 50 m (the
+    largest miss is 84 m).
+  - **Not yet done.** The ship arrives with up to 26 m/s of horizontal speed. The game chapter
+    still writes the glide attitude.
 - **Work:**
-  1. A terminal attitude loop for the catch glide: fast and accurate angle tracking with
-     the roll held. Then close the drift guidance on the identified plant.
-  2. Retune every Raptor 3 ship controller for a 15° gimbal (item 6), then adopt it.
-  3. Light near overhead, nose toward the cradle; brake the throw on the 15° gimbal.
-  4. Lower the ignition toward the flown profile (this item), then move the pins (item 8).
+  1. Retune every Raptor 3 ship controller for a 15° gimbal (item 6), then adopt it.
+  2. Light near overhead, nose toward the cradle; brake the throw on the 15° gimbal.
+  3. Lower the ignition toward the flown profile (this item), then move the pins (item 8).
+  4. Fly the physical glide in the game chapter and recalibrate the entry seed.
 
 ### 6. Raptor gimbal range (all variants)
 

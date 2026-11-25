@@ -40,6 +40,66 @@ public sealed class TowerCatchBurnDefinition
     [JsonPropertyName("glideVelocityGainPerSecond")] public double GlideVelocityGainPerSecond { get; set; }
     /// <summary>Time the flip and spool take before the braking profile holds (s).</summary>
     [JsonPropertyName("flipLeadSeconds")] public double FlipLeadSeconds { get; set; }
+    /// <summary>Angle of attack the physical catch glide settles to below the descent's terminal speed (deg).</summary>
+    [JsonPropertyName("glideTerminalAngleOfAttackDegrees")] public double GlideTerminalAngleOfAttackDegrees { get; set; } = 83.0;
+    /// <summary>Speed below which the physical catch glide points its nose along the line to the cradle (m/s).</summary>
+    [JsonPropertyName("glideTerminalHeadingSpeedMps")] public double GlideTerminalHeadingSpeedMps { get; set; } = 700.0;
+    /// <summary>Altitude below which the physical glide lines its nose up with the approach axis for the flip (m).</summary>
+    [JsonPropertyName("glideFinalAlignmentAltitudeM")] public double GlideFinalAlignmentAltitudeM { get; set; } = 3000.0;
+    /// <summary>Drift speed along the nose per degree of angle of attack off the zero-drift angle (m/s per degree, identified).</summary>
+    [JsonPropertyName("glideDriftPerDegreeMps")] public double GlideDriftPerDegreeMps { get; set; } = 2.4;
+    /// <summary>Angle of attack at which the terminal belly flop sinks without drifting (deg, identified).</summary>
+    [JsonPropertyName("glideZeroDriftAngleDegrees")] public double GlideZeroDriftAngleDegrees { get; set; } = 89.0;
+    /// <summary>Trimmable angle-of-attack range of the terminal belly flop at catch mass (deg).</summary>
+    [JsonPropertyName("glideMinimumAngleOfAttackDegrees")] public double GlideMinimumAngleOfAttackDegrees { get; set; } = 80.0;
+    [JsonPropertyName("glideMaximumAngleOfAttackDegrees")] public double GlideMaximumAngleOfAttackDegrees { get; set; } = 102.0;
+    /// <summary>Horizontal distance below which the glide takes its approach axis from the nose instead of the cradle (m).</summary>
+    [JsonPropertyName("glideAxisMinimumDistanceM")] public double GlideAxisMinimumDistanceM { get; set; } = 200.0;
+    /// <summary>Slew rate of the physical glide's attitude reference in the terminal glide (rad/s).</summary>
+    [JsonPropertyName("glideReferenceSlewRateRadPerSecond")] public double GlideReferenceSlewRateRadPerSecond { get; set; } = 0.15;
+    /// <summary>Half-angle of the cone about the approach axis the glide may turn its nose through (deg).</summary>
+    [JsonPropertyName("glideNoseConeDegrees")] public double GlideNoseConeDegrees { get; set; } = 30.0;
+    /// <summary>Largest heading rate the physical glide asks of its nose (deg/s).</summary>
+    [JsonPropertyName("glideHeadingRateDegPerS")] public double GlideHeadingRateDegPerS { get; set; } = 6.0;
+    /// <summary>Largest lead of the physical glide's attitude reference over the ship (deg).</summary>
+    [JsonPropertyName("glideMaximumReferenceLeadDegrees")] public double GlideMaximumReferenceLeadDegrees { get; set; } = 20.0;
+    /// <summary>Along-nose acceleration per degree below 90° on the belly flop (m/s² per degree).</summary>
+    [JsonPropertyName("glideLiftPerDegreeMps2")] public double GlideLiftPerDegreeMps2 { get; set; } = 0.175;
+    /// <summary>Altitude at which the terminal glide guidance aims to reach the ignition point at rest (m).</summary>
+    [JsonPropertyName("glideAimAltitudeM")] public double GlideAimAltitudeM { get; set; } = 2000.0;
+    /// <summary>Shortest time to go the terminal glide guidance uses (s).</summary>
+    [JsonPropertyName("glideMinimumTimeToGoS")] public double GlideMinimumTimeToGoS { get; set; } = 6.0;
+    /// <summary>Largest horizontal acceleration the terminal glide guidance asks for (m/s²).</summary>
+    [JsonPropertyName("glideMaximumAccelerationMps2")] public double GlideMaximumAccelerationMps2 { get; set; } = 1.5;
+    /// <summary>When true the glide's approach axis follows the bearing to the cradle down to the final alignment altitude.</summary>
+    [JsonPropertyName("glideRadialApproach")] public bool GlideRadialApproach { get; set; } = true;
+    /// <summary>Rate at which the approach axis may turn toward the bearing inside the axis minimum distance (deg/s).</summary>
+    [JsonPropertyName("glideAxisTurnRateDegPerS")] public double GlideAxisTurnRateDegPerS { get; set; } = 2.0;
+    /// <summary>Weight of arriving at rest in the terminal glide guidance: 0 = position only (zero-effort miss), 1 = position and rest.</summary>
+    [JsonPropertyName("glideArrivalVelocityWeight")] public double GlideArrivalVelocityWeight { get; set; } = 0.0;
+    /// <summary>Speed below which the physical glide flies the terminal attitude loop (m/s).</summary>
+    [JsonPropertyName("glideTerminalAttitudeSpeedMps")] public double GlideTerminalAttitudeSpeedMps { get; set; } = 200.0;
+    /// <summary>Terminal attitude loop natural frequencies (rad/s): heading (body X), roll (body Y), angle of attack (body Z).</summary>
+    [JsonPropertyName("glideHeadingFrequencyRadPerS")] public double GlideHeadingFrequencyRadPerS { get; set; } = 0.15;
+    [JsonPropertyName("glideRollFrequencyRadPerS")] public double GlideRollFrequencyRadPerS { get; set; } = 1.5;
+    [JsonPropertyName("glideAngleFrequencyRadPerS")] public double GlideAngleFrequencyRadPerS { get; set; } = 1.0;
+    /// <summary>Terminal attitude loop damping ratios: heading, roll, angle of attack.</summary>
+    [JsonPropertyName("glideHeadingDampingRatio")] public double GlideHeadingDampingRatio { get; set; } = 1.0;
+    [JsonPropertyName("glideRollDampingRatio")] public double GlideRollDampingRatio { get; set; } = 1.0;
+    [JsonPropertyName("glideAngleDampingRatio")] public double GlideAngleDampingRatio { get; set; } = 0.9;
+    /// <summary>Acceleration and rate limits of the terminal heading reference (deg/s², deg/s).</summary>
+    [JsonPropertyName("glideHeadingAccelerationDegPerS2")] public double GlideHeadingAccelerationDegPerS2 { get; set; } = 0.5;
+    [JsonPropertyName("glideHeadingRateLimitDegPerS")] public double GlideHeadingReferenceRateDegPerS { get; set; } = 4.0;
+    /// <summary>Acceleration and rate limits of the terminal angle-of-attack reference (deg/s², deg/s).</summary>
+    [JsonPropertyName("glideAngleAccelerationDegPerS2")] public double GlideAngleAccelerationDegPerS2 { get; set; } = 1.5;
+    [JsonPropertyName("glideAngleRateDegPerS")] public double GlideAngleRateDegPerS { get; set; } = 3.0;
+    /// <summary>Integral gain (1/s) and limit (deg) on the terminal angle-of-attack tracking error.</summary>
+    [JsonPropertyName("glideAngleTrackingIntegralGainPerSecond")] public double GlideAngleTrackingIntegralGainPerSecond { get; set; } = 0.4;
+    [JsonPropertyName("glideAngleTrackingIntegralLimitDegrees")] public double GlideAngleTrackingIntegralLimitDegrees { get; set; } = 6.0;
+    /// <summary>Reference rate (deg/s) below which the tracking integral runs.</summary>
+    [JsonPropertyName("glideAngleIntegralHoldRateDegPerS")] public double GlideAngleIntegralHoldRateDegPerS { get; set; } = 0.1;
+    /// <summary>Weight of roll over the other axes in the terminal flap allocation (angular-acceleration space).</summary>
+    [JsonPropertyName("glideAllocationRollPriority")] public double GlideAllocationRollPriority { get; set; } = 5.0;
     [JsonPropertyName("brakingDecelerationMps2")] public double BrakingDecelerationMps2 { get; set; }
     [JsonPropertyName("terminalProfileClearanceM")] public double TerminalProfileClearanceM { get; set; }
     [JsonPropertyName("terminalDecelerationMps2")] public double TerminalDecelerationMps2 { get; set; }
@@ -196,6 +256,17 @@ public sealed class TowerCatchBurnDefinition
             || BrakingFlapCommandScale < 0.0 || BrakingFlapCommandScale > 1.0 || !double.IsFinite(BrakingFlapCommandScale)
             || FlipRollDampingGain < 0.0 || !double.IsFinite(FlipRollDampingGain)
             || RollAlignedToleranceDegrees < 0.0 || RollAlignedToleranceDegrees >= 90.0
+            || GlideTerminalAngleOfAttackDegrees <= 0.0 || GlideTerminalAngleOfAttackDegrees > 90.0
+            || GlideLiftPerDegreeMps2 <= 0.0 || GlideDriftPerDegreeMps <= 0.0
+            || GlideMinimumAngleOfAttackDegrees >= GlideZeroDriftAngleDegrees || GlideMaximumAngleOfAttackDegrees <= GlideZeroDriftAngleDegrees
+            || GlideArrivalVelocityWeight < 0.0 || GlideArrivalVelocityWeight > 1.0 || GlideAxisMinimumDistanceM < 0.0
+            || GlideTerminalHeadingSpeedMps < 0.0 || !double.IsFinite(GlideTerminalHeadingSpeedMps)
+            || GlideMaximumReferenceLeadDegrees < 0.0 || GlideHeadingRateDegPerS <= 0.0 || GlideFinalAlignmentAltitudeM < 0.0
+            || new[] { GlideTerminalAttitudeSpeedMps, GlideHeadingFrequencyRadPerS, GlideRollFrequencyRadPerS,
+                GlideAngleFrequencyRadPerS, GlideHeadingDampingRatio, GlideRollDampingRatio, GlideAngleDampingRatio,
+                GlideHeadingAccelerationDegPerS2, GlideHeadingReferenceRateDegPerS, GlideAngleAccelerationDegPerS2, GlideMinimumTimeToGoS, GlideMaximumAccelerationMps2, GlideAngleRateDegPerS,
+                GlideAngleIntegralHoldRateDegPerS, GlideAllocationRollPriority }.Any(v => !double.IsFinite(v) || v <= 0.0)
+            || GlideAngleTrackingIntegralGainPerSecond < 0.0 || GlideAngleTrackingIntegralLimitDegrees < 0.0
             || MaximumTiltDegrees >= 45.0 || ThrottleHeadroom > 1.0 || ArrestThrottleHeadroom > 1.0
             || ContactDescentSpeedMps > TowerCatchCutoff.MaxVerticalSpeedMps
             || AlignmentHoldClearanceM >= TerminalProfileClearanceM

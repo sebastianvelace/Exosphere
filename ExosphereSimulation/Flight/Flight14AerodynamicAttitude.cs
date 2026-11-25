@@ -14,13 +14,25 @@ public static class Flight14AerodynamicAttitude
     /// </summary>
     public static Vector3d ComputeCommand(Vessel ship, CelestialBody body,
         Quaterniond reference, double trimOnsetPressurePa, double trimFullPressurePa)
+        => ComputeCommand(ship, body, reference, trimOnsetPressurePa, trimFullPressurePa, null);
+
+    /// <summary>
+    /// As <see cref="ComputeCommand(Vessel, CelestialBody, Quaterniond, double, double)"/>, with
+    /// the scheduled loop's bandwidth replaced by <paramref name="loop"/> when one is given:
+    /// natural frequency (rad/s) and damping ratio per body axis (X, Y roll, Z).
+    /// </summary>
+    public static Vector3d ComputeCommand(Vessel ship, CelestialBody body,
+        Quaterniond reference, double trimOnsetPressurePa, double trimFullPressurePa,
+        (Vector3d NaturalFrequencyRadPerS, Vector3d DampingRatio)? loop,
+        Vector3d referenceAngularVelocityWorld = default, Vector3d feedforwardAngularAccelerationWorld = default)
     {
         // The command is a fraction of the ship's whole authority (flaps, jets, gimbals).
         var authority3 = ship.FlightControlInvertsAerodynamics ? ship.GetAttitudeAuthorityBody(body) : Vector3d.Zero;
         var feedback = ship.FlightControlInvertsAerodynamics && authority3.X > 1e-9
                 && authority3.Y > 1e-9 && authority3.Z > 1e-9
             ? ScheduledFeedback(ship.Orientation, reference, ship.AngularVelocity, authority3,
-                ship.GetAirRelativeVelocity(body).Magnitude)
+                ship.GetAirRelativeVelocity(body).Magnitude, loop,
+                referenceAngularVelocityWorld, feedforwardAngularAccelerationWorld)
             : AttitudeGuidance.ComputeCommand(ship.Orientation, reference, ship.AngularVelocity, 2, 25);
         double authority = ControlAuthority.Evaluate(ship);
         double q = ship.GetDynamicPressure(body);
@@ -73,7 +85,9 @@ public static class Flight14AerodynamicAttitude
     /// slower hypersonic transverse loop returns smoothly to the terminal trim loop.
     /// </summary>
     private static Vector3d ScheduledFeedback(Quaterniond current, Quaterniond desired,
-        Vector3d angularVelocityWorld, Vector3d authorityBody, double airspeedMps)
+        Vector3d angularVelocityWorld, Vector3d authorityBody, double airspeedMps,
+        (Vector3d NaturalFrequencyRadPerS, Vector3d DampingRatio)? loop = null,
+        Vector3d referenceAngularVelocityWorld = default, Vector3d feedforwardAngularAccelerationWorld = default)
     {
         var q = (desired * current.Inverse()).Normalize();
         if (q.W < 0.0) q = new Quaterniond(-q.W, -q.X, -q.Y, -q.Z);
@@ -98,6 +112,19 @@ public static class Flight14AerodynamicAttitude
             error.X * transverseKp - rate.X * transverseKd,
             error.Y * kp - rate.Y * kd,
             error.Z * transverseKp - rate.Z * transverseKd);
+        if (loop is { } l)
+        {
+            var f = l.NaturalFrequencyRadPerS;
+            var z = l.DampingRatio;
+            // Track a moving reference: damp the rate error, and add the reference's own
+            // angular acceleration as feedforward.
+            rate -= current.Inverse().Rotate(referenceAngularVelocityWorld);
+            var feedforward = current.Inverse().Rotate(feedforwardAngularAccelerationWorld);
+            acceleration = feedforward + new Vector3d(
+                error.X * f.X * f.X - rate.X * 2.0 * z.X * f.X,
+                error.Y * f.Y * f.Y - rate.Y * 2.0 * z.Y * f.Y,
+                error.Z * f.Z * f.Z - rate.Z * 2.0 * z.Z * f.Z);
+        }
         // Body X = pitch, Z = yaw, Y = roll; semantic controls are pitch/yaw/roll.
         return new Vector3d(
             System.Math.Clamp(acceleration.X / authorityBody.X, -1.0, 1.0),

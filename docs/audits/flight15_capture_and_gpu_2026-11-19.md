@@ -1224,6 +1224,100 @@ terminal attitude loop itself: faster and more accurate angle tracking with the 
 so the flaps are not on the descent's slew and lead limits. Only then can the drift
 guidance close.
 
+### Terminal attitude loop and drift guidance (2026-11-24)
+
+The terminal glide now has its own attitude loop and drift guidance
+(`TowerCatchPhysicalGlide`, tests in `TowerCatchPhysicalGlideTests`). Both were designed on
+the plant identified on the 70 km chapter bench. Nothing in the aerodynamic or flap model
+changed. The game chapter still flies the kinematic glide (step 6 of the plan).
+
+**Static plant (grid over the four flap deflections, 12 km, q ≈ 4.2 kPa, 215 t).** The hull
+and flaps trim at every angle from 80° to 104°. The control margin about trim:
+
+| Angle | Angle of attack (rad/s²) | Heading (rad/s²) | Roll (rad/s²) |
+| ---: | ---: | ---: | ---: |
+| 80° | −0.137 / +0.039 | ±0.028 | ±0.68 |
+| 88.5° | −0.098 / +0.076 | ±0.043 | ±0.88 |
+| 97° | −0.059 / +0.117 | ±0.041 | ±0.77 |
+| 104° | −0.029 / +0.150 | ±0.022 | ±0.51 |
+
+The flaps slew at 25°/s (simulator estimate). The roll inertia (1.97 × 10⁶ kg m²) is about
+25 times smaller than the transverse one (4.84 × 10⁷).
+
+**Why the descent law oscillated.** Raising its bandwidth from 0.3 to 3 rad/s made the
+angle tracking worse, not better: with a 4.5° step the error reached 9–17° and the roll
+50–75°. Two mechanisms caused this:
+
+- The flap allocation solves in torque (N·m). When the angle demand saturates the flaps,
+  the least-squares solve gives up roll first, because its torques are 25 times smaller for
+  the same angular acceleration.
+- A step reference asks for more than the margin. With the 25°/s servos lagging by about 1 s,
+  the loop then limit-cycles. The authority used to normalise the command (Σ|∂τ/∂δ|·travel at
+  neutral, about 0.16 rad/s²) is about twice the real margin about trim.
+
+**Design.**
+
+- **Allocation in angular acceleration, roll first.** An opt-in
+  `Vessel.BodyFlapAllocationAxisWeights` (null keeps the torque solve, so Flight 14 is
+  unchanged). The glide sets weights 1/I per axis, with roll five times heavier.
+- **Shaped references with feedforward.** The angle reference moves on a time-optimal
+  profile at 1.5°/s² and 3°/s, inside the 12 km margin. 2.5°/s² was too much there and gave
+  3° of tracking error. Its rate and acceleration are fed forward. The heading reference does
+  the same at 0.5°/s² and 4°/s.
+- **Per-axis loop.** Heading 0.15 rad/s (ζ 1), roll 1.5 (ζ 1), angle 1.0 (ζ 0.9). Roll at
+  3 rad/s goes unstable on the servo lag.
+- **Integral on the angle error, run only while the reference holds still.** This removes the
+  0.5–1° bias of the static-moment inversion without overshooting the ramps.
+- **Takeover.** The loop takes over at 200 m/s and holds the takeover heading until the
+  terminal guidance gives one.
+
+**Step response (12 → 2 km, heading held).** Steps of 3–5° between 83° and 99° settle inside
+1° in 1.1–2.5 s at 50, 60 and 120 Hz. The mean error is under 0.8° and the roll stays below
+4.4°. The first steps within about 10 s of the takeover take 3.4–5.7 s.
+
+**Range with this loop.** It flies 79–103° cleanly, with the roll under 3°. At 104° and above
+it loses roll (87–106°), as the aft flaps near their stop. The glide uses 80–102°. The old
+83–101° came from the slow loop.
+
+**Drift plant, re-identified.** Zero drift at α₀ ≈ 89.0°. The steady drift toward the tail is
+−17.9 m/s at 80°, −13.9 at 83°, +7.0 at 92°, +21.0 at 98° and +30.0 at 102°. The response is
+first order with τ ≈ 13 s ≈ V/g, which is the hull's horizontal drag. As an acceleration:
+a_tail = c (α − α₀) − v_tail g/V, with c ≈ 0.175 m/s² per degree.
+
+**Guidance.**
+
+- **Law.** A zero-effort-miss law to the ignition point at the 2 km aim altitude, saturated at
+  1.5 m/s². The angle comes from inverting the plant along the nose as it actually points, and
+  the nose stays within ±30° of the approach axis.
+- **Approach axis.** It follows the bearing to the cradle, so the ignition point can be
+  anywhere on the 150 m lead circle with the nose toward the cradle. Within 200 m of the cradle
+  it turns at no more than 2°/s, so a pass overhead does not flip it. It freezes at 3 km.
+- **Near or far side.** When reaching the far side of the circle tail first (the strong drift
+  direction) is estimated to be faster than turning the nose round, the ship flies over the
+  cradle to the far side.
+- **Not kept.** Asking to arrive at rest (zero-effort velocity) cost reach: the ship came 90–120 m
+  short at 120 Hz.
+
+**Dispersion test.** At 12.5 km the state is moved by ±600 m along and ±300 m across the
+cradle ground track (15 states). The miss is measured at 2 km against the ignition point.
+
+| Frame rate | Cases under 50 m | Largest miss | Mean miss | Nose to axis |
+| ---: | ---: | ---: | ---: | ---: |
+| 50 Hz | 15 / 15 | 29 m | 14 m | within 23° |
+| 60 Hz | 15 / 15 | 22 m | 10 m | within 16° |
+| 120 Hz | 14 / 15 | 84 m | 20 m | within 25° |
+
+At 120 Hz the state at 12.5 km differs, and the +600 m case starts with the nose about 80°
+off the axis. It reaches ignition at 25 m/s after 1 km of tail-first drift, at the reach limit.
+The prototype drift guidance missed by 40–640 m on the same test.
+
+**Still open.**
+
+- The ignition point is reached with up to 26 m/s of horizontal speed, which the flip and
+  braking must still absorb.
+- The game chapter still writes the glide attitude.
+- The guidance takes over only at 160 m/s, about 11.5 km.
+
 ## Orbital return feasibility
 
 The simulated ascent and all 26 releases produced a 237.381 × 296.885 km

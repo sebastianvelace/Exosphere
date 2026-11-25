@@ -43,6 +43,9 @@ Base tecnica cerrada en `main`:
   is checked against researcher and flight data in
   [docs/research/starship_aero/MODEL_COMPARISON.md](docs/research/starship_aero/MODEL_COMPARISON.md),
   which lists the open corrections (catch pins, ignition altitude, gimbal range, booster drag).
+  The physical terminal glide (bench only, not yet in the game chapter) now has an attitude
+  loop designed on the identified flap plant and a drift guidance that reaches the ignition
+  point within 29 m at 50 Hz and 22 m at 60 Hz from ±600 m dispersions at 12.5 km.
   See the [Flight 15 verification](docs/audits/flight15_capture_and_gpu_2026-11-19.md).
   Flight 14 remains available from the Flight 15 briefing and exposes an automatic
   engineering exploration: loaded ascent, insertion, 26 payload releases and estimated

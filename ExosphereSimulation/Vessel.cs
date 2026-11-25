@@ -98,6 +98,14 @@ public class Vessel
     public Vector3d? FlapCommandOverride { get; set; }
 
     /// <summary>
+    /// Per-axis weights (body X, Y roll, Z) of the body-flap allocation's least-squares solve.
+    /// Null solves in torque (N·m), which under saturation gives up the axis with the smallest
+    /// torques first; a controller can weight by inverse inertia (angular acceleration) and
+    /// add axis priorities.
+    /// </summary>
+    public Vector3d? BodyFlapAllocationAxisWeights { get; set; }
+
+    /// <summary>
     /// True when the last coupled step's flight control inverted the predicted aerodynamic
     /// moment (distributed model): guidance must not add its own static-moment trim on top.
     /// </summary>
@@ -1020,13 +1028,28 @@ public class Vessel
                 else
                     desired += baseTorque;
             }
+            var weights = BodyFlapAllocationAxisWeights ?? new Vector3d(1.0, 1.0, 1.0);
+            if (BodyFlapAllocationAxisWeights.HasValue)
+            {
+                m00 = m11 = m22 = 0.0;
+                for (int i = 0; i < flaps.Count; i++)
+                {
+                    effectiveness[i] = new Vector3d(effectiveness[i].X * weights.X,
+                        effectiveness[i].Y * weights.Y, effectiveness[i].Z * weights.Z);
+                    m00 += effectiveness[i].X * effectiveness[i].X;
+                    m11 += effectiveness[i].Y * effectiveness[i].Y;
+                    m22 += effectiveness[i].Z * effectiveness[i].Z;
+                }
+            }
+            var weightedDesired = new Vector3d(desired.X * weights.X, desired.Y * weights.Y, desired.Z * weights.Z);
+            var weightedBase = new Vector3d(baseTorque.X * weights.X, baseTorque.Y * weights.Y, baseTorque.Z * weights.Z);
             double epsilon = 1e-6 * System.Math.Max(1e-12, m00 + m11 + m22);
             // Redistributed pseudo-inverse (Virnig & Bodden): a surface that would pass its
             // stop is fixed there and the remaining moment is re-solved over the free ones.
             for (int i = 0; i < flaps.Count; i++) { fixedAtStop[i] = false; delta[i] = 0.0; }
             for (int iteration = 0; iteration <= flaps.Count; iteration++)
             {
-                var residual = desired - baseTorque;
+                var residual = weightedDesired - weightedBase;
                 double f00 = epsilon, f01 = 0, f02 = 0, f11 = epsilon, f12 = 0, f22 = epsilon;
                 for (int i = 0; i < flaps.Count; i++)
                 {

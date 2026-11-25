@@ -184,10 +184,12 @@ public static class AerodynamicsModel
         var lift = liftDirection - flow * liftDirection.Dot(flow);
         if (lift.Magnitude < 1e-6)
             return ComputeLiftDownEntryAxis(Vector3d.Up, flow, angleOfAttackDegrees);
+        // Beyond 90° the nose tilts against the motion: the tail-low belly flop whose lift
+        // points toward the tail (trimmable to about 120° with the aft flaps, Li 2022).
         return (flow * System.Math.Cos(
-                    System.Math.Clamp(angleOfAttackDegrees, 0.0, 90.0) * MathUtils.DEG_TO_RAD)
+                    System.Math.Clamp(angleOfAttackDegrees, 0.0, 180.0) * MathUtils.DEG_TO_RAD)
                 + lift.Normalized * System.Math.Sin(
-                    System.Math.Clamp(angleOfAttackDegrees, 0.0, 90.0) * MathUtils.DEG_TO_RAD))
+                    System.Math.Clamp(angleOfAttackDegrees, 0.0, 180.0) * MathUtils.DEG_TO_RAD))
             .Normalized;
     }
 
